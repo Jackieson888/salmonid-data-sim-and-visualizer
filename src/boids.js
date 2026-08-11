@@ -1,75 +1,15 @@
 // boids.js
 // Classic Reynolds flocking (separation, alignment, cohesion) with a few
 // fish-specific additions: a gentle downstream drift, current drag, and
-// wall/obstacle avoidance so the school reacts to the riverbanks and dam.
+// edge steering so the school stays inside the open rectangular channel.
 // The run flows left to right: fish are spawned near the left edge (see
 // main.js) and exit once they cross the right edge (see Flock.step).
-
-// ---------------------------------------------------------------------
-// Riverbank + island geometry — the collision meshes fish steer around
-// and hard-clamp against. Expressed as fractions of the canvas so they
-// scale with any window size. main.js imports these same functions to
-// draw the land, so what's drawn is exactly what fish can't swim through.
-// Loosely modeled on a Snake River island reference: a slender, tilted
-// island mid-channel between two wavy, natural-looking shorelines.
-// ---------------------------------------------------------------------
-export const BANK_DEPTH = 0.13; // bank depth as a fraction of height, at rest
-const BANK_WAVE_AMP = 0.03; // how far the shoreline wanders off that rest depth
-const BANK_WAVE_FREQ = 0.0045; // spatial frequency of that wander, per px of x
-
-export function bankTopY(x, bounds) {
-  return (
-    bounds.height * (BANK_DEPTH + BANK_WAVE_AMP * Math.sin(x * BANK_WAVE_FREQ))
-  );
-}
-
-export function bankBottomY(x, bounds) {
-  return (
-    bounds.height *
-    (1 - BANK_DEPTH - BANK_WAVE_AMP * Math.sin(x * BANK_WAVE_FREQ * 1.3 + 2.4))
-  );
-}
-
-export const ISLAND = {
-  cx: 0.46, // center, as a fraction of width/height
-  cy: 0.5,
-  rx: 0.15, // radii, as a fraction of width/height
-  ry: 0.045,
-  angle: -0.1, // slight tilt, radians
-};
-
-// World (x, y) expressed in the island's own rotated, radius-normalized
-// frame: dist 0 = center, dist 1 = right at the edge. Also hands back the
-// rotation so callers can convert a direction in this frame back to world
-// space without redoing the trig.
-export function islandSpace(x, y, bounds) {
-  const cx = ISLAND.cx * bounds.width;
-  const cy = ISLAND.cy * bounds.height;
-  const rx = ISLAND.rx * bounds.width;
-  const ry = ISLAND.ry * bounds.height;
-  const cos = Math.cos(ISLAND.angle);
-  const sin = Math.sin(ISLAND.angle);
-  const dx = x - cx;
-  const dy = y - cy;
-  const localX = (dx * cos + dy * sin) / rx;
-  const localY = (-dx * sin + dy * cos) / ry;
-  return { dist: Math.hypot(localX, localY), localX, localY, cos, sin, rx, ry };
-}
-
-// Inverse of islandSpace's local (unrotated, radius-normalized) coordinates
-// back to world (x, y) — used to snap a fish to the island's edge on contact.
-export function islandLocalToWorld(localX, localY, bounds, space) {
-  const dx = localX * space.rx * space.cos - localY * space.ry * space.sin;
-  const dy = localX * space.rx * space.sin + localY * space.ry * space.cos;
-  return { x: ISLAND.cx * bounds.width + dx, y: ISLAND.cy * bounds.height + dy };
-}
-
-// True if (x, y) is over land — either bank — rather than open channel.
-// Used to keep random placement (initial fill, day-jump scrub) out of the
-// banks; the island is checked separately since it sits mid-channel.
-export function isOverBank(x, y, bounds) {
-  return y < bankTopY(x, bounds) || y > bankBottomY(x, bounds);
-}
+//
+// Depth (fish.depth, 0 = surface .. 1 = riverbed) is a second, independent
+// wandering process — cosmetic only, never read by the horizontal flocking
+// forces — that drives the 3D renderer's vertical swim position (see
+// scene/fishMesh.js) so fish visibly cruise up and down through the water
+// column instead of skimming a fixed depth.
 
 export class Fish {
   constructor(x, y, bounds) {
@@ -86,6 +26,13 @@ export class Fish {
     this.length = 30 + Math.random() * 5;
     this.wobblePhase = Math.random() * Math.PI * 1;
     this.wobbleSpeed = 2 + Math.random() * 1;
+
+    // Vertical wander: eases toward a randomly re-picked target depth,
+    // occasionally retargeting, so fish drift up and down the water column
+    // on their own independent timers instead of all bobbing in lockstep.
+    this.depth = 0.2 + Math.random() * 0.6;
+    this.depthTarget = this.depth;
+    this.depthCooldown = 60 + Math.random() * 150;
   }
 
   get speed() {
@@ -169,16 +116,22 @@ export class Flock {
       let ax = 0,
         ay = 0;
 
+      // Separation: steer away from the (inverse-distance-weighted) average
+      // direction to nearby neighbors, so fish don't pile on top of each other.
       if (sepCount > 0) {
         ax += (sepX / sepCount) * this.options.separationWeight;
         ay += (sepY / sepCount) * this.options.separationWeight;
       }
+      // Alignment: steer velocity toward the neighborhood's average velocity,
+      // so nearby fish gradually match heading/speed.
       if (aliCount > 0) {
         const avgVx = aliX / aliCount,
           avgVy = aliY / aliCount;
         ax += (avgVx - fish.vx) * 0.05 * this.options.alignmentWeight;
         ay += (avgVy - fish.vy) * 0.05 * this.options.alignmentWeight;
       }
+      // Cohesion: steer toward the neighborhood's average position, so the
+      // school stays loosely grouped instead of drifting apart.
       if (cohCount > 0) {
         const cx = cohX / cohCount,
           cy = cohY / cohCount;
@@ -192,32 +145,15 @@ export class Flock {
       // Current drag: a slow lateral drift, like river current pushing back
       ay += Math.sin(fish.x * 0.002) * this.options.currentWeight * 0.01;
 
-      // Steer away from the banks (top/bottom, now following the wavy
-      // shoreline rather than a flat margin) and the left spawn edge. The
+      // Steer away from the top/bottom edges and the left spawn edge. The
       // right edge is intentionally left open so fish can exit downstream.
       const { margin, edgeSteer } = this.options;
-      const topLimit = bankTopY(fish.x, this.bounds) + margin;
-      const bottomLimit = bankBottomY(fish.x, this.bounds) - margin;
-      if (fish.y < topLimit) ay += edgeSteer;
-      if (fish.y > bottomLimit) ay -= edgeSteer;
+      if (fish.y < margin) ay += edgeSteer;
+      if (fish.y > this.bounds.height - margin) ay -= edgeSteer;
       if (fish.x < margin) ax += edgeSteer;
 
-      // Steer around the island, harder the closer the fish gets — the
-      // outward direction is computed in the island's own rotated frame
-      // (see islandSpace) and rotated back to world space to steer with.
-      const island = islandSpace(fish.x, fish.y, this.bounds);
-      const islandSteerRadius = 1.5; // normalized distance steering kicks in at
-      if (island.dist < islandSteerRadius) {
-        const nx = island.localX / (island.dist || 1);
-        const ny = island.localY / (island.dist || 1);
-        const worldNx = nx * island.cos - ny * island.sin;
-        const worldNy = nx * island.sin + ny * island.cos;
-        const strength = (islandSteerRadius - island.dist) * edgeSteer * 2;
-        ax += worldNx * strength;
-        ay += worldNy * strength;
-      }
-
-      // Clamp steering force
+      // Clamp steering force so no single frame can yank a fish's heading
+      // around too sharply, regardless of how strong the combined forces are.
       const forceMag = Math.hypot(ax, ay);
       const maxForce = this.options.maxForce;
       if (forceMag > maxForce) {
@@ -225,6 +161,7 @@ export class Flock {
         ay = (ay / forceMag) * maxForce;
       }
 
+      // Integrate: apply the clamped steering force to velocity.
       fish.vx += ax * dt;
       fish.vy += ay * dt;
 
@@ -241,41 +178,28 @@ export class Flock {
         fish.vy *= scale;
       }
 
+      // Integrate: apply velocity to position.
       fish.x += fish.vx * dt;
       fish.y += fish.vy * dt;
 
-      // Hard collision: even though the steering above discourages it,
-      // flocking forces can still push a fish into the bank or island —
-      // so as a last resort, snap it back to the surface it hit. Horizontal
-      // exit (right edge) is handled below, once per step rather than per
-      // fish.
-      const top = bankTopY(fish.x, this.bounds);
-      const bottom = bankBottomY(fish.x, this.bounds);
-      if (fish.y < top) {
-        fish.y = top;
+      // Hard clamp: even though the steering above discourages it, flocking
+      // forces can still push a fish past the top/bottom edge.
+      if (fish.y < 0) {
+        fish.y = 0;
         fish.vy *= -0.5;
       }
-      if (fish.y > bottom) {
-        fish.y = bottom;
+      if (fish.y > this.bounds.height) {
+        fish.y = this.bounds.height;
         fish.vy *= -0.5;
       }
 
-      // Same last-resort snap for the island: if the fish ended up inside
-      // it, push it back out to the nearest point on the edge.
-      const islandAfter = islandSpace(fish.x, fish.y, this.bounds);
-      if (islandAfter.dist < 1) {
-        const scale = 1 / (islandAfter.dist || 0.0001);
-        const edge = islandLocalToWorld(
-          islandAfter.localX * scale,
-          islandAfter.localY * scale,
-          this.bounds,
-          islandAfter,
-        );
-        fish.x = edge.x;
-        fish.y = edge.y;
-        fish.vx *= -0.5;
-        fish.vy *= -0.5;
+      // Vertical wander, fully decoupled from the horizontal steering above.
+      fish.depthCooldown -= dt;
+      if (fish.depthCooldown <= 0) {
+        fish.depthTarget = 0.1 + Math.random() * 0.8;
+        fish.depthCooldown = 90 + Math.random() * 150;
       }
+      fish.depth += (fish.depthTarget - fish.depth) * 0.01 * dt;
     }
 
     // River flow-through: fish that cross the right edge have finished
