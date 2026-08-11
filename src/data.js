@@ -10,6 +10,11 @@
 // Sockeye), a year, and export as CSV. Parse each row into
 // { date: "YYYY-MM-DD", count: <daily count> } and drop it in below.
 
+//https://www.cbr.washington.edu/dart/cs/php/rpt/adult_daily.php?sc=1&outputFormat=html&year=1975&proj=LWG&span=no&startdate=1%2F1&enddate=12%2F31&run=&syear=2026&eyear=2026
+
+const COLUMBIA_BASIN_RESEARCH_DART_URL =
+  "https://www.cbr.washington.edu/dart/query/adult_daily?sc=1&outputFormat=csv&year=1975&proj=LWG&span=no&startdate=1%2F1&enddate=12%2F31&run=&syear=2026&eyear=2026";
+
 function generatePlaceholderRun() {
   const days = 90; // roughly April 1 - June 30
   const data = [];

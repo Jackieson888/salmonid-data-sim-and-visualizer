@@ -6,9 +6,15 @@
 // (see main.js.old buildSwimFrames): a per-vertex lateral bend driven by a
 // traveling sine wave whose amplitude grows toward the tail, evaluated in
 // a custom vertex shader instead of baked per-frame on the CPU.
+//
+// Fish also pick up the same causticGlow() read the terrain/water use (see
+// causticsChunk.js), sampled at each vertex's world XZ position, so a fish
+// swimming through a bright patch of the water's light net visibly glints —
+// the fish read as sitting *in* the water instead of pasted over it.
 
 import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
 
 const MODEL_URL = "/salmon.obj";
 const SKIN_URL = "/salmon-skin.png";
@@ -29,18 +35,26 @@ const BEND_FREQUENCY = 5.0; // spatial frequency of the traveling wave along the
 const VISUAL_SCALE = 2.4;
 
 const VERTEX_SHADER = /* glsl */ `
+  ${CAUSTIC_GLOW_GLSL}
+
   attribute float aMatId;
   attribute float aAlong;
   attribute float aPhase;
   attribute float aSpeed;
+  attribute float aOpacity;
 
   uniform float uTime;
   uniform float uBendAmplitude;
   uniform float uBendFrequency;
+  uniform sampler2D uWater;
+  uniform vec2 uWorldSize;
+  uniform vec2 uTexel;
 
   varying vec2 vUv;
   varying float vMatId;
   varying vec3 vWorldNormal;
+  varying float vCausticGlow;
+  varying float vOpacity;
 
   void main() {
     // Swapped from the raw OBJ (u, 1-v): the source photo runs nose->tail
@@ -50,6 +64,7 @@ const VERTEX_SHADER = /* glsl */ `
     // vertical banding. Swapping axes lines the photo up along the spine.
     vUv = vec2(uv.y, 1.0 - uv.x);
     vMatId = aMatId;
+    vOpacity = aOpacity;
 
     float alongSq = aAlong * aAlong;
     float bendPhase = uTime * 0.0012 * aSpeed - aAlong * uBendFrequency + aPhase;
@@ -59,6 +74,12 @@ const VERTEX_SHADER = /* glsl */ `
 
     vec4 worldPos = instanceMatrix * vec4(bent, 1.0);
     vWorldNormal = normalize((instanceMatrix * vec4(normal, 0.0)).xyz);
+
+    // Same causticGlow() read terrain.js/water.js use, sampled at this
+    // vertex's world position — one read per vertex (cheaper than per
+    // fragment, and plenty smooth at the fish's screen size).
+    vec2 waterUv = worldPos.xz / uWorldSize;
+    vCausticGlow = causticGlow(uWater, waterUv, uTexel);
 
     vec4 mvPosition = modelViewMatrix * worldPos;
     gl_Position = projectionMatrix * mvPosition;
@@ -70,10 +91,14 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uEyeColor;
   uniform vec3 uMouthColor;
   uniform vec3 uLightDir;
+  uniform vec3 uCausticsColor;
+  uniform float uCausticsStrength;
 
   varying vec2 vUv;
   varying float vMatId;
   varying vec3 vWorldNormal;
+  varying float vCausticGlow;
+  varying float vOpacity;
 
   void main() {
     vec3 base;
@@ -89,7 +114,12 @@ const FRAGMENT_SHADER = /* glsl */ `
     float band = floor(ndl * 4.0) / 4.0;
     float lit = mix(0.55, 1.2, band);
 
-    gl_FragColor = vec4(base * lit, 1.0);
+    // Fake the same light net the riverbed/surface show, glinting across
+    // the fish as they pass through a bright patch — a highlight added on
+    // top rather than a full relight, so it doesn't fight the body texture.
+    float glow = min(vCausticGlow * uCausticsStrength, 1.4);
+
+    gl_FragColor = vec4(base * lit + uCausticsColor * glow, vOpacity);
   }
 `;
 
@@ -97,7 +127,11 @@ async function loadMergedGeometry() {
   const loader = new OBJLoader();
   const group = await loader.loadAsync(MODEL_URL);
 
-  const groupNameToMatId = { sal_body: MAT_BODY, sal_eye: MAT_EYE, sal_mouth: MAT_MOUTH };
+  const groupNameToMatId = {
+    sal_body: MAT_BODY,
+    sal_eye: MAT_EYE,
+    sal_mouth: MAT_MOUTH,
+  };
 
   const positions = [];
   const uvs = [];
@@ -106,9 +140,12 @@ async function loadMergedGeometry() {
   // Track the model's bounding box while walking its meshes, so it can be
   // re-centered and measured (for the nose->tail `aAlong` param below)
   // without a second pass over the data.
-  let minX = Infinity, maxX = -Infinity;
-  let minY = Infinity, maxY = -Infinity;
-  let minZ = Infinity, maxZ = -Infinity;
+  let minX = Infinity,
+    maxX = -Infinity;
+  let minY = Infinity,
+    maxY = -Infinity;
+  let minZ = Infinity,
+    maxZ = -Infinity;
 
   // Flatten every sub-mesh (body/eye/mouth) into one flat vertex soup,
   // tagging each vertex with which material it belongs to.
@@ -154,7 +191,10 @@ async function loadMergedGeometry() {
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setAttribute("aMatId", new THREE.Float32BufferAttribute(matIds, 1));
   geometry.setAttribute("aAlong", new THREE.Float32BufferAttribute(along, 1));
@@ -178,11 +218,17 @@ export function loadFishAssets() {
   return cachedLoad;
 }
 
-export function createFishInstancedMesh({ geometry, modelLength, texture }, maxCount) {
+export function createFishInstancedMesh(
+  { geometry, modelLength, texture },
+  maxCount,
+  waterSimSize,
+) {
   const phase = new Float32Array(maxCount);
   const speed = new Float32Array(maxCount);
+  const opacity = new Float32Array(maxCount);
   geometry.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1));
   geometry.setAttribute("aSpeed", new THREE.InstancedBufferAttribute(speed, 1));
+  geometry.setAttribute("aOpacity", new THREE.InstancedBufferAttribute(opacity, 1));
 
   const uniforms = {
     uTime: { value: 0 },
@@ -192,12 +238,22 @@ export function createFishInstancedMesh({ geometry, modelLength, texture }, maxC
     uEyeColor: { value: EYE_COLOR },
     uMouthColor: { value: MOUTH_COLOR },
     uLightDir: { value: new THREE.Vector3(0.4, 1, 0.25).normalize() },
+    uWater: { value: null },
+    uWorldSize: { value: new THREE.Vector2(1, 1) }, // real size arrives via update() each frame
+    uTexel: { value: new THREE.Vector2(1 / waterSimSize, 1 / waterSimSize) },
+    uCausticsColor: { value: new THREE.Color(0.55, 0.95, 0.85) },
+    uCausticsStrength: { value: 60 },
   };
 
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: VERTEX_SHADER,
     fragmentShader: FRAGMENT_SHADER,
+    // Lets aOpacity (spawn fade-in / remove fade-out — see boids.js) actually
+    // blend instead of being ignored; most fish sit at opacity 1 (fully
+    // opaque) most of the time, so leaving depthWrite at its default keeps
+    // normal occlusion correct and only the brief fade window can mis-sort.
+    transparent: true,
   });
 
   const mesh = new THREE.InstancedMesh(geometry, material, maxCount);
@@ -220,7 +276,7 @@ export function createFishInstancedMesh({ geometry, modelLength, texture }, maxC
   // range, with a small wobble and a slight pitch toward whichever way
   // that drift is currently heading so it still reads as swimming rather
   // than an elevator.
-  function update(fish, t, depthRange) {
+  function update(fish, t, depthRange, bounds, waterTexture) {
     const { surfaceY, floorY } = depthRange;
     const count = Math.min(fish.length, maxCount);
     for (let i = 0; i < count; i++) {
@@ -235,17 +291,27 @@ export function createFishInstancedMesh({ geometry, modelLength, texture }, maxC
 
       const s = (f.length * VISUAL_SCALE) / modelLength;
       scaleVec.set(s, s, s);
-      const y = THREE.MathUtils.lerp(surfaceY, floorY, f.depth) + Math.sin(t * 0.0007 + f.wobblePhase) * 2.5;
+      const y =
+        THREE.MathUtils.lerp(surfaceY, floorY, f.depth) +
+        Math.sin(t * 0.0007 + f.wobblePhase) * 2.5;
       matrix.compose(new THREE.Vector3(f.x, y, f.y), quaternion, scaleVec);
       mesh.setMatrixAt(i, matrix);
       phase[i] = f.wobblePhase;
       speed[i] = f.wobbleSpeed;
+      opacity[i] = f.opacity;
     }
     mesh.count = count;
     mesh.instanceMatrix.needsUpdate = true;
     geometry.attributes.aPhase.needsUpdate = true;
     geometry.attributes.aSpeed.needsUpdate = true;
+    geometry.attributes.aOpacity.needsUpdate = true;
     uniforms.uTime.value = t;
+
+    // The water sim's ping-pong texture swaps every frame, and bounds can
+    // change on resize — both get refreshed here rather than wired through
+    // a separate setter, since update() already runs once per frame.
+    uniforms.uWater.value = waterTexture;
+    uniforms.uWorldSize.value.set(bounds.width, bounds.height);
   }
 
   return { mesh, update };

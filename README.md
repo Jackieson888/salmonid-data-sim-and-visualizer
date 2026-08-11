@@ -24,15 +24,18 @@ leverage 3D depth to read as a diorama rather than a flat map.
 - `src/scene/terrain.js` — turns `bankTopY`/`bankBottomY`/`islandSpace`
   into an elevation mesh (vertex-colored, beach-sloped shoreline) plus
   the island's vegetation speckles
-- `src/scene/water.js` — the water plane: a ported version of the old
-  procedural caustic-texture generator, scrolled via a custom shader,
-  plus the per-pod "lens ripple" glow (see `src/scene/pods.js`)
+- `src/scene/water.js` — the water plane: fresnel-shaded surface driven by
+  the live water sim, plus the per-pod "lens ripple" glow (see
+  `src/scene/pods.js`)
 - `src/scene/fishMesh.js` — loads `SALMON.OBJ`, merges its body/eye/mouth
   groups into one geometry, and drives the swim animation + instancing
 - `src/scene/waterSim.js` — GPU height-field water simulation (ping-pong
-  render targets) that the caustics pass and water surface both read from
-- `src/scene/caustics.js` — the two-pass caustics pipeline (terrain depth
-  map + refracted ray-march) that lights the riverbed and water surface
+  render targets) that the terrain and water surface both read from
+- `src/scene/causticsChunk.js` — a shared, stylized (not physically
+  accurate) caustic-glow GLSL function: brightness from the water surface's
+  local curvature, sampled directly off the water sim texture. Used by
+  both `terrain.js` and `water.js`; the intended extension point for
+  eventually tinting the fish too
 - `src/scene/pods.js` — bridges `boids.js`'s CPU-side fish clustering into
   the ripple sources the water shader reads
 - `public/salmon.obj` / `public/salmon-skin.png` — runtime copies of the

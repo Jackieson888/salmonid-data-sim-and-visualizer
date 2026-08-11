@@ -52,6 +52,11 @@ const UPDATE_FRAGMENT_SHADER = /* glsl */ `
     // Discrete wave equation: pull height toward the 4-neighbor average
     // (that's the propagation), accumulate that pull into velocity (.g)
     // with a touch of damping so ripples fade out, then integrate height.
+    // Both constants are tuned for a calm stretch of river: a lower
+    // propagation factor spreads ripples out more slowly (sluggish, heavy
+    // water rather than a jittery pond-drop), and lighter damping lets a
+    // ripple travel further — grow into a broad, slow swell — before it
+    // dies out instead of staying small and local.
     vec2 dx = vec2(delta.x, 0.0);
     vec2 dy = vec2(0.0, delta.y);
     float average = (
@@ -61,8 +66,8 @@ const UPDATE_FRAGMENT_SHADER = /* glsl */ `
       texture2D(texture, coord + dy).r
     ) * 0.25;
 
-    info.g += (average - info.r) * 2.0;
-    info.g *= 0.995;
+    info.g += (average - info.r) * 0.9;
+    info.g *= 0.9975;
     info.r += info.g;
 
     // Recompute the surface normal (.ba) from the local height gradient,

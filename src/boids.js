@@ -10,6 +10,15 @@
 // forces — that drives the 3D renderer's vertical swim position (see
 // scene/fishMesh.js) so fish visibly cruise up and down through the water
 // column instead of skimming a fixed depth.
+//
+// Fish don't pop in/out: `opacity` ramps 0->1 over their first
+// SPAWN_FADE_FRAMES frames of life, and Flock.remove() doesn't delete a
+// fish immediately — it flags it `removing` and Flock.step() fades its
+// opacity 1->0 over REMOVE_FADE_FRAMES before actually dropping it from
+// the array. The renderer (fishMesh.js) reads `fish.opacity` each frame.
+
+const SPAWN_FADE_FRAMES = 24;
+const REMOVE_FADE_FRAMES = 24;
 
 export class Fish {
   constructor(x, y, bounds) {
@@ -33,10 +42,23 @@ export class Fish {
     this.depth = 0.2 + Math.random() * 0.6;
     this.depthTarget = this.depth;
     this.depthCooldown = 60 + Math.random() * 150;
+
+    // Fade in/out lifecycle — see file header. `age` drives the fade-in;
+    // `removing`/`removeAge` drive the fade-out once Flock.remove() flags it.
+    this.age = 0;
+    this.removing = false;
+    this.removeAge = 0;
   }
 
   get speed() {
     return Math.hypot(this.vx, this.vy);
+  }
+
+  get opacity() {
+    if (this.removing) {
+      return Math.max(0, 1 - this.removeAge / REMOVE_FADE_FRAMES);
+    }
+    return Math.min(1, this.age / SPAWN_FADE_FRAMES);
   }
 }
 
@@ -66,9 +88,38 @@ export class Flock {
     return fish;
   }
 
+  // Doesn't delete the fish immediately — flags it to fade out over
+  // REMOVE_FADE_FRAMES (see Fish.opacity); step() drops it from the array
+  // once that fade finishes. Safe to call more than once on the same fish.
   remove(fish) {
-    const idx = this.fish.indexOf(fish);
-    if (idx !== -1) this.fish.splice(idx, 1);
+    if (fish.removing) return;
+    fish.removing = true;
+    fish.removeAge = 0;
+  }
+
+  // Count of fish that are logically still part of the run — excludes ones
+  // already fading out after remove(). Population-target math (main.js)
+  // uses this instead of fish.length so a pending fade-out doesn't get
+  // double-counted or cause a removal loop to spin forever waiting for
+  // fish that are already flagged to disappear.
+  activeCount() {
+    let n = 0;
+    for (const fish of this.fish) if (!fish.removing) n++;
+    return n;
+  }
+
+  // Immediately drops any fish still mid-fade-out from a previous remove(),
+  // skipping the rest of their fade. Without this, a hard resync (see
+  // main.js's jumpToDay) that fires faster than step() can finish fading
+  // fish out — e.g. a fast timeline-scrub drag — would let already-flagged
+  // fish pile up in the array on every call instead of ever finishing, and
+  // step()'s O(n²) neighbor search would grow with them until the whole
+  // page stalls. Called at the start of a fresh jump so at most one jump's
+  // worth of fades is ever pending, no matter how fast jumps arrive.
+  finalizeRemovals() {
+    if (this.fish.some((f) => f.removing)) {
+      this.fish = this.fish.filter((f) => !f.removing);
+    }
   }
 
   setBounds(bounds) {
@@ -200,14 +251,23 @@ export class Flock {
         fish.depthCooldown = 90 + Math.random() * 150;
       }
       fish.depth += (fish.depthTarget - fish.depth) * 0.01 * dt;
+
+      // Fade lifecycle: age drives the spawn fade-in; removing fish also
+      // age their fade-out timer (see Fish.opacity).
+      fish.age += dt;
+      if (fish.removing) fish.removeAge += dt;
     }
 
     // River flow-through: fish that cross the right edge have finished
-    // their run and are removed, rather than wrapping back to the start.
+    // their run — flag them to fade out (see remove()) rather than
+    // wrapping back to the start or vanishing outright.
     const exitX = this.bounds.width + 40;
-    if (this.fish.some((f) => f.x > exitX)) {
-      this.fish = this.fish.filter((f) => f.x <= exitX);
+    for (const fish of this.fish) {
+      if (fish.x > exitX) this.remove(fish);
     }
+
+    // Finalize: drop any fish whose fade-out has fully played out.
+    this.fish = this.fish.filter((f) => !(f.removing && f.removeAge >= REMOVE_FADE_FRAMES));
   }
 }
 

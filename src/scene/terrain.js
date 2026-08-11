@@ -1,30 +1,35 @@
 // terrain.js
-// Flat riverbed floor, in the spirit of martinRenou/threejs-caustics' pool
-// floor: a simple plane sitting below the water surface that exists mainly
-// to catch the caustics pass (see scene/caustics.js). No banks or island —
-// fish swim through the open water column above it.
+// Flat riverbed floor: a simple plane sitting below the water surface that
+// exists mainly to catch the stylized caustic glow (see causticsChunk.js).
+// No banks or island — fish swim through the open water column above it.
 
 import * as THREE from "three";
+import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
 
-export const RIVER_DEPTH_FRAC = 0.1; // floor depth below the water surface, as a fraction of bounds.height
+export const RIVER_DEPTH_FRAC = 0.25; // floor depth below the water surface, as a fraction of bounds.height
 
-const GRID_STEP = 40; // world units per floor vertex — just enough for gentle per-vertex color noise
+const GRID_STEP = 20; // world units per floor vertex — just enough for gentle per-vertex color noise
 
-const FLOOR_COLOR = new THREE.Color("#16394a");
+const FLOOR_COLOR = new THREE.Color("#152423");
 const COLOR_NOISE = 0.05; // per-vertex brightness jitter, keeps the floor from reading as flat-shaded
 
 export function riverDepth(bounds) {
   return bounds.height * RIVER_DEPTH_FRAC;
 }
 
-export function buildTerrainMesh(bounds) {
+export function buildTerrainMesh(bounds, waterSimSize) {
   // A flat, subdivided plane sitting `depth` world units below the water
   // surface, rotated to lie horizontal (X/Z) and translated so it spans
   // [0, bounds.width] x [0, bounds.height] instead of being centered on origin.
   const depth = riverDepth(bounds);
   const cols = Math.max(2, Math.round(bounds.width / GRID_STEP));
   const rows = Math.max(2, Math.round(bounds.height / GRID_STEP));
-  const geometry = new THREE.PlaneGeometry(bounds.width, bounds.height, cols, rows);
+  const geometry = new THREE.PlaneGeometry(
+    bounds.width,
+    bounds.height,
+    cols,
+    rows,
+  );
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(bounds.width / 2, -depth, bounds.height / 2);
 
@@ -44,7 +49,7 @@ export function buildTerrainMesh(bounds) {
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
 
-  const material = buildTerrainMaterial();
+  const material = buildTerrainMaterial(bounds, waterSimSize);
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "terrain";
@@ -54,13 +59,11 @@ export function buildTerrainMesh(bounds) {
 const TERRAIN_VERTEX_SHADER = /* glsl */ `
   attribute vec3 color;
 
-  uniform mat4 lightProjectionMatrix;
-  uniform mat4 lightViewMatrix;
   uniform vec3 sunDir;
 
   varying vec3 vColor;
   varying float vLightIntensity;
-  varying vec3 vLightSpacePos;
+  varying vec2 vWorldXZ;
 
   void main() {
     vColor = color;
@@ -69,68 +72,49 @@ const TERRAIN_VERTEX_SHADER = /* glsl */ `
     vec3 worldNormal = normalize(mat3(modelMatrix) * normal);
     vLightIntensity = max(dot(worldNormal, sunDir), 0.0);
 
-    // Project this vertex into the caustics light camera's clip space so the
-    // fragment shader can sample the caustics texture at the matching texel.
-    vec4 lightSpace = lightProjectionMatrix * lightViewMatrix * modelMatrix * vec4(position, 1.0);
-    vLightSpacePos = vec3(0.5) + 0.5 * lightSpace.xyz / lightSpace.w;
+    // Geometry is already translated into world space at build time (see
+    // buildTerrainMesh) and this mesh never itself moves, so the raw
+    // position IS the world XZ the caustic glow needs to sample by.
+    vWorldXZ = position.xz;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
-  uniform sampler2D caustics;
+  ${CAUSTIC_GLOW_GLSL}
+
+  uniform sampler2D water;
+  uniform vec2 worldSize;
+  uniform vec2 texel;
   uniform vec3 causticsColor;
-  uniform vec2 causticsResolution;
+  uniform float causticsStrength;
 
   varying vec3 vColor;
   varying float vLightIntensity;
-  varying vec3 vLightSpacePos;
-
-  const float bias = 0.02;
-
-  float blur(vec2 uv, vec2 direction) {
-    vec2 off1 = vec2(1.3846153846) * direction;
-    vec2 off2 = vec2(3.2307692308) * direction;
-    float intensity = texture2D(caustics, uv).x * 0.2270270270;
-    intensity += texture2D(caustics, uv + off1 / causticsResolution).x * 0.3162162162;
-    intensity += texture2D(caustics, uv - off1 / causticsResolution).x * 0.3162162162;
-    intensity += texture2D(caustics, uv + off2 / causticsResolution).x * 0.0702702703;
-    intensity += texture2D(caustics, uv - off2 / causticsResolution).x * 0.0702702703;
-    return intensity;
-  }
+  varying vec2 vWorldXZ;
 
   void main() {
     // Toon-ish quantized diffuse, three bands.
     float band = vLightIntensity > 0.72 ? 1.0 : (vLightIntensity > 0.4 ? 0.78 : 0.6);
     vec3 base = vColor * (0.45 + 0.55 * band);
 
-    // Only add the caustics glow where this fragment is actually the
-    // closest surface to the light (depth test against the stored terrain
-    // depth map), so the net of light doesn't bleed through occluded areas.
-    float causticsDepth = texture2D(caustics, vLightSpacePos.xy).w;
-    float glow = 0.0;
-    if (causticsDepth > vLightSpacePos.z - bias) {
-      // Soften the accumulated caustics texture with a small 2-tap blur
-      // (horizontal + vertical) so individual triangle-scale hotspots merge
-      // into a smoother net-of-light look.
-      glow = 0.5 * (blur(vLightSpacePos.xy, vec2(0.0, 0.5)) + blur(vLightSpacePos.xy, vec2(0.5, 0.0)));
-    }
-    glow = min(glow, 1.4);
+    vec2 uv = vWorldXZ / worldSize;
+    float glow = min(causticGlow(water, uv, texel) * causticsStrength, 1.4);
 
     vec3 color = base + causticsColor * glow;
     gl_FragColor = vec4(color, 1.0);
   }
 `;
 
-function buildTerrainMaterial() {
+function buildTerrainMaterial(bounds, waterSimSize) {
   return new THREE.ShaderMaterial({
     uniforms: {
-      caustics: { value: null },
-      causticsColor: { value: new THREE.Color(0.55, 0.85, 0.95) },
-      causticsResolution: { value: new THREE.Vector2(512, 512) },
-      lightProjectionMatrix: { value: new THREE.Matrix4() },
-      lightViewMatrix: { value: new THREE.Matrix4() },
+      water: { value: null },
+      worldSize: { value: new THREE.Vector2(bounds.width, bounds.height) },
+      texel: { value: new THREE.Vector2(1 / waterSimSize, 1 / waterSimSize) },
+      causticsColor: { value: new THREE.Color(0.55, 0.95, 0.85) },
+      causticsStrength: { value: 20 },
       sunDir: { value: new THREE.Vector3(0.4, 1, 0.25).normalize() },
     },
     vertexShader: TERRAIN_VERTEX_SHADER,
@@ -138,12 +122,10 @@ function buildTerrainMaterial() {
   });
 }
 
-// Wires the caustics render target + light camera produced by
-// scene/caustics.js into an already-built terrain mesh's material.
-export function applyCaustics(terrainMesh, causticsPipeline) {
-  const uniforms = terrainMesh.material.uniforms;
-  uniforms.caustics.value = causticsPipeline.texture;
-  uniforms.causticsResolution.value.set(causticsPipeline.size, causticsPipeline.size);
-  uniforms.lightProjectionMatrix.value.copy(causticsPipeline.lightCamera.projectionMatrix);
-  uniforms.lightViewMatrix.value.copy(causticsPipeline.lightCamera.matrixWorldInverse);
+// Feeds the terrain material the water sim's current height/normal texture
+// (its ping-pong target swaps every frame, so this needs to run every frame
+// — see main.js's loop). No light camera, no separate caustics render pass:
+// the glow is sampled straight from the water texture (see causticsChunk.js).
+export function setTerrainWaterTexture(terrainMesh, waterTexture) {
+  terrainMesh.material.uniforms.water.value = waterTexture;
 }

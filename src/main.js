@@ -1,10 +1,9 @@
 import { Flock } from "./boids.js";
 import { runData } from "./data.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
-import { buildTerrainMesh, applyCaustics, riverDepth } from "./scene/terrain.js";
+import { buildTerrainMesh, setTerrainWaterTexture, riverDepth } from "./scene/terrain.js";
 import { buildWaterMesh } from "./scene/water.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
-import { createCausticsPipeline } from "./scene/caustics.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
 import { computePods } from "./scene/pods.js";
 
@@ -26,13 +25,14 @@ const sceneSetup = createSceneSetup(canvas, bounds);
 const { renderer, scene, camera } = sceneSetup;
 
 // ---------------------------------------------------------------------
-// Water simulation + caustics pipeline (see scene/waterSim.js and
-// scene/caustics.js — ported from martinRenou/threejs-caustics). The
-// water sim's own [-1, 1] space is square regardless of world aspect
-// ratio, so ripple radii get corrected by worldAspect to stay circular.
+// Water simulation (see scene/waterSim.js, ported from
+// martinRenou/threejs-caustics). The water sim's own [-1, 1] space is
+// square regardless of world aspect ratio, so ripple radii get corrected
+// by worldAspect to stay circular. The terrain and water surface both
+// read caustic glow straight off this sim's texture (see
+// scene/causticsChunk.js) rather than through a separate render pass.
 // ---------------------------------------------------------------------
 const WATER_SIM_SIZE = 192;
-const WATER_AMPLITUDE = 10; // world units of ripple height, for the caustics ray origin
 
 // Converts a world-space (x, z) position into the water sim's normalized
 // [-1, 1] uv space, used whenever we need to drop a ripple at a world point.
@@ -40,35 +40,31 @@ function worldToSim(x, z) {
   return { x: (x / bounds.width) * 2 - 1, z: (z / bounds.height) * 2 - 1 };
 }
 
-let terrainMesh = buildTerrainMesh(bounds);
+let terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
 scene.add(terrainMesh);
 
 // Depth range fish swim within: a little below the surface down to just
 // above the riverbed floor. See boids.js's fish.depth and fishMesh.js.
 let depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
 
-let causticsPipeline = createCausticsPipeline({ bounds, terrainMesh });
-applyCaustics(terrainMesh, causticsPipeline);
-causticsPipeline.renderTerrainDepthMap(renderer);
-
 let waterSim = createWaterSimulation(renderer, WATER_SIM_SIZE, bounds.height / bounds.width);
 
-let water = buildWaterMesh(bounds);
+let water = buildWaterMesh(bounds, WATER_SIM_SIZE);
 scene.add(water.mesh);
 
 let fishRenderer = null;
 loadFishAssets()
   .then((assets) => {
-    fishRenderer = createFishInstancedMesh(assets, 1500);
+    fishRenderer = createFishInstancedMesh(assets, 1500, WATER_SIM_SIZE);
     scene.add(fishRenderer.mesh);
   })
   .catch((err) => console.error("Failed to load fish model:", err));
 
 // Window resize handler: everything bounds-shaped (terrain, water, the
-// caustics pipeline, the water sim) is rebuilt from scratch at the new
-// size, since these meshes/render targets are sized directly off `bounds`
-// rather than being resizable in place. Old GPU resources are disposed
-// before their replacements are created to avoid leaking memory.
+// water sim) is rebuilt from scratch at the new size, since these
+// meshes/render targets are sized directly off `bounds` rather than being
+// resizable in place. Old GPU resources are disposed before their
+// replacements are created to avoid leaking memory.
 function resize() {
   bounds = { width: window.innerWidth, height: window.innerHeight };
   sceneSetup.resize(bounds);
@@ -79,16 +75,12 @@ function resize() {
   terrainMesh.material.dispose();
   water.mesh.geometry.dispose();
   water.mesh.material.dispose();
-  causticsPipeline.dispose();
   waterSim.dispose();
 
-  terrainMesh = buildTerrainMesh(bounds);
+  terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
   depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
-  causticsPipeline = createCausticsPipeline({ bounds, terrainMesh });
-  applyCaustics(terrainMesh, causticsPipeline);
-  causticsPipeline.renderTerrainDepthMap(renderer);
   waterSim = createWaterSimulation(renderer, WATER_SIM_SIZE, bounds.height / bounds.width);
-  water = buildWaterMesh(bounds);
+  water = buildWaterMesh(bounds, WATER_SIM_SIZE);
   scene.add(terrainMesh, water.mesh);
 }
 
@@ -171,24 +163,34 @@ function randomOpenWaterPoint() {
   return { x: Math.random() * bounds.width, y: Math.random() * bounds.height };
 }
 
-// Scrubbing the timeline jumps straight to a day: instantly spawn/remove
-// fish until the population matches that day's target, then reset the
-// per-day animation state (frame counter, spawn accumulator, speed, HUD).
+// Scrubbing the timeline jumps straight to a day: spawn/flag-for-removal
+// fish until the population matches that day's target (they still fade
+// in/out — see boids.js — rather than popping), then reset the per-day
+// animation state (frame counter, spawn accumulator, speed, HUD).
 function jumpToDay(idx) {
+  // A fresh jump is a hard resync point: flush any fade-out still pending
+  // from a previous jump rather than layering more on top of it (see
+  // Flock.finalizeRemovals() — this is what keeps a fast slider drag from
+  // growing the fish array without bound).
+  flock.finalizeRemovals();
+
   const target = targetFishForDay(idx);
-  while (flock.fish.length < target) {
+  while (flock.activeCount() < target) {
     const { x, y } = randomOpenWaterPoint();
     flock.spawn(x, y);
   }
-  while (flock.fish.length > target) {
-    flock.remove(flock.fish[flock.fish.length - 1]);
+  while (flock.activeCount() > target) {
+    // activeCount() excludes fish already mid-fade-out, so this always
+    // finds a fresh candidate — remove() itself is a no-op on a fish
+    // that's already flagged, which is what would infinite-loop otherwise.
+    flock.remove(flock.fish.find((f) => !f.removing));
   }
   dayIndex = idx;
   frameCounter = 0;
   spawnAccumulator = 0;
   applyDaySpeed(idx);
   dateLabel.textContent = runData[idx].date;
-  fishCountLabel.textContent = `${flock.fish.length} fish`;
+  fishCountLabel.textContent = `${flock.activeCount()} fish`;
   timelineInput.value = String(idx);
 }
 
@@ -210,20 +212,23 @@ timelineInput.addEventListener("input", (e) => {
 // surface (pods drop ripples as they pass), plus a slow ambient "rain" so
 // the surface never goes fully static.
 // ---------------------------------------------------------------------
-const AMBIENT_DROP_INTERVAL_FRAMES = 12;
-const POD_DROP_INTERVAL_FRAMES = 12;
+// Calm-water tuning: dropped less often, each drop bigger and gentler than
+// a sharp poke, to read as slow, broad swells rather than busy chop (see
+// the matching propagation/damping tuning in waterSim.js).
+const AMBIENT_DROP_INTERVAL_FRAMES = 30;
+const POD_DROP_INTERVAL_FRAMES = 20;
 let rippleFrame = 0;
 
 function emitRipples() {
   rippleFrame++;
 
-  // Ambient "rain": one small random ripple every AMBIENT_DROP_INTERVAL_FRAMES
+  // Ambient "rain": one broad, soft ripple every AMBIENT_DROP_INTERVAL_FRAMES
   // frames, purely cosmetic so the water surface is never perfectly still.
   if (rippleFrame % AMBIENT_DROP_INTERVAL_FRAMES === 0) {
     const x = Math.random() * bounds.width;
     const z = Math.random() * bounds.height;
     const center = worldToSim(x, z);
-    waterSim.addDrop(center, 0.02 + Math.random() * 0.015, 0.025);
+    waterSim.addDrop(center, 0.05 + Math.random() * 0.03, 0.018);
   }
 
   // Pod ripples: each clustered group of fish (see pods.js) drops a ripple
@@ -233,8 +238,8 @@ function emitRipples() {
     const pods = computePods(flock.fish);
     for (const pod of pods) {
       const center = worldToSim(pod.x, pod.z);
-      const radius = Math.min(0.12, (pod.radius / bounds.width) * 1.5);
-      const strength = Math.sin(pod.phase) >= 0 ? 0.03 : -0.03;
+      const radius = Math.min(0.18, (pod.radius / bounds.width) * 2);
+      const strength = Math.sin(pod.phase) >= 0 ? 0.02 : -0.02;
       waterSim.addDrop(center, radius, strength);
     }
   }
@@ -244,23 +249,28 @@ function emitRipples() {
 // Animation loop
 // ---------------------------------------------------------------------
 function loop(t) {
-  // 1. Advance the flocking simulation one tick and reflect the live count in the HUD.
+  // 1. Advance the flocking simulation one tick and reflect the live count in
+  // the HUD. activeCount() excludes fish mid-fade-out (see boids.js) so the
+  // number reflects the run's logical population, not the fading stragglers
+  // still on screen.
   flock.step(1);
-  fishCountLabel.textContent = `${flock.fish.length} fish`;
+  fishCountLabel.textContent = `${flock.activeCount()} fish`;
 
   sceneSetup.updateCamera(t);
 
   // 2. Advance the water surface: drop this frame's ripples, relax the
-  // height field, re-render the caustics that refract through it, then hand
-  // both textures to the water mesh's shader.
+  // height field, then hand the resulting texture to the terrain and water
+  // shaders (both read their caustic glow straight off it — see
+  // scene/causticsChunk.js).
   emitRipples();
   waterSim.step();
-  causticsPipeline.renderCaustics(renderer, waterSim.texture, WATER_AMPLITUDE);
-  water.setSources(waterSim.texture, causticsPipeline);
+  setTerrainWaterTexture(terrainMesh, waterSim.texture);
+  water.setSources(waterSim.texture);
 
   // 3. Sync the instanced fish mesh to the simulation's current fish array
-  // (positions, headings, depth, swim-phase) — only once the model has loaded.
-  if (fishRenderer) fishRenderer.update(flock.fish, t, depthRange);
+  // (positions, headings, depth, swim-phase, caustic glow) — only once the
+  // model has loaded.
+  if (fishRenderer) fishRenderer.update(flock.fish, t, depthRange, bounds, waterSim.texture);
 
   renderer.render(scene, camera);
 
@@ -270,7 +280,7 @@ function loop(t) {
   if (isPlaying) {
     const progress = frameCounter / FRAMES_PER_DAY;
     const target = desiredPopulation(dayIndex, progress);
-    const error = target - flock.fish.length;
+    const error = target - flock.activeCount();
     spawnAccumulator += Math.max(0, error) * POPULATION_CORRECTION_GAIN;
     while (spawnAccumulator >= 1) {
       spawnAtLeftEdge();
