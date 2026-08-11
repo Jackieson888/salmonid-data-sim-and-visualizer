@@ -4,7 +4,8 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
   background: #04121a;
@@ -95,4 +96,21 @@ html, body {
   #timeline {
     width: 140px;
   }
+}
+
+#debug-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  margin: 0;
+  color: #7fd8e8;
+  background: rgba(4, 18, 26, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: pre;
 }

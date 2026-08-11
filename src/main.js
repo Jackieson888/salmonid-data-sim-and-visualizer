@@ -1,8 +1,12 @@
 import { Flock } from "./boids.js";
 import { runData } from "./data.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
-import { buildTerrainMesh, setTerrainWaterTexture, riverDepth } from "./scene/terrain.js";
-import { buildWaterMesh } from "./scene/water.js";
+import {
+  buildTerrainMesh,
+  setTerrainWaterTexture,
+  riverDepth,
+} from "./scene/terrain.js";
+import { buildWaterMesh, waterWorldSize } from "./scene/water.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
 import { computePods } from "./scene/pods.js";
@@ -22,7 +26,18 @@ const fishCountLabel = document.getElementById("fish-count");
 let bounds = { width: window.innerWidth, height: window.innerHeight };
 
 const sceneSetup = createSceneSetup(canvas, bounds);
-const { renderer, scene, camera } = sceneSetup;
+const { renderer, scene, camera, controls } = sceneSetup;
+
+// ---------------------------------------------------------------------
+// Camera debug readout — toggle with "D". Shows live distance-to-target
+// plus camera/target/bounds numbers so a sensible OrbitControls
+// minDistance/maxDistance can be read off directly instead of guessed.
+// ---------------------------------------------------------------------
+const debugPanel = document.getElementById("debug-panel");
+window.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() !== "d" || e.target.tagName === "INPUT") return;
+  debugPanel.hidden = !debugPanel.hidden;
+});
 
 // ---------------------------------------------------------------------
 // Water simulation (see scene/waterSim.js, ported from
@@ -32,22 +47,37 @@ const { renderer, scene, camera } = sceneSetup;
 // read caustic glow straight off this sim's texture (see
 // scene/causticsChunk.js) rather than through a separate render pass.
 // ---------------------------------------------------------------------
-const WATER_SIM_SIZE = 192;
+const WATER_SIM_SIZE = 600;
+
+// The sim actually covers a bigger area than the river bounds (see
+// waterWorldSize()/WATER_SIZE_MULTIPLIER in water.js) so ripples can
+// propagate all the way out to the water plane's faded edges instead of
+// the edge texel just clamping/stretching across that whole margin.
+let waterSize = waterWorldSize(bounds);
 
 // Converts a world-space (x, z) position into the water sim's normalized
-// [-1, 1] uv space, used whenever we need to drop a ripple at a world point.
+// [-1, 1] uv space, used whenever we need to drop a ripple at a world
+// point. Shifted by the sim's margin since it's centered on bounds rather
+// than corner-anchored at world (0, 0) — see waterWorldSize().
 function worldToSim(x, z) {
-  return { x: (x / bounds.width) * 2 - 1, z: (z / bounds.height) * 2 - 1 };
+  return {
+    x: ((x + waterSize.marginX) / waterSize.width) * 2 - 1,
+    z: ((z + waterSize.marginZ) / waterSize.height) * 2 - 1,
+  };
 }
 
 let terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
-scene.add(terrainMesh);
+// scene.add(terrainMesh);
 
 // Depth range fish swim within: a little below the surface down to just
 // above the riverbed floor. See boids.js's fish.depth and fishMesh.js.
 let depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
 
-let waterSim = createWaterSimulation(renderer, WATER_SIM_SIZE, bounds.height / bounds.width);
+let waterSim = createWaterSimulation(
+  renderer,
+  WATER_SIM_SIZE,
+  waterSize.height / waterSize.width,
+);
 
 let water = buildWaterMesh(bounds, WATER_SIM_SIZE);
 scene.add(water.mesh);
@@ -55,7 +85,7 @@ scene.add(water.mesh);
 let fishRenderer = null;
 loadFishAssets()
   .then((assets) => {
-    fishRenderer = createFishInstancedMesh(assets, 1500, WATER_SIM_SIZE);
+    fishRenderer = createFishInstancedMesh(assets, 1500, WATER_SIM_SIZE, bounds);
     scene.add(fishRenderer.mesh);
   })
   .catch((err) => console.error("Failed to load fish model:", err));
@@ -77,11 +107,16 @@ function resize() {
   water.mesh.material.dispose();
   waterSim.dispose();
 
+  waterSize = waterWorldSize(bounds);
   terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
   depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
-  waterSim = createWaterSimulation(renderer, WATER_SIM_SIZE, bounds.height / bounds.width);
+  waterSim = createWaterSimulation(
+    renderer,
+    WATER_SIM_SIZE,
+    waterSize.height / waterSize.width,
+  );
   water = buildWaterMesh(bounds, WATER_SIM_SIZE);
-  scene.add(terrainMesh, water.mesh);
+  scene.add(water.mesh);
 }
 
 const BASE_MAX_SPEED = 2.4;
@@ -140,7 +175,8 @@ function speedMultiplierForRate(rate) {
 
 // Applies the current day's speed multiplier to the flock's shared maxSpeed.
 function applyDaySpeed(idx) {
-  flock.options.maxSpeed = BASE_MAX_SPEED * speedMultiplierForRate(dailyRateOfChange[idx]);
+  flock.options.maxSpeed =
+    BASE_MAX_SPEED * speedMultiplierForRate(dailyRateOfChange[idx]);
 }
 
 let spawnAccumulator = 0;
@@ -224,21 +260,32 @@ function emitRipples() {
 
   // Ambient "rain": one broad, soft ripple every AMBIENT_DROP_INTERVAL_FRAMES
   // frames, purely cosmetic so the water surface is never perfectly still.
+  // The 0.05-0.08 sim-space radius was tuned back when the sim's [-1, 1]
+  // space mapped 1:1 onto bounds; now that it maps onto the bigger
+  // waterSize, the same sim-space radius reads as a bigger real-world
+  // ripple, so it's scaled down by that same ratio to keep the tuned size.
   if (rippleFrame % AMBIENT_DROP_INTERVAL_FRAMES === 0) {
     const x = Math.random() * bounds.width;
     const z = Math.random() * bounds.height;
     const center = worldToSim(x, z);
-    waterSim.addDrop(center, 0.05 + Math.random() * 0.03, 0.018);
+    const radiusScale = bounds.width / waterSize.width;
+    waterSim.addDrop(
+      center,
+      (0.05 + Math.random() * 0.03) * radiusScale,
+      0.018,
+    );
   }
 
   // Pod ripples: each clustered group of fish (see pods.js) drops a ripple
   // sized to the pod and sign-alternating over time (sin of its phase), so
-  // passing schools visibly disturb the surface above them.
+  // passing schools visibly disturb the surface above them. Normalized
+  // against waterSize (not bounds) so the real-world ripple size tracks
+  // the pod regardless of how much bigger the sim's mapped area is.
   if (rippleFrame % POD_DROP_INTERVAL_FRAMES === 0) {
     const pods = computePods(flock.fish);
     for (const pod of pods) {
       const center = worldToSim(pod.x, pod.z);
-      const radius = Math.min(0.18, (pod.radius / bounds.width) * 2);
+      const radius = Math.min(0.18, (pod.radius / waterSize.width) * 2);
       const strength = Math.sin(pod.phase) >= 0 ? 0.02 : -0.02;
       waterSim.addDrop(center, radius, strength);
     }
@@ -258,6 +305,16 @@ function loop(t) {
 
   sceneSetup.updateCamera(t);
 
+  if (!debugPanel.hidden) {
+    const dist = camera.position.distanceTo(controls.target);
+    debugPanel.textContent =
+      `distance to target: ${dist.toFixed(1)}\n` +
+      `camera: (${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)})\n` +
+      `target: (${controls.target.x.toFixed(0)}, ${controls.target.y.toFixed(0)}, ${controls.target.z.toFixed(0)})\n` +
+      `bounds: ${bounds.width.toFixed(0)} x ${bounds.height.toFixed(0)}\n` +
+      `camera.far: ${camera.far.toFixed(0)}`;
+  }
+
   // 2. Advance the water surface: drop this frame's ripples, relax the
   // height field, then hand the resulting texture to the terrain and water
   // shaders (both read their caustic glow straight off it — see
@@ -270,7 +327,15 @@ function loop(t) {
   // 3. Sync the instanced fish mesh to the simulation's current fish array
   // (positions, headings, depth, swim-phase, caustic glow) — only once the
   // model has loaded.
-  if (fishRenderer) fishRenderer.update(flock.fish, t, depthRange, bounds, waterSim.texture);
+  if (fishRenderer)
+    fishRenderer.update(
+      flock.fish,
+      t,
+      depthRange,
+      waterSize,
+      waterSim.texture,
+      bounds,
+    );
 
   renderer.render(scene, camera);
 

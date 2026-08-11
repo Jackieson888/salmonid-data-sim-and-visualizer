@@ -15,6 +15,8 @@
 import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
+import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
+import { riverDepth } from "./terrain.js";
 
 const MODEL_URL = "/salmon.obj";
 const SKIN_URL = "/salmon-skin.png";
@@ -34,6 +36,18 @@ const BEND_FREQUENCY = 5.0; // spatial frequency of the traveling wave along the
 // matching the visual scale the old sprite used (fish.length * 2.8 tall).
 const VISUAL_SCALE = 2.4;
 
+// How much a fish dims the deeper below the water surface (world Y = 0) it
+// swims, simulating sunlight attenuating with depth. ln(4) means a fish at
+// exactly riverDepth(bounds) — the riverbed — sits at 1/4 brightness before
+// the MIN_DEPTH_DIM floor below; fish are never scaled darker than that
+// floor even past the riverbed, so they stay readable at the very bottom.
+const DEPTH_DARKEN_FACTOR = Math.log(4);
+const MIN_DEPTH_DIM = 0.15;
+
+function depthDarkenRate(bounds) {
+  return DEPTH_DARKEN_FACTOR / riverDepth(bounds);
+}
+
 const VERTEX_SHADER = /* glsl */ `
   ${CAUSTIC_GLOW_GLSL}
 
@@ -48,13 +62,17 @@ const VERTEX_SHADER = /* glsl */ `
   uniform float uBendFrequency;
   uniform sampler2D uWater;
   uniform vec2 uWorldSize;
+  uniform vec2 uMargin;
   uniform vec2 uTexel;
+  uniform float uDepthDarkenRate;
 
   varying vec2 vUv;
   varying float vMatId;
   varying vec3 vWorldNormal;
   varying float vCausticGlow;
   varying float vOpacity;
+  varying vec3 vWorldPos;
+  varying float vDepthDim;
 
   void main() {
     // Swapped from the raw OBJ (u, 1-v): the source photo runs nose->tail
@@ -73,12 +91,23 @@ const VERTEX_SHADER = /* glsl */ `
     vec3 bent = position + vec3(bend, 0.0, 0.0);
 
     vec4 worldPos = instanceMatrix * vec4(bent, 1.0);
+    vWorldPos = worldPos.xyz;
     vWorldNormal = normalize((instanceMatrix * vec4(normal, 0.0)).xyz);
+
+    // Darker the deeper below the surface (world Y = 0) this vertex sits —
+    // see DEPTH_DARKEN_FACTOR/MIN_DEPTH_DIM above.
+    float depthBelowSurface = max(0.0, -worldPos.y);
+    vDepthDim = max(${MIN_DEPTH_DIM}, exp(-depthBelowSurface * uDepthDarkenRate));
 
     // Same causticGlow() read terrain.js/water.js use, sampled at this
     // vertex's world position — one read per vertex (cheaper than per
-    // fragment, and plenty smooth at the fish's screen size).
-    vec2 waterUv = worldPos.xz / uWorldSize;
+    // fragment, and plenty smooth at the fish's screen size). uWorldSize/
+    // uMargin match water.js's waterWorldSize() — the sim covers a bigger,
+    // bounds-centered area, not just the raw bounds (see main.js). Left
+    // un-dimmed here — depth attenuation is applied in the fragment shader
+    // *after* the intensity curve (see FRAGMENT_SHADER) so it stays visible
+    // instead of getting swallowed by saturation at high uCausticsStrength.
+    vec2 waterUv = (worldPos.xz + uMargin) / uWorldSize;
     vCausticGlow = causticGlow(uWater, waterUv, uTexel);
 
     vec4 mvPosition = modelViewMatrix * worldPos;
@@ -87,11 +116,14 @@ const VERTEX_SHADER = /* glsl */ `
 `;
 
 const FRAGMENT_SHADER = /* glsl */ `
+  ${FOG_GLSL}
+
   uniform sampler2D uBodyMap;
   uniform vec3 uEyeColor;
   uniform vec3 uMouthColor;
   uniform vec3 uLightDir;
-  uniform vec3 uCausticsColor;
+  uniform vec3 uCausticsColor1;
+  uniform vec3 uCausticsColor2;
   uniform float uCausticsStrength;
 
   varying vec2 vUv;
@@ -99,6 +131,8 @@ const FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vWorldNormal;
   varying float vCausticGlow;
   varying float vOpacity;
+  varying vec3 vWorldPos;
+  varying float vDepthDim;
 
   void main() {
     vec3 base;
@@ -117,9 +151,35 @@ const FRAGMENT_SHADER = /* glsl */ `
     // Fake the same light net the riverbed/surface show, glinting across
     // the fish as they pass through a bright patch — a highlight added on
     // top rather than a full relight, so it doesn't fight the body texture.
-    float glow = min(vCausticGlow * uCausticsStrength, 1.4);
+    // Soft-saturates toward 1.4 instead of hard-clamping: the live water
+    // sim's curvature spikes frame to frame, and a hard min() turns "just
+    // under the cap" and "just over it" into a visible on/off pop every
+    // time a spike crosses that line. This curve's slope shrinks as it
+    // approaches the cap, so the same spike lands as a much smaller,
+    // smoother change in brightness instead of a flicker.
+    float glowStrength = vCausticGlow * uCausticsStrength;
+    float glowSaturated = 1.4 * glowStrength / (glowStrength + 1.4);
 
-    gl_FragColor = vec4(base * lit + uCausticsColor * glow, vOpacity);
+    // vDepthDim applied AFTER saturation, not folded into vCausticGlow —
+    // multiplying it in beforehand let a high uCausticsStrength push even
+    // the dimmed deep-water signal into the saturated region, where the
+    // curve's output barely moves regardless of the input's scale. Scaling
+    // the already-saturated result instead keeps the surface->depth falloff
+    // proportional (and visible) no matter how intense the raw glow is.
+    float glow = glowSaturated * vDepthDim;
+
+    // Two-tone caustics: uCausticsColor1 (the lighter tone) only takes over
+    // where the glow is genuinely intense AND the fish is near the surface —
+    // multiplying the two signals means either one fading (a dim glimmer, or
+    // the same glimmer deeper down) pulls the tone back toward
+    // uCausticsColor2, matching how real underwater light both dims and
+    // loses its sharp, bright color with depth.
+    float glowNorm = clamp(glowSaturated / 1.4, 0.0, 1.0);
+    float tone = clamp(glowNorm * vDepthDim, 0.0, 1.0);
+    vec3 causticsColor = mix(uCausticsColor2, uCausticsColor1, tone);
+
+    vec3 color = applyFog(base * lit * vDepthDim + causticsColor * glow, vWorldPos);
+    gl_FragColor = vec4(color, vOpacity);
   }
 `;
 
@@ -222,13 +282,17 @@ export function createFishInstancedMesh(
   { geometry, modelLength, texture },
   maxCount,
   waterSimSize,
+  bounds,
 ) {
   const phase = new Float32Array(maxCount);
   const speed = new Float32Array(maxCount);
   const opacity = new Float32Array(maxCount);
   geometry.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1));
   geometry.setAttribute("aSpeed", new THREE.InstancedBufferAttribute(speed, 1));
-  geometry.setAttribute("aOpacity", new THREE.InstancedBufferAttribute(opacity, 1));
+  geometry.setAttribute(
+    "aOpacity",
+    new THREE.InstancedBufferAttribute(opacity, 1),
+  );
 
   const uniforms = {
     uTime: { value: 0 },
@@ -240,9 +304,14 @@ export function createFishInstancedMesh(
     uLightDir: { value: new THREE.Vector3(0.4, 1, 0.25).normalize() },
     uWater: { value: null },
     uWorldSize: { value: new THREE.Vector2(1, 1) }, // real size arrives via update() each frame
+    uMargin: { value: new THREE.Vector2(0, 0) }, // ditto
     uTexel: { value: new THREE.Vector2(1 / waterSimSize, 1 / waterSimSize) },
-    uCausticsColor: { value: new THREE.Color(0.55, 0.95, 0.85) },
+    uCausticsColor1: { value: new THREE.Color("#5cc594") },
+    uCausticsColor2: { value: new THREE.Color("#123b28") },
     uCausticsStrength: { value: 60 },
+    uFogColor: { value: FOG_COLOR },
+    uFogDensity: { value: fogDensity(bounds) },
+    uDepthDarkenRate: { value: depthDarkenRate(bounds) },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -276,7 +345,7 @@ export function createFishInstancedMesh(
   // range, with a small wobble and a slight pitch toward whichever way
   // that drift is currently heading so it still reads as swimming rather
   // than an elevator.
-  function update(fish, t, depthRange, bounds, waterTexture) {
+  function update(fish, t, depthRange, waterSize, waterTexture, bounds) {
     const { surfaceY, floorY } = depthRange;
     const count = Math.min(fish.length, maxCount);
     for (let i = 0; i < count; i++) {
@@ -307,11 +376,14 @@ export function createFishInstancedMesh(
     geometry.attributes.aOpacity.needsUpdate = true;
     uniforms.uTime.value = t;
 
-    // The water sim's ping-pong texture swaps every frame, and bounds can
-    // change on resize — both get refreshed here rather than wired through
-    // a separate setter, since update() already runs once per frame.
+    // The water sim's ping-pong texture swaps every frame, and waterSize/
+    // bounds can change on resize — all refreshed here rather than wired
+    // through a separate setter, since update() already runs once per frame.
     uniforms.uWater.value = waterTexture;
-    uniforms.uWorldSize.value.set(bounds.width, bounds.height);
+    uniforms.uWorldSize.value.set(waterSize.width, waterSize.height);
+    uniforms.uMargin.value.set(waterSize.marginX, waterSize.marginZ);
+    uniforms.uFogDensity.value = fogDensity(bounds);
+    uniforms.uDepthDarkenRate.value = depthDarkenRate(bounds);
   }
 
   return { mesh, update };

@@ -5,8 +5,9 @@
 
 import * as THREE from "three";
 import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
+import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
 
-export const RIVER_DEPTH_FRAC = 0.25; // floor depth below the water surface, as a fraction of bounds.height
+export const RIVER_DEPTH_FRAC = 0.5; // floor depth below the water surface, as a fraction of bounds.height
 
 const GRID_STEP = 20; // world units per floor vertex — just enough for gentle per-vertex color noise
 
@@ -63,7 +64,7 @@ const TERRAIN_VERTEX_SHADER = /* glsl */ `
 
   varying vec3 vColor;
   varying float vLightIntensity;
-  varying vec2 vWorldXZ;
+  varying vec3 vWorldPos;
 
   void main() {
     vColor = color;
@@ -74,8 +75,8 @@ const TERRAIN_VERTEX_SHADER = /* glsl */ `
 
     // Geometry is already translated into world space at build time (see
     // buildTerrainMesh) and this mesh never itself moves, so the raw
-    // position IS the world XZ the caustic glow needs to sample by.
-    vWorldXZ = position.xz;
+    // position IS the world position the caustic glow/fog need.
+    vWorldPos = position;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
@@ -83,6 +84,7 @@ const TERRAIN_VERTEX_SHADER = /* glsl */ `
 
 const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
   ${CAUSTIC_GLOW_GLSL}
+  ${FOG_GLSL}
 
   uniform sampler2D water;
   uniform vec2 worldSize;
@@ -92,17 +94,18 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
 
   varying vec3 vColor;
   varying float vLightIntensity;
-  varying vec2 vWorldXZ;
+  varying vec3 vWorldPos;
 
   void main() {
     // Toon-ish quantized diffuse, three bands.
     float band = vLightIntensity > 0.72 ? 1.0 : (vLightIntensity > 0.4 ? 0.78 : 0.6);
     vec3 base = vColor * (0.45 + 0.55 * band);
 
-    vec2 uv = vWorldXZ / worldSize;
+    vec2 uv = vWorldPos.xz / worldSize;
     float glow = min(causticGlow(water, uv, texel) * causticsStrength, 1.4);
 
     vec3 color = base + causticsColor * glow;
+    color = applyFog(color, vWorldPos);
     gl_FragColor = vec4(color, 1.0);
   }
 `;
@@ -116,6 +119,8 @@ function buildTerrainMaterial(bounds, waterSimSize) {
       causticsColor: { value: new THREE.Color(0.55, 0.95, 0.85) },
       causticsStrength: { value: 20 },
       sunDir: { value: new THREE.Vector3(0.4, 1, 0.25).normalize() },
+      uFogColor: { value: FOG_COLOR },
+      uFogDensity: { value: fogDensity(bounds) },
     },
     vertexShader: TERRAIN_VERTEX_SHADER,
     fragmentShader: TERRAIN_FRAGMENT_SHADER,
