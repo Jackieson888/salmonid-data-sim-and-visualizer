@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Salmon Run — A Boids Simulation</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+    <canvas id="river-canvas"></canvas>
+
+    <div id="hud">
+      <div id="title-block">
+        <h1>Snake River Salmon Run</h1>
+        <p id="date-label">Loading run data…</p>
+      </div>
+
+      <div id="controls">
+        <button id="play-pause" aria-label="Play or pause">Pause</button>
+        <input type="range" id="timeline" min="0" max="100" value="0" />
+        <span id="fish-count">0 fish</span>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

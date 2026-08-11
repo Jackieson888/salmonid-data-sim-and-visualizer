@@ -1,0 +1,98 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: #04121a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#river-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  padding: 32px;
+}
+
+#title-block {
+  color: #eaf6fb;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+#title-block h1 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#title-block p {
+  margin-top: 4px;
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
+#controls {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(4, 18, 26, 0.55);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 10px 18px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+#play-pause {
+  background: #eaf6fb;
+  color: #04121a;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#play-pause:hover {
+  opacity: 0.85;
+}
+
+#timeline {
+  width: 260px;
+  accent-color: #7fd8e8;
+}
+
+#fish-count {
+  color: #eaf6fb;
+  font-size: 0.8rem;
+  opacity: 0.8;
+  min-width: 70px;
+}
+
+@media (max-width: 600px) {
+  #timeline {
+    width: 140px;
+  }
+}
