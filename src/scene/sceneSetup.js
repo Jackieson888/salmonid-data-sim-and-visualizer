@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { FOG_COLOR, fogDensity } from "./fog.js";
+import { seasonForDay } from "./season.js";
 
 const FOV = 90;
 const NEAR = 1;
@@ -41,8 +42,8 @@ export function createSceneSetup(canvas, bounds) {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(FOG_COLOR, fogDensity(bounds));
-  const atmosphereColor = new THREE.Color("#123549");
-  const depthsColor = new THREE.Color("#041d19");
+  const atmosphereColor = new THREE.Color("#1d423b");
+  const depthsColor = new THREE.Color("#051b17");
 
   // Background is a sky sphere rather than a flat scene.background color, so
   // it can gradient by world Y (0 = water surface, matching depthRange/
@@ -93,7 +94,7 @@ export function createSceneSetup(canvas, bounds) {
   sun.position.set(0.4, 1, 0.25);
   scene.add(sun);
   scene.add(new THREE.AmbientLight(0x8fb8c8, 0.55));
-  const fill = new THREE.HemisphereLight(0x9fd8ff, 0x14201a, 0.5);
+  const fill = new THREE.HemisphereLight(0x9fd8ff, 0x14201a, 0.65);
   scene.add(fill);
 
   // Initial framing, applied once: camera starts at EYE_FRAC looking at
@@ -143,5 +144,20 @@ export function createSceneSetup(canvas, bounds) {
     sky.position.copy(camera.position);
   }
 
-  return { renderer, scene, camera, controls, resize, updateCamera };
+  // Blends the sky sphere, sun, and hemisphere fill light toward the given
+  // day-of-year's seasonal look (see season.js) — the visible stand-in for
+  // a year passing as the timeline advances. atmosphereColor/depthsColor
+  // are mutated in place rather than reassigned, since the sky material's
+  // uniforms already hold a reference to these exact Color objects.
+  function setSeason(dayOfYear) {
+    const season = seasonForDay(dayOfYear);
+    atmosphereColor.copy(season.atmosphereColor);
+    depthsColor.copy(season.depthsColor);
+    sun.color.copy(season.sunColor);
+    sun.intensity = season.sunIntensity;
+    sun.position.copy(season.sunDirection);
+    fill.color.copy(season.hemisphereSky);
+  }
+
+  return { renderer, scene, camera, controls, resize, updateCamera, setSeason };
 }

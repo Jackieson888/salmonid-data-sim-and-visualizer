@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
+import { seasonForDay } from "./season.js";
 
 export const RIVER_DEPTH_FRAC = 0.5; // floor depth below the water surface, as a fraction of bounds.height
 
@@ -133,4 +134,16 @@ function buildTerrainMaterial(bounds, waterSimSize) {
 // the glow is sampled straight from the water texture (see causticsChunk.js).
 export function setTerrainWaterTexture(terrainMesh, waterTexture) {
   terrainMesh.material.uniforms.water.value = waterTexture;
+}
+
+// Ties the riverbed's caustic glow (and sun direction) to the same season
+// driving the sky/sun, water surface, and fish (see sceneSetup.js/
+// water.js/fishMesh.js) — called from main.js whenever the displayed date
+// changes.
+export function setTerrainSeason(terrainMesh, dayOfYear) {
+  const season = seasonForDay(dayOfYear);
+  terrainMesh.material.uniforms.causticsColor.value.copy(
+    season.causticsColor1,
+  );
+  terrainMesh.material.uniforms.sunDir.value.copy(season.sunDirection);
 }

@@ -16,10 +16,27 @@
         <p id="date-label">Loading run data…</p>
       </div>
 
-      <div id="controls">
-        <button id="play-pause" aria-label="Play or pause">Pause</button>
-        <input type="range" id="timeline" min="0" max="100" value="0" />
-        <span id="fish-count">0 fish</span>
+      <div id="bottom-block">
+        <div id="species-breakdown">
+          <span class="species-chip" data-species="chinook">
+            <i></i>Chinook <b id="count-chinook">0</b>
+          </span>
+          <span class="species-chip" data-species="jackChinook">
+            <i></i>Jack Chinook <b id="count-jackChinook">0</b>
+          </span>
+          <span class="species-chip" data-species="steelhead">
+            <i></i>Steelhead <b id="count-steelhead">0</b>
+          </span>
+          <span class="species-chip" data-species="shad">
+            <i></i>Shad <b id="count-shad">0</b>
+          </span>
+        </div>
+
+        <div id="controls">
+          <button id="play-pause" aria-label="Play or pause">Pause</button>
+          <input type="range" id="timeline" min="0" max="100" value="0" />
+          <span id="fish-count">0 fish</span>
+        </div>
       </div>
     </div>
 

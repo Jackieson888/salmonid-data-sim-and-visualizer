@@ -16,14 +16,80 @@
 // fish immediately — it flags it `removing` and Flock.step() fades its
 // opacity 1->0 over REMOVE_FADE_FRAMES before actually dropping it from
 // the array. The renderer (fishMesh.js) reads `fish.opacity` each frame.
+//
+// Flock.step()'s two neighbor searches (flocking forces, then overlap
+// resolution) each run through a spatial grid (see buildSpatialGrid) rather
+// than a straight all-pairs scan — a straight O(n^2) scan is what made a
+// few thousand fish visibly stall the sim; gridding keeps each fish's
+// neighbor search down to roughly the fish actually near it.
 
 const SPAWN_FADE_FRAMES = 24;
 const REMOVE_FADE_FRAMES = 24;
 
+// Matches fishMesh.js's VISUAL_SCALE: a fish's rendered nose-to-tail body
+// length in world units is `fish.length * BODY_VISUAL_SCALE`. Flock.step's
+// overlap-resolution pass uses this to keep the boid-space minimum distance
+// between fish tied to how big they actually render, instead of an
+// arbitrary boid-space number that has no relation to the mesh size.
+const BODY_VISUAL_SCALE = 2.4;
+
+// Fraction of the world-space "how much are these two fish's bodies
+// overlapping" that counts as too close and gets corrected each frame — see
+// the overlap-resolution pass at the end of step(). Kept well under 1 (full
+// body length) since fish are thin and mostly swim roughly nose-to-tail with
+// their neighbors; a full-length clearance would read as a school too
+// sparse to look like a school.
+const OVERLAP_CLEARANCE = 0.4;
+
+// Cell size for the overlap-resolution pass's spatial grid (see
+// buildSpatialGrid/gridKey below) — must be >= the largest possible minDist
+// between two fish, (35 + 35) * 0.5 * BODY_VISUAL_SCALE * OVERLAP_CLEARANCE
+// ≈ 33.6 at the top of fish.length's [30, 35] range, so 40 leaves comfortable
+// headroom without making cells so large that too many irrelevant fish share
+// one. Deliberately smaller than perceptionRadius (the flocking pass's grid
+// cell size, set per-Flock in the constructor below) since it only needs to
+// catch actual near-touching pairs, not the whole flocking neighborhood.
+const OVERLAP_GRID_CELL_SIZE = 40;
+
+// Packs a grid cell's (cx, cy) into a single Map key without allocating a
+// string per lookup. Safe as long as cy always fits in [0, GRID_KEY_SCALE) —
+// true here because fish.y is always clamped to [0, bounds.height] by the
+// end of step() (see the hard clamp below), so cy = floor(y / cellSize) is
+// always small and non-negative; cx may be negative (fish spawn slightly
+// left of x=0) and that's fine, this is just a mixed-radix encoding.
+const GRID_KEY_SCALE = 1 << 20;
+
+function gridKey(cx, cy) {
+  return cx * GRID_KEY_SCALE + cy;
+}
+
+// Buckets `fish` by which cellSize x cellSize cell they fall in. Callers
+// then only need to scan a fish's own cell plus its 8 neighbors (see
+// step()) instead of the whole flock — the difference between O(n^2) and
+// roughly O(n) per frame once fish counts climb into the thousands, since a
+// cell's bucket only holds the handful of fish actually near it rather than
+// every fish in the sim. Requires cellSize >= the largest radius any caller
+// will query with with this grid, so that neighborhood is guaranteed to be
+// found within one cell step in either axis.
+function buildSpatialGrid(fish, cellSize) {
+  const grid = new Map();
+  for (const f of fish) {
+    const key = gridKey(Math.floor(f.x / cellSize), Math.floor(f.y / cellSize));
+    let bucket = grid.get(key);
+    if (bucket === undefined) grid.set(key, (bucket = []));
+    bucket.push(f);
+  }
+  return grid;
+}
+
 export class Fish {
-  constructor(x, y, bounds) {
+  constructor(x, y, bounds, species = "steelhead") {
     this.x = x;
     this.y = y;
+    // Which of the four DART species (see data.js) this fish represents —
+    // the renderer (fishMesh.js) reads this to tint the shared steelhead
+    // mesh per species until species-specific models exist.
+    this.species = species;
     // Mostly rightward (downstream) with some spread, so a freshly spawned
     // fish already reads as part of the flow instead of facing any which way.
     const angle = (Math.random() - 0.5) * Math.PI * 0.5;
@@ -34,7 +100,6 @@ export class Fish {
     // Per-fish variation so the school doesn't look uniform/robotic.
     this.length = 30 + Math.random() * 5;
     this.wobblePhase = Math.random() * Math.PI * 1;
-    this.wobbleSpeed = 2 + Math.random() * 1;
 
     // Vertical wander: eases toward a randomly re-picked target depth,
     // occasionally retargeting, so fish drift up and down the water column
@@ -77,13 +142,13 @@ export class Flock {
       cohesionWeight: options.cohesionWeight ?? 0.9,
       flowWeight: options.flowWeight ?? 0.35,
       currentWeight: options.currentWeight ?? 0.18,
-      margin: options.margin ?? 60,
-      edgeSteer: options.edgeSteer ?? 0.12,
+      margin: options.margin ?? 80,
+      edgeSteer: options.edgeSteer ?? 0.25,
     };
   }
 
-  spawn(x, y) {
-    const fish = new Fish(x, y, this.bounds);
+  spawn(x, y, species) {
+    const fish = new Fish(x, y, this.bounds, species);
     this.fish.push(fish);
     return fish;
   }
@@ -112,10 +177,10 @@ export class Flock {
   // skipping the rest of their fade. Without this, a hard resync (see
   // main.js's jumpToDay) that fires faster than step() can finish fading
   // fish out — e.g. a fast timeline-scrub drag — would let already-flagged
-  // fish pile up in the array on every call instead of ever finishing, and
-  // step()'s O(n²) neighbor search would grow with them until the whole
-  // page stalls. Called at the start of a fresh jump so at most one jump's
-  // worth of fades is ever pending, no matter how fast jumps arrive.
+  // fish pile up in the array on every call instead of ever finishing,
+  // growing step()'s per-frame cost with them until the whole page stalls.
+  // Called at the start of a fresh jump so at most one jump's worth of
+  // fades is ever pending, no matter how fast jumps arrive.
   finalizeRemovals() {
     if (this.fish.some((f) => f.removing)) {
       this.fish = this.fish.filter((f) => !f.removing);
@@ -131,8 +196,15 @@ export class Flock {
     const perceptionSq = perceptionRadius * perceptionRadius;
     const separationSq = separationRadius * separationRadius;
 
-    // Simple O(n^2) neighbor search — plenty fast for a few hundred fish.
-    // If scaling up past ~1500 agents, swap in a spatial grid here.
+    // Spatial grid sized to perceptionRadius — the largest radius queried
+    // below — so the 3x3-cell neighborhood scanned per fish is guaranteed to
+    // contain every other fish within perceptionRadius (see
+    // buildSpatialGrid). Rebuilt fresh each step since fish move every
+    // frame; building it is itself only O(n), so this is still a huge win
+    // over the O(n^2) full-flock scan it replaces once fish counts climb
+    // into the thousands.
+    const grid = buildSpatialGrid(this.fish, perceptionRadius);
+
     for (const fish of this.fish) {
       let sepX = 0,
         sepY = 0,
@@ -144,24 +216,32 @@ export class Flock {
         cohY = 0,
         cohCount = 0;
 
-      for (const other of this.fish) {
-        if (other === fish) continue;
-        const dx = other.x - fish.x;
-        const dy = other.y - fish.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq > perceptionSq || distSq === 0) continue;
+      const fcx = Math.floor(fish.x / perceptionRadius);
+      const fcy = Math.floor(fish.y / perceptionRadius);
+      for (let gx = fcx - 1; gx <= fcx + 1; gx++) {
+        for (let gy = fcy - 1; gy <= fcy + 1; gy++) {
+          const bucket = grid.get(gridKey(gx, gy));
+          if (!bucket) continue;
+          for (const other of bucket) {
+            if (other === fish) continue;
+            const dx = other.x - fish.x;
+            const dy = other.y - fish.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq > perceptionSq || distSq === 0) continue;
 
-        if (distSq < separationSq) {
-          sepX -= dx / distSq;
-          sepY -= dy / distSq;
-          sepCount++;
+            if (distSq < separationSq) {
+              sepX -= dx / distSq;
+              sepY -= dy / distSq;
+              sepCount++;
+            }
+            aliX += other.vx;
+            aliY += other.vy;
+            aliCount++;
+            cohX += other.x;
+            cohY += other.y;
+            cohCount++;
+          }
         }
-        aliX += other.vx;
-        aliY += other.vy;
-        aliCount++;
-        cohX += other.x;
-        cohY += other.y;
-        cohCount++;
       }
 
       let ax = 0,
@@ -196,21 +276,33 @@ export class Flock {
       // Current drag: a slow lateral drift, like river current pushing back
       ay += Math.sin(fish.x * 0.002) * this.options.currentWeight * 0.01;
 
-      // Steer away from the top/bottom edges and the left spawn edge. The
-      // right edge is intentionally left open so fish can exit downstream.
-      const { margin, edgeSteer } = this.options;
-      if (fish.y < margin) ay += edgeSteer;
-      if (fish.y > this.bounds.height - margin) ay -= edgeSteer;
-      if (fish.x < margin) ax += edgeSteer;
-
       // Clamp steering force so no single frame can yank a fish's heading
-      // around too sharply, regardless of how strong the combined forces are.
+      // around too sharply, regardless of how strong the combined flocking
+      // forces are.
       const forceMag = Math.hypot(ax, ay);
       const maxForce = this.options.maxForce;
       if (forceMag > maxForce) {
         ax = (ax / forceMag) * maxForce;
         ay = (ay / forceMag) * maxForce;
       }
+
+      // Steer away from the top/bottom edges and the left spawn edge. The
+      // right edge is intentionally left open so fish can exit downstream.
+      // Applied *after* the flocking clamp above (with its own separate
+      // headroom) rather than folded into it — otherwise a fish whose
+      // maxForce budget is already spent on separation/cohesion has nothing
+      // left to steer away from a wall with, doesn't turn in time, and hits
+      // the hard clamp below hard enough to visibly snap. Scaled by how far
+      // into the margin the fish has drifted (0 at the margin line, full
+      // strength at the wall) so the push ramps up smoothly instead of
+      // switching on at a fixed strength the instant the fish crosses the
+      // margin.
+      const { margin, edgeSteer } = this.options;
+      if (fish.y < margin) ay += edgeSteer * (1 - fish.y / margin);
+      if (fish.y > this.bounds.height - margin) {
+        ay -= edgeSteer * (1 - (this.bounds.height - fish.y) / margin);
+      }
+      if (fish.x < margin) ax += edgeSteer * (1 - fish.x / margin);
 
       // Integrate: apply the clamped steering force to velocity.
       fish.vx += ax * dt;
@@ -234,14 +326,21 @@ export class Flock {
       fish.y += fish.vy * dt;
 
       // Hard clamp: even though the steering above discourages it, flocking
-      // forces can still push a fish past the top/bottom edge.
+      // forces can still push a fish past the top/bottom edge. Stops the
+      // outward velocity component rather than reversing it — a full bounce
+      // flips fish.vy's sign, which flips the rendered heading
+      // (atan2(vx, vy) in fishMesh.js) almost instantly and reads as the
+      // fish snapping/jumping in place. Zeroing it just holds the fish at
+      // the wall for a frame while the edge steering above (recomputed
+      // fresh next frame, now at maximum strength right at the boundary)
+      // eases it back in.
       if (fish.y < 0) {
         fish.y = 0;
-        fish.vy *= -0.5;
+        if (fish.vy < 0) fish.vy = 0;
       }
       if (fish.y > this.bounds.height) {
         fish.y = this.bounds.height;
-        fish.vy *= -0.5;
+        if (fish.vy > 0) fish.vy = 0;
       }
 
       // Vertical wander, fully decoupled from the horizontal steering above.
@@ -258,6 +357,69 @@ export class Flock {
       if (fish.removing) fish.removeAge += dt;
     }
 
+    // Overlap resolution: a hard guarantee that fish bodies stay apart,
+    // independent of however the separation/cohesion forces above happen to
+    // balance out. Those forces are a soft preference — cohesion pulling a
+    // crowded school inward can settle into a steady state where separation
+    // just isn't winning by enough, and the two fish's meshes visibly clip.
+    // Only a fraction of each pair's overlap is corrected per frame (not all
+    // of it at once) so a pair that ends up overlapping eases apart smoothly
+    // over a few frames instead of visibly popping to new positions.
+    //
+    // Own spatial grid (see buildSpatialGrid), built fresh here rather than
+    // reused from above — positions just moved during the flocking pass
+    // above, and this pass needs a smaller cell size anyway (see
+    // OVERLAP_GRID_CELL_SIZE) since it only cares about actual near-touching
+    // pairs, not the whole flocking-force neighborhood.
+    //
+    // __gridIdx tags each fish with its index in this.fish for this pass
+    // only, so a pair found while scanning fish A's cells and again while
+    // scanning fish B's is only corrected once (mirrors the old i/j<i+1
+    // O(n^2) loop this replaces) instead of twice as hard.
+    const CORRECTION_FRACTION = 0.5;
+    for (let i = 0; i < this.fish.length; i++) this.fish[i].__gridIdx = i;
+    const overlapGrid = buildSpatialGrid(this.fish, OVERLAP_GRID_CELL_SIZE);
+
+    for (const a of this.fish) {
+      const acx = Math.floor(a.x / OVERLAP_GRID_CELL_SIZE);
+      const acy = Math.floor(a.y / OVERLAP_GRID_CELL_SIZE);
+      for (let gx = acx - 1; gx <= acx + 1; gx++) {
+        for (let gy = acy - 1; gy <= acy + 1; gy++) {
+          const bucket = overlapGrid.get(gridKey(gx, gy));
+          if (!bucket) continue;
+          for (const b of bucket) {
+            if (b.__gridIdx <= a.__gridIdx) continue;
+
+            const minDist =
+              (a.length + b.length) * 0.5 * BODY_VISUAL_SCALE * OVERLAP_CLEARANCE;
+            let dx = b.x - a.x;
+            let dy = b.y - a.y;
+            // Compare squared distance first so the (much pricier) sqrt
+            // below only runs for pairs that actually overlap — the common
+            // case even within the 3x3-cell neighborhood, since
+            // OVERLAP_GRID_CELL_SIZE is deliberately a bit larger than any
+            // real minDist.
+            const distSq = dx * dx + dy * dy;
+            if (distSq >= minDist * minDist) continue;
+            let dist = Math.sqrt(distSq);
+            if (dist === 0) {
+              // Exactly coincident (e.g. two fish spawned on the same frame
+              // at the same point) — nudge along an arbitrary axis so
+              // there's a direction to push apart along.
+              dx = 0.01;
+              dy = 0;
+              dist = 0.01;
+            }
+            const push = ((minDist - dist) / dist) * CORRECTION_FRACTION * 0.5;
+            a.x -= dx * push;
+            a.y -= dy * push;
+            b.x += dx * push;
+            b.y += dy * push;
+          }
+        }
+      }
+    }
+
     // River flow-through: fish that cross the right edge have finished
     // their run — flag them to fade out (see remove()) rather than
     // wrapping back to the start or vanishing outright.
@@ -269,47 +431,4 @@ export class Flock {
     // Finalize: drop any fish whose fade-out has fully played out.
     this.fish = this.fish.filter((f) => !(f.removing && f.removeAge >= REMOVE_FADE_FRAMES));
   }
-}
-
-// ---------------------------------------------------------------------
-// Pod clustering — groups fish that are within `threshold` of each other,
-// directly or transitively (union-find), so the renderer can draw one
-// shared ripple outline per school instead of one per fish.
-// Same O(n²) cost class as Flock.step's neighbor search; fine at the
-// same fish counts, would need the same spatial-grid fix if that changes.
-// ---------------------------------------------------------------------
-export function clusterFish(fish, threshold) {
-  const n = fish.length;
-  const parent = new Array(n);
-  for (let i = 0; i < n; i++) parent[i] = i;
-
-  function find(i) {
-    while (parent[i] !== i) {
-      parent[i] = parent[parent[i]];
-      i = parent[i];
-    }
-    return i;
-  }
-  function union(a, b) {
-    const ra = find(a),
-      rb = find(b);
-    if (ra !== rb) parent[ra] = rb;
-  }
-
-  const thresholdSq = threshold * threshold;
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const dx = fish[i].x - fish[j].x;
-      const dy = fish[i].y - fish[j].y;
-      if (dx * dx + dy * dy <= thresholdSq) union(i, j);
-    }
-  }
-
-  const groups = new Map();
-  for (let i = 0; i < n; i++) {
-    const root = find(i);
-    if (!groups.has(root)) groups.set(root, []);
-    groups.get(root).push(fish[i]);
-  }
-  return Array.from(groups.values());
 }

@@ -4,12 +4,13 @@ import { createSceneSetup } from "./scene/sceneSetup.js";
 import {
   buildTerrainMesh,
   setTerrainWaterTexture,
+  setTerrainSeason,
   riverDepth,
 } from "./scene/terrain.js";
 import { buildWaterMesh, waterWorldSize } from "./scene/water.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
-import { computePods } from "./scene/pods.js";
+import { dayOfYear } from "./scene/season.js";
 
 const canvas = document.getElementById("river-canvas");
 
@@ -17,6 +18,26 @@ const dateLabel = document.getElementById("date-label");
 const playPauseBtn = document.getElementById("play-pause");
 const timelineInput = document.getElementById("timeline");
 const fishCountLabel = document.getElementById("fish-count");
+const speciesCountEls = {
+  chinook: document.getElementById("count-chinook"),
+  jackChinook: document.getElementById("count-jackChinook"),
+  steelhead: document.getElementById("count-steelhead"),
+  shad: document.getElementById("count-shad"),
+};
+
+// Drives the HUD's fish counts from the real per-day DART numbers (see
+// data.js) rather than flock.activeCount() — the simulated/rendered boid
+// count is capped well below these for performance (see MAX_PER_SPECIES
+// below), so it's not what a viewer wants to read as "how many fish passed
+// today." Falls back to 0 for a day with no species breakdown at all (see
+// generatePlaceholderRun() in data.js).
+function updateFishCountDisplay(idx) {
+  const day = runData[idx];
+  fishCountLabel.textContent = `${(day.count ?? 0).toLocaleString()} fish`;
+  for (const key of Object.keys(speciesCountEls)) {
+    speciesCountEls[key].textContent = (day[key] ?? 0).toLocaleString();
+  }
+}
 
 // ---------------------------------------------------------------------
 // Scene: bounds map 1:1 onto world units — worldX = fish.x (downstream),
@@ -26,7 +47,7 @@ const fishCountLabel = document.getElementById("fish-count");
 let bounds = { width: window.innerWidth, height: window.innerHeight };
 
 const sceneSetup = createSceneSetup(canvas, bounds);
-const { renderer, scene, camera, controls } = sceneSetup;
+const { renderer, scene, camera, controls, setSeason } = sceneSetup;
 
 // ---------------------------------------------------------------------
 // Camera debug readout — toggle with "D". Shows live distance-to-target
@@ -82,11 +103,55 @@ let waterSim = createWaterSimulation(
 let water = buildWaterMesh(bounds, WATER_SIM_SIZE);
 scene.add(water.mesh);
 
+// Tracks the day-of-year last passed to setSeason/water.setSeason, so
+// resize() can re-apply it after rebuilding `water` from scratch (a fresh
+// buildWaterMesh() call otherwise resets its sky-reflection tint to a
+// pre-season default — see water.js).
+let currentDayOfYear = 0;
+
+// Drives the sky/sun (sceneSetup.js), the water surface's reflected-sky
+// tint (water.js), the caustic glow on fish/riverbed, and the riverbed's
+// sun direction (terrain.js) from the same date, so the whole scene reads
+// as one consistent season instead of drifting independently.
+function applySeason(dateStr) {
+  currentDayOfYear = dayOfYear(dateStr);
+  setSeason(currentDayOfYear);
+  water.setSeason(currentDayOfYear);
+  setTerrainSeason(terrainMesh, currentDayOfYear);
+  fishRenderer?.setSeason(currentDayOfYear);
+}
+
+const SPECIES_KEYS = ["chinook", "jackChinook", "steelhead", "shad"];
+
+// Caps how many fish of any single species are simulated/rendered at once.
+// Unlike a flat total cap, this is per-species: the real steelhead-
+// updated.glb mesh (see fishMesh.js) is far more expensive per instance
+// than a placeholder shape would be — texture sampling, VAT skinning
+// lookups, caustics/fog/specular — so an overwhelming single-species day
+// (2015's Chinook peak alone hits ~7500 — see data.js) needs its own
+// ceiling rather than sharing one pooled total with three other species
+// nowhere near it. MAX_POPULATION (the sum across all species) is what
+// createFishInstancedMesh's instance count is sized to below.
+const MAX_PER_SPECIES = 400;
+const MAX_POPULATION = MAX_PER_SPECIES * SPECIES_KEYS.length;
+
+// loadFishAssets() loads+bakes every distinct per-species GLB (see
+// SPECIES_MODEL_URL in fishMesh.js) — real async work, unlike a placeholder
+// shape — so fishRenderer stays null until it resolves; every reader below
+// (applySeason, the render loop) guards for that.
 let fishRenderer = null;
 loadFishAssets()
-  .then((assets) => {
-    fishRenderer = createFishInstancedMesh(assets, 1500, WATER_SIM_SIZE, bounds);
+  .then((assetsByUrl) => {
+    fishRenderer = createFishInstancedMesh(
+      assetsByUrl,
+      MAX_PER_SPECIES,
+      WATER_SIM_SIZE,
+      bounds,
+    );
     scene.add(fishRenderer.mesh);
+    // applySeason() may already have run once (jumpToDay(0) below) before
+    // the model finished loading — the mesh didn't exist yet to receive it.
+    fishRenderer.setSeason(currentDayOfYear);
   })
   .catch((err) => console.error("Failed to load fish model:", err));
 
@@ -109,6 +174,7 @@ function resize() {
 
   waterSize = waterWorldSize(bounds);
   terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
+  setTerrainSeason(terrainMesh, currentDayOfYear);
   depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
   waterSim = createWaterSimulation(
     renderer,
@@ -116,15 +182,26 @@ function resize() {
     waterSize.height / waterSize.width,
   );
   water = buildWaterMesh(bounds, WATER_SIM_SIZE);
+  water.setSeason(currentDayOfYear);
   scene.add(water.mesh);
 }
 
-const BASE_MAX_SPEED = 2.4;
+// Was 2.4 — halved so a fish's spawn-to-exit crossing takes roughly twice as
+// long (see FRAMES_PER_DAY below, doubled to match), giving more time to
+// actually watch individual fish swim through the scene instead of them
+// blowing past in a couple seconds.
+const BASE_MAX_SPEED = 1.2;
 
 const flock = new Flock(bounds, {
   maxSpeed: BASE_MAX_SPEED,
-  perceptionRadius: 60,
-  separationRadius: 20,
+  perceptionRadius: 70,
+  // Was 20 — well under a fish's actual rendered body length (~72-84 world
+  // units, fish.length * fishMesh.js's VISUAL_SCALE), so the separation
+  // force's steady state let meshes clip well before this force pushed back
+  // hard. Now close to Flock.step's overlap-resolution clearance so the
+  // soft force does most of the work and the hard correction is a rare
+  // safety net instead of the only thing keeping fish apart.
+  separationRadius: 45,
 });
 
 window.addEventListener("resize", resize);
@@ -137,15 +214,36 @@ window.addEventListener("resize", resize);
 let dayIndex = 0;
 let isPlaying = true;
 let frameCounter = 0;
-const FRAMES_PER_DAY = 40;
+// Was 40 — doubled so each simulated day plays out over twice as long.
+const FRAMES_PER_DAY = 80;
 
 timelineInput.max = String(runData.length - 1);
 
+// Per-species counts for day `idx`, each capped at MAX_PER_SPECIES (see
+// above) — the shared source of truth for both how many fish that day
+// targets in total (targetFishForDay) and what mix new spawns should be
+// weighted toward (pickSpeciesForDay), so an over-cap species is
+// under-represented consistently in both instead of just at the total.
+function speciesCountsForDay(idx) {
+  const day = runData[idx];
+  const counts = {};
+  for (const key of SPECIES_KEYS) {
+    counts[key] = Math.min(MAX_PER_SPECIES, day[key] ?? 0);
+  }
+  return counts;
+}
+
 // How many fish should be on-screen for a given day, straight from the
-// data (no interpolation) — the base number `desiredPopulation` ramps toward.
+// data (no interpolation) — the base number `desiredPopulation` ramps
+// toward. Falls back to the day's plain `count`, still capped, when there's
+// no species breakdown at all — generatePlaceholderRun()'s fallback entries
+// (see data.js) only carry `count`.
 function targetFishForDay(idx) {
-  const SCALE = 1;
-  return Math.round(runData[idx].count * SCALE);
+  const counts = speciesCountsForDay(idx);
+  let total = 0;
+  for (const key of SPECIES_KEYS) total += counts[key];
+  if (total === 0) total = Math.min(MAX_POPULATION, runData[idx].count ?? 0);
+  return total;
 }
 
 // Precomputed day-over-day change in target population, one entry per day,
@@ -162,6 +260,25 @@ function desiredPopulation(idx, progress) {
   const today = targetFishForDay(idx);
   const tomorrow = targetFishForDay((idx + 1) % runData.length);
   return today + (tomorrow - today) * progress;
+}
+
+// Weighted-random species pick for a spawn on day `idx`, matching that day's
+// capped Chinook/Jack Chinook/Steelhead/Shad mix (see speciesCountsForDay) —
+// using the same capped counts as targetFishForDay so a species pinned at
+// MAX_PER_SPECIES is under-represented in new spawns to match, not just in
+// the total. Falls back to all-steelhead when a day has no species
+// breakdown at all.
+function pickSpeciesForDay(idx) {
+  const counts = speciesCountsForDay(idx);
+  let total = 0;
+  for (const key of SPECIES_KEYS) total += counts[key];
+  if (total <= 0) return "steelhead";
+  let r = Math.random() * total;
+  for (const key of SPECIES_KEYS) {
+    r -= counts[key];
+    if (r <= 0) return key;
+  }
+  return "steelhead";
 }
 
 // Maps a day's rate-of-change in population to a swim-speed multiplier:
@@ -189,7 +306,7 @@ function spawnAtLeftEdge() {
   const x = -Math.random() * 40;
   const margin = 15;
   const y = margin + Math.random() * (bounds.height - margin * 2);
-  flock.spawn(x, y);
+  flock.spawn(x, y, pickSpeciesForDay(dayIndex));
 }
 
 // Used only for bulk-filling/draining the population when jumping straight
@@ -213,7 +330,7 @@ function jumpToDay(idx) {
   const target = targetFishForDay(idx);
   while (flock.activeCount() < target) {
     const { x, y } = randomOpenWaterPoint();
-    flock.spawn(x, y);
+    flock.spawn(x, y, pickSpeciesForDay(idx));
   }
   while (flock.activeCount() > target) {
     // activeCount() excludes fish already mid-fade-out, so this always
@@ -226,8 +343,9 @@ function jumpToDay(idx) {
   spawnAccumulator = 0;
   applyDaySpeed(idx);
   dateLabel.textContent = runData[idx].date;
-  fishCountLabel.textContent = `${flock.activeCount()} fish`;
+  updateFishCountDisplay(idx);
   timelineInput.value = String(idx);
+  applySeason(runData[idx].date);
 }
 
 jumpToDay(0);
@@ -244,64 +362,46 @@ timelineInput.addEventListener("input", (e) => {
 });
 
 // ---------------------------------------------------------------------
-// Water ripples — no mouse interactivity: the fish themselves disturb the
-// surface (pods drop ripples as they pass), plus a slow ambient "rain" so
-// the surface never goes fully static.
+// Water ripples — no mouse interactivity, no per-fish disturbance either:
+// this used to also drop a ripple per clustered "pod" of nearby fish (see
+// git history / former scene/pods.js), but finding those pods meant
+// clustering the entire flock (an O(n^2) union-find pass) every 20 frames —
+// real money at thousands of fish, for a purely decorative effect. A slow
+// ambient "rain," independent of the fish sim entirely, reads almost as
+// well and costs nothing per fish.
 // ---------------------------------------------------------------------
 // Calm-water tuning: dropped less often, each drop bigger and gentler than
 // a sharp poke, to read as slow, broad swells rather than busy chop (see
 // the matching propagation/damping tuning in waterSim.js).
 const AMBIENT_DROP_INTERVAL_FRAMES = 30;
-const POD_DROP_INTERVAL_FRAMES = 20;
 let rippleFrame = 0;
 
 function emitRipples() {
   rippleFrame++;
+  if (rippleFrame % AMBIENT_DROP_INTERVAL_FRAMES !== 0) return;
 
-  // Ambient "rain": one broad, soft ripple every AMBIENT_DROP_INTERVAL_FRAMES
-  // frames, purely cosmetic so the water surface is never perfectly still.
-  // The 0.05-0.08 sim-space radius was tuned back when the sim's [-1, 1]
-  // space mapped 1:1 onto bounds; now that it maps onto the bigger
-  // waterSize, the same sim-space radius reads as a bigger real-world
-  // ripple, so it's scaled down by that same ratio to keep the tuned size.
-  if (rippleFrame % AMBIENT_DROP_INTERVAL_FRAMES === 0) {
-    const x = Math.random() * bounds.width;
-    const z = Math.random() * bounds.height;
-    const center = worldToSim(x, z);
-    const radiusScale = bounds.width / waterSize.width;
-    waterSim.addDrop(
-      center,
-      (0.05 + Math.random() * 0.03) * radiusScale,
-      0.018,
-    );
-  }
-
-  // Pod ripples: each clustered group of fish (see pods.js) drops a ripple
-  // sized to the pod and sign-alternating over time (sin of its phase), so
-  // passing schools visibly disturb the surface above them. Normalized
-  // against waterSize (not bounds) so the real-world ripple size tracks
-  // the pod regardless of how much bigger the sim's mapped area is.
-  if (rippleFrame % POD_DROP_INTERVAL_FRAMES === 0) {
-    const pods = computePods(flock.fish);
-    for (const pod of pods) {
-      const center = worldToSim(pod.x, pod.z);
-      const radius = Math.min(0.18, (pod.radius / waterSize.width) * 2);
-      const strength = Math.sin(pod.phase) >= 0 ? 0.02 : -0.02;
-      waterSim.addDrop(center, radius, strength);
-    }
-  }
+  // One broad, soft ripple every AMBIENT_DROP_INTERVAL_FRAMES frames. The
+  // 0.05-0.08 sim-space radius was tuned back when the sim's [-1, 1] space
+  // mapped 1:1 onto bounds; now that it maps onto the bigger waterSize, the
+  // same sim-space radius reads as a bigger real-world ripple, so it's
+  // scaled down by that same ratio to keep the tuned size.
+  const x = Math.random() * bounds.width;
+  const z = Math.random() * bounds.height;
+  const center = worldToSim(x, z);
+  const radiusScale = bounds.width / waterSize.width;
+  waterSim.addDrop(center, (0.05 + Math.random() * 0.03) * radiusScale, 0.018);
 }
 
 // ---------------------------------------------------------------------
 // Animation loop
 // ---------------------------------------------------------------------
 function loop(t) {
-  // 1. Advance the flocking simulation one tick and reflect the live count in
-  // the HUD. activeCount() excludes fish mid-fade-out (see boids.js) so the
-  // number reflects the run's logical population, not the fading stragglers
-  // still on screen.
+  // 1. Advance the flocking simulation one tick. The HUD's fish counts are
+  // driven by the real per-day DART data instead (see
+  // updateFishCountDisplay), not this simulated count, so nothing here
+  // needs to run every frame — only when dayIndex actually changes (see
+  // jumpToDay and the day-rollover below).
   flock.step(1);
-  fishCountLabel.textContent = `${flock.activeCount()} fish`;
 
   sceneSetup.updateCamera(t);
 
@@ -325,8 +425,8 @@ function loop(t) {
   water.setSources(waterSim.texture);
 
   // 3. Sync the instanced fish mesh to the simulation's current fish array
-  // (positions, headings, depth, swim-phase, caustic glow) — only once the
-  // model has loaded.
+  // (positions, headings, depth, swim-phase, species tint, caustic glow) —
+  // only once the model has loaded.
   if (fishRenderer)
     fishRenderer.update(
       flock.fish,
@@ -358,7 +458,9 @@ function loop(t) {
       dayIndex = (dayIndex + 1) % runData.length;
       applyDaySpeed(dayIndex);
       dateLabel.textContent = runData[dayIndex].date;
+      updateFishCountDisplay(dayIndex);
       timelineInput.value = String(dayIndex);
+      applySeason(runData[dayIndex].date);
     }
   }
 

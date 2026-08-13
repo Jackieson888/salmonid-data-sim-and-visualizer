@@ -51,6 +51,64 @@ body {
   opacity: 0.75;
 }
 
+#bottom-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* Real per-day DART counts (see data.js/main.js) — not the simulated boid
+   count, which is capped well below these for performance (see
+   MAX_PER_SPECIES in main.js). Colors match each species' InstancedMesh
+   tint in scene/fishMesh.js's SPECIES_COLORS. */
+#species-breakdown {
+  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.species-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #eaf6fb;
+  font-size: 0.75rem;
+  background: rgba(4, 18, 26, 0.55);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+.species-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.species-chip b {
+  font-weight: 600;
+}
+
+.species-chip[data-species="chinook"] {
+  color: #ff6b6b;
+}
+
+.species-chip[data-species="jackChinook"] {
+  color: #ffb066;
+}
+
+.species-chip[data-species="steelhead"] {
+  color: #b9c9c2;
+}
+
+.species-chip[data-species="shad"] {
+  color: #c98bf0;
+}
+
 #controls {
   pointer-events: auto;
   display: flex;

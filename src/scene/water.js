@@ -22,6 +22,7 @@
 import * as THREE from "three";
 import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
+import { seasonForDay } from "./season.js";
 
 // How much bigger than the river bounds the water sim/plane covers — the
 // entire added margin (from the real edge out to the plane's own edge) is
@@ -62,6 +63,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform vec2 uTexel;
   uniform vec3 uBaseColor;
   uniform vec3 uSkyColor;
+  uniform vec3 uCausticsColor;
   uniform float uCausticsStrength;
   uniform vec2 uCenter;
   uniform vec2 uPlaneHalfSize;
@@ -89,7 +91,7 @@ const FRAGMENT_SHADER = /* glsl */ `
     // surface glints with the same light pattern that lands underwater
     // instead of an unrelated procedural shimmer.
     float glint = min(causticGlow(uWater, uv, uTexel) * uCausticsStrength, 1.4);
-    color += vec3(0.75, 0.92, 0.98) * glint * 0.35;
+    color += uCausticsColor * glint * 0.35;
 
     // Edge fade: fully opaque out to uCoreFrac (exactly where the real
     // river bounds end — see buildWaterMesh), then a smooth dissolve across
@@ -133,7 +135,16 @@ export function buildWaterMesh(bounds, waterSimSize) {
     uMargin: { value: new THREE.Vector2(marginX, marginZ) },
     uTexel: { value: new THREE.Vector2(1 / waterSimSize, 1 / waterSimSize) },
     uBaseColor: { value: new THREE.Color("#0c3636") },
+    // Reflected-sky tint the fresnel term (below) mixes in at grazing
+    // angles — overwritten by setSeason() to track the sky sphere's own
+    // atmosphereColor (see sceneSetup.js/season.js) so the water reads as
+    // reflecting the same sky rather than a fixed, season-blind tone. This
+    // starting value only shows before the first setSeason() call.
     uSkyColor: { value: new THREE.Color("#366374") },
+    // Surface glint tint — overwritten by setSeason() to track the same
+    // causticsColor1 fishMesh.js's two-tone glow uses. Starting value only
+    // shows before the first setSeason() call.
+    uCausticsColor: { value: new THREE.Color(0.75, 0.92, 0.98) },
     uCausticsStrength: { value: 30 },
     uCenter: { value: new THREE.Vector2(centerX, centerZ) },
     uPlaneHalfSize: {
@@ -167,5 +178,16 @@ export function buildWaterMesh(bounds, waterSimSize) {
     uniforms.uWater.value = waterTexture;
   }
 
-  return { mesh, setSources };
+  // Ties the fresnel reflection tint to the same seasonal sky the sky
+  // sphere/sun use (see sceneSetup.js) — called from main.js whenever the
+  // displayed date changes, and again after any resize rebuilds this mesh
+  // (a fresh buildWaterMesh() call otherwise resets uSkyColor to its
+  // pre-season default above).
+  function setSeason(dayOfYear) {
+    const season = seasonForDay(dayOfYear);
+    uniforms.uSkyColor.value.copy(season.atmosphereColor);
+    uniforms.uCausticsColor.value.copy(season.causticsColor1);
+  }
+
+  return { mesh, setSources, setSeason };
 }

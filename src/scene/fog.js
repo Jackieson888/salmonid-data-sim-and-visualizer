@@ -7,7 +7,7 @@
 // includes FOG_GLSL and calls applyFog() itself to actually show it.
 import * as THREE from "three";
 
-export const FOG_COLOR = new THREE.Color("#093b2f");
+export const FOG_COLOR = new THREE.Color("#115243");
 
 // Divided by the world's largest dimension so the falloff distance scales
 // with world size instead of being tuned in raw world units (bounds track
