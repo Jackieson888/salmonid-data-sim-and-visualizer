@@ -28,32 +28,42 @@
 // (Blender's auto-suffix from stray duplicate actions in the source file),
 // so it's currently riding the animations[0] fallback, not the name match.
 //
-// Fish also pick up the same causticGlow() read the terrain/water use (see
-// causticsChunk.js), sampled at each vertex's world XZ position, so a fish
-// swimming through a bright patch of the water's light net visibly glints —
-// the fish read as sitting *in* the water instead of pasted over it.
+// Fish also read the same caustics texture the terrain/water do, sampled at
+// each vertex's world XZ position, so a fish swimming through a bright patch
+// of the water's light net visibly glints — the fish read as sitting *in*
+// the water instead of pasted over it. They use causticGlowPoint (a single
+// tap) rather than the 4-tap causticGlow those two use; see causticsChunk.js
+// for why the blur isn't worth its cost per vertex.
 //
 // Species models: SPECIES_MODEL_URL (below) maps each of the four DART
 // species (see data.js — Chinook/Jack Chinook/Steelhead/Shad) to a GLB.
-// Species that share a URL (currently jackChinook/shad, both still riding
-// the steelhead placeholder) are drawn from one shared InstancedMesh and
-// told apart only by a flat per-instance color multiply (aTint). A species
-// with its own distinct URL (steelhead, chinook) gets its own InstancedMesh
-// built from its own geometry/VAT/texture (see createFishInstancedMesh) and
-// an identity tint, since its model already looks like that species.
+// Species that share a URL are drawn from one shared InstancedMesh and told
+// apart only by a flat per-instance color multiply (aTint); a species with
+// its own distinct URL gets its own InstancedMesh built from its own
+// geometry/VAT/texture (see createFishInstancedMesh).
+//
+// All four currently point at steelhead-final.glb — deliberately, as an
+// evaluation build: it is the first mesh authored against the vertex budget
+// and the procedural swim rig (1320 verts / 654 tris / 16 spine bones, one
+// loop-closed "Swimming" cycle), and pointing every species at it isolates
+// "how does the new geometry and animation read in-scene" from "are the
+// other three models done yet." Restore per-species URLs as each new mesh
+// lands; nothing else here needs to change when they do.
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
+import { CAUSTIC_GLOW_POINT_GLSL } from "./causticsChunk.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
 import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
 
+const STEELHEAD_FINAL_URL = "/steelhead-final.glb";
+
 const SPECIES_MODEL_URL = {
-  steelhead: "/steelhead-updated.glb",
-  chinook: "/chinook.glb",
-  jackChinook: "/steelhead-updated.glb", //placeholder until a jack-chinook model exists
-  shad: "/shad.glb",
+  steelhead: STEELHEAD_FINAL_URL,
+  chinook: STEELHEAD_FINAL_URL,
+  jackChinook: STEELHEAD_FINAL_URL,
+  shad: STEELHEAD_FINAL_URL,
 };
 
 // Per-model fixup rotation, folded into worldMatrix in loadSpeciesModel
@@ -76,23 +86,43 @@ const SPECIES_MODEL_URL = {
 // axis onto Z while leaving Y — already the correct up axis — untouched,
 // where an X-axis turn (right for steelhead) would instead swap the body's
 // height into the depth axis.
+//
+// steelhead-final.glb is the chinook case, not the old steelhead one: its
+// "Armature" node is identity and the -90°-about-Z compensation sits on the
+// root bone ("Bone"), so it never reaches mesh.matrixWorld. Its raw local
+// axes are body-along-X (extent 4.76) / dorsal-along-Y (1.78) / lateral-
+// along-Z (0.77), so it needs the Y-axis quarter turn. Direction matters as
+// well as axis: rotating +90° about Y maps +X onto -Z, and this model's nose
+// is at -X (verified from the rig — per-bone swing rises 3.9° at the -X end
+// to 15.9° at the +X end, and the high-amplitude end of a swim cycle is the
+// tail), so the nose lands on +Z exactly as noseOffsetLocal expects.
 const MODEL_ROTATION_FIX = {
   "/steelhead-updated.glb": new THREE.Matrix4().makeRotationX(Math.PI * -0.5),
   "/chinook.glb": new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
-  "/shad.glb": new THREE.Matrix4().makeRotationX(Math.PI * -0.5),
+  "/shad.glb": new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
+  "/jack_chinook.glb": new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
+  [STEELHEAD_FINAL_URL]: new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
 };
 
 // Flat per-instance tint for each of the four DART species (see data.js),
 // multiplied into the sampled body texture in the fragment shader below.
-// Steelhead and chinook are identity (1,1,1) — each has its own model (see
-// SPECIES_MODEL_URL) that already looks like that species, no recolor
-// needed — jackChinook/shad are still riding the steelhead placeholder
-// model, so they get a bright, unmissable tint to read as distinct from it.
+//
+// All four species share one model in this build (see SPECIES_MODEL_URL), so
+// tint is currently the *only* thing telling them apart on screen — and
+// steelhead-final.glb ships no texture, so uBodyMap is the flat
+// PLACEHOLDER_BODY_COLOR olive rather than a photographic skin. Both push
+// these toward "clearly distinguishable" over "subtle": values above 1 are
+// deliberate, since multiplying a mid-olive base by a <1 tint on all three
+// channels just produces four shades of the same murk. They still track
+// each species' real cast — bronze-maroon spawning chinook, greener jack,
+// rosy-striped steelhead, cold silver-blue shad — so the frame doesn't read
+// as arbitrarily color-coded. Set steelhead back to identity once its own
+// textured model lands.
 const SPECIES_COLORS = {
-  steelhead: new THREE.Color(1, 1, 1),
-  chinook: new THREE.Color(1, 1, 1),
-  jackChinook: new THREE.Color("#ff8c1a"),
-  shad: new THREE.Color(1, 1, 1),
+  steelhead: new THREE.Color(1.05, 0.9, 1.0),
+  chinook: new THREE.Color(1.15, 1.05, 0.8),
+  jackChinook: new THREE.Color(0.95, 1.1, 1.0),
+  shad: new THREE.Color(0.85, 1.0, 1.35),
 };
 const DEFAULT_COLOR = SPECIES_COLORS.steelhead;
 
@@ -106,18 +136,56 @@ const MOUTH_COLOR = new THREE.Color(0.690196, 0.67451, 0.694118);
 // for a low-poly fish with linear interpolation between rows in the shader.
 const VAT_FRAME_COUNT = 30;
 
-// Converts a per-frame delta time (ms) and the fish's live sim speed into a
-// clip-loops increment, accumulated per-fish frame-over-frame in update()
-// below (f.swimCyclePos) rather than recomputed from absolute time each
-// frame — recomputing as `uTime * rate * currentSpeed` made the sampled VAT
-// frame jump every time currentSpeed changed (worse the longer uTime had
-// been running), which read as stutter whenever a fish sped up or slowed
-// down. Accumulating avoids that: a change in speed only changes the rate
-// future increments are added at, never retroactively re-scales elapsed
-// time. A per-fish aPhase (radians, see boids.js wobblePhase) is added on
-// top as a fixed offset so fish swimming at the same speed still don't
-// lock-step.
-const SWIM_CYCLE_RATE = 0.0012 / (2 * Math.PI);
+// How far a fish travels per complete tailbeat, in body lengths — the
+// "stride length" of carangiform swimming, which for a salmonid at steady
+// cruise is roughly 0.6-0.8 body lengths per beat.
+//
+// This is what ties the animation to the locomotion, and it replaces a
+// hardcoded per-species Hz table. Tailbeat rate is not a free visual
+// parameter: a fish that beats its tail twice while sliding forward one body
+// length reads as swimming in treacle no matter how good the clip is,
+// because the eye reads thrust per stroke directly. Deriving the rate from
+// how fast the fish is actually moving keeps the two locked no matter what
+// changes underneath — BASE_MAX_SPEED, a day's speed multiplier (see
+// speedMultiplierForRate in main.js), or a fish working out of a crowd.
+//
+// Species differentiation falls out of this for free rather than needing its
+// own table: every fish shares one maxSpeed, so a ~89-world-unit chinook
+// covers far fewer body lengths per second than a ~38-unit shad and beats
+// correspondingly slower. That spread (~2.3x) is wider than real biology's
+// (~1.5x, since real chinook also swim faster in absolute terms than shad
+// do), but the sim gives every species the same speed, and matching the
+// motion on screen matters more here than matching a scaling law the sim
+// doesn't model anyway.
+const STRIDE_LENGTH = 0.7;
+
+// Bounds on the derived rate, in cycles per sim step. The sim enforces a
+// minimum cruising speed (see boids.js) so the lower bound is mostly a
+// safety net against a fish freezing into a rigid plank; the upper stops a
+// brief speed spike from blurring the tail into a hum. At 60fps these are
+// roughly 0.25Hz and 3.6Hz.
+const MIN_BEATS_PER_STEP = 0.004;
+const MAX_BEATS_PER_STEP = 0.06;
+
+// Accumulated per-fish frame-over-frame in update() below (f.swimCyclePos)
+// rather than recomputed from absolute time each frame — recomputing as
+// `uTime * rate` would make the sampled VAT frame jump on every call that
+// changed uTime's scale.
+//
+// Accumulated per sim *step*, not per real second, because the sim itself is
+// frame-coupled: main.js's loop calls flock.step(1) once per animation
+// frame, so fish cover a fixed distance per frame rather than per second.
+// Advancing the tailbeat on the same clock is what keeps stride length
+// honest at any refresh rate — on a 120Hz display fish move twice as far per
+// second and beat twice as often, holding the same distance per stroke.
+// This does assume update() is called exactly once per flock.step(), which
+// main.js's loop does.
+//
+// Two per-fish offsets keep the school from locking together: aPhase (a
+// fixed radian offset, see boids.js wobblePhase) and swimRate (a +/-12% rate
+// multiplier, see boids.js). The latter matters more — a school where every
+// fish beats at exactly the same frequency reads as cloned however well the
+// phases are spread, since the relative pattern never changes.
 const PHASE_TO_CYCLE = 1 / (2 * Math.PI);
 
 // Fish are drawn at roughly this multiple of their (2D-sim) `length` value,
@@ -150,22 +218,22 @@ function depthFogRate(bounds) {
 }
 
 const VERTEX_SHADER = /* glsl */ `
-  ${CAUSTIC_GLOW_GLSL}
+  ${CAUSTIC_GLOW_POINT_GLSL}
 
   attribute float aMatId;
   attribute float aVertexIndex;
   attribute float aPhase;
   attribute float aCyclePos;
   attribute float aOpacity;
+  attribute float aAmplitude;
   attribute vec3 aTint;
 
   uniform sampler2D uVat;
   uniform float uVatFrameCount;
   uniform float uVatVertexCount;
-  uniform sampler2D uWater;
+  uniform sampler2D uCaustics;
   uniform vec2 uWorldSize;
   uniform vec2 uMargin;
-  uniform vec2 uTexel;
   uniform float uDepthDarkenRate;
   uniform float uDepthFogRate;
 
@@ -183,7 +251,11 @@ const VERTEX_SHADER = /* glsl */ `
   // bakeVertexAnimationTexture in fishMesh.js). NearestFilter on both axes —
   // linear filtering along the vertex axis would blend unrelated vertices
   // together, so frame-to-frame smoothing is done by hand below instead.
-  vec3 sampleVat(float frame) {
+  //
+  // Stores each pose as an OFFSET from the rest pose, not an absolute
+  // position, so the rest pose can be added back below at a per-instance
+  // scale (aAmplitude).
+  vec3 sampleVatOffset(float frame) {
     vec2 uv = vec2(
       (aVertexIndex + 0.5) / uVatVertexCount,
       (mod(frame, uVatFrameCount) + 0.5) / uVatFrameCount
@@ -200,7 +272,20 @@ const VERTEX_SHADER = /* glsl */ `
     float cycles = aCyclePos + aPhase * ${PHASE_TO_CYCLE};
     float frameF = fract(cycles) * uVatFrameCount;
     float frame0 = floor(frameF);
-    vec3 bent = mix(sampleVat(frame0), sampleVat(frame0 + 1.0), frameF - frame0);
+    vec3 swim = mix(
+      sampleVatOffset(frame0),
+      sampleVatOffset(frame0 + 1.0),
+      frameF - frame0
+    );
+
+    // The rest pose (three's built-in "position" attribute) was previously
+    // uploaded per vertex and never read, since the VAT held absolute
+    // positions. Baking offsets
+    // instead puts it to work and makes per-instance stroke strength free:
+    // aAmplitude 1.0 reproduces the authored clip exactly, 0.0 is a
+    // straight, motionless fish, and values between let a school vary how
+    // hard each fish is working without a second baked clip.
+    vec3 bent = position + swim * aAmplitude;
 
     vec4 worldPos = instanceMatrix * vec4(bent, 1.0);
     vWorldPos = worldPos.xyz;
@@ -216,16 +301,18 @@ const VERTEX_SHADER = /* glsl */ `
     // above.
     vDepthFog = 1.0 - exp(-depthBelowSurface * uDepthFogRate);
 
-    // Same causticGlow() read terrain.js/water.js use, sampled at this
-    // vertex's world position — one read per vertex (cheaper than per
-    // fragment, and plenty smooth at the fish's screen size). uWorldSize/
+    // The same caustics texture terrain.js/water.js read, sampled at this
+    // vertex's world position — but through causticGlowPoint (a single tap)
+    // rather than the 4-tap blur those two use, since this runs per vertex
+    // and gets interpolated across the triangle anyway; see causticsChunk.js
+    // for why that trade is worth 4 vertex texture fetches. uWorldSize/
     // uMargin match water.js's waterWorldSize() — the sim covers a bigger,
     // bounds-centered area, not just the raw bounds (see main.js). Left
     // un-dimmed here — depth attenuation is applied in the fragment shader
     // *after* the intensity curve (see FRAGMENT_SHADER) so it stays visible
     // instead of getting swallowed by saturation at high uCausticsStrength.
     vec2 waterUv = (worldPos.xz + uMargin) / uWorldSize;
-    vCausticGlow = causticGlow(uWater, waterUv, uTexel);
+    vCausticGlow = causticGlowPoint(uCaustics, waterUv);
 
     vec4 mvPosition = modelViewMatrix * worldPos;
     gl_Position = projectionMatrix * mvPosition;
@@ -335,15 +422,27 @@ const FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// Samples the mesh at `frameCount` evenly-spaced points across the clip's
-// duration, CPU-skinning each vertex by hand (mirrors three's
-// skinning_vertex.glsl.js chunk: bindMatrix -> weighted bone matrices ->
-// bindMatrixInverse) and writes the result into a (vertexCount x
-// frameCount) float texture. If the mesh isn't actually skinned (see the
-// NOTE at the top of this file), frameCount collapses to 1 and every "pose"
-// is just the mesh's own static, world-transformed position — fish render
-// but don't swim, with no special-casing needed elsewhere.
-function bakeVertexAnimationTexture(scene, mesh, clip, worldMatrix, center) {
+// Samples the mesh at `frameCount` evenly-spaced points across one cycle of
+// the clip (see clipStart/clipSpan below), CPU-skinning each vertex by hand
+// (mirrors three's skinning_vertex.glsl.js chunk: bindMatrix -> weighted
+// bone matrices -> bindMatrixInverse) and writes each pose into a
+// (vertexCount x frameCount) float texture as an OFFSET from `restPositions`
+// rather than as an absolute position — which is what lets the vertex
+// shader scale the swim per instance (aAmplitude) for free.
+//
+// If the mesh isn't actually skinned (see the NOTE at the top of this file),
+// frameCount collapses to 1 and that single pose is the mesh's own static,
+// world-transformed position — identical to restPositions, so every offset
+// is zero and the fish simply renders at rest. Fish don't swim, with no
+// special-casing needed elsewhere.
+function bakeVertexAnimationTexture(
+  scene,
+  mesh,
+  clip,
+  worldMatrix,
+  center,
+  restPositions,
+) {
   const posAttr = mesh.geometry.attributes.position;
   const vertexCount = posAttr.count;
   const isSkinned = mesh.isSkinnedMesh && !!clip;
@@ -351,6 +450,31 @@ function bakeVertexAnimationTexture(scene, mesh, clip, worldMatrix, center) {
 
   const mixer = isSkinned ? new THREE.AnimationMixer(scene) : null;
   if (mixer) mixer.clipAction(clip).play();
+
+  // Which slice of the clip's timeline one full cycle actually occupies.
+  //
+  // Not simply [0, clip.duration]: Blender numbers its first frame 1, not 0,
+  // so an exported clip's tracks start at 1/fps while clip.duration reports
+  // the *last* key's absolute time (steelhead-final.glb: keys run 0.0417 ->
+  // 1.2917 at 24fps). Sampling [0, duration] would spend the first sample on
+  // the flat pre-roll before the first key and then stop a frame short of
+  // the loop point, leaving a small phase jump every single cycle on every
+  // fish — the same class of glitch as a clip whose ends don't match, just
+  // subtler and introduced on our side rather than the exporter's.
+  //
+  // Sampling [firstKey, duration] instead is exactly one authored cycle,
+  // provided the export closes its loop (pose at duration == pose at
+  // firstKey — worth verifying per model, it is the one property of the
+  // clip this code cannot check for itself).
+  let clipStart = 0;
+  let clipSpan = 0;
+  if (isSkinned) {
+    const starts = clip.tracks
+      .map((track) => track.times[0])
+      .filter((t) => Number.isFinite(t));
+    clipStart = starts.length > 0 ? Math.min(...starts) : 0;
+    clipSpan = Math.max(1e-6, clip.duration - clipStart);
+  }
 
   const skinIndexAttr = mesh.geometry.attributes.skinIndex;
   const skinWeightAttr = mesh.geometry.attributes.skinWeight;
@@ -365,7 +489,7 @@ function bakeVertexAnimationTexture(scene, mesh, clip, worldMatrix, center) {
 
   for (let f = 0; f < frameCount; f++) {
     if (isSkinned) {
-      mixer.setTime((clip.duration * f) / frameCount);
+      mixer.setTime(clipStart + (clipSpan * f) / frameCount);
       scene.updateMatrixWorld(true);
       mesh.skeleton.update();
     }
@@ -396,10 +520,14 @@ function bakeVertexAnimationTexture(scene, mesh, clip, worldMatrix, center) {
 
       world.applyMatrix4(worldMatrix).sub(center);
 
+      // Stored as an offset from the rest pose rather than as an absolute
+      // position — see the aAmplitude note in VERTEX_SHADER. restPositions
+      // is the caller's already-transformed, already-recentered geometry, so
+      // both sides of this subtraction are in the same space.
       const o = (f * vertexCount + i) * 4;
-      data[o] = world.x;
-      data[o + 1] = world.y;
-      data[o + 2] = world.z;
+      data[o] = world.x - restPositions.getX(i);
+      data[o + 1] = world.y - restPositions.getY(i);
+      data[o + 2] = world.z - restPositions.getZ(i);
       data[o + 3] = 1;
     }
   }
@@ -507,12 +635,16 @@ async function loadSpeciesModel(url) {
     gltf.animations.find((c) => c.name === "Swimming") ??
     gltf.animations[0] ??
     null;
+  // posAttr here is the cloned geometry's position attribute, already
+  // world-transformed and recentered above — the exact rest pose the vertex
+  // shader adds the sampled offsets back onto.
   const vat = bakeVertexAnimationTexture(
     gltf.scene,
     mesh,
     clip,
     worldMatrix,
     center,
+    posAttr,
   );
 
   geometry.deleteAttribute("skinIndex");
@@ -560,12 +692,12 @@ export function loadFishAssets() {
 function buildSpeciesRenderer(
   { geometry, modelLength, texture, vat },
   maxCount,
-  waterSimSize,
   bounds,
 ) {
   const phase = new Float32Array(maxCount);
   const cyclePos = new Float32Array(maxCount);
   const opacity = new Float32Array(maxCount);
+  const amplitude = new Float32Array(maxCount);
   const tint = new Float32Array(maxCount * 3);
   geometry.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1));
   geometry.setAttribute(
@@ -575,6 +707,10 @@ function buildSpeciesRenderer(
   geometry.setAttribute(
     "aOpacity",
     new THREE.InstancedBufferAttribute(opacity, 1),
+  );
+  geometry.setAttribute(
+    "aAmplitude",
+    new THREE.InstancedBufferAttribute(amplitude, 1),
   );
   geometry.setAttribute("aTint", new THREE.InstancedBufferAttribute(tint, 3));
 
@@ -592,13 +728,12 @@ function buildSpeciesRenderer(
     // hotspot, which reads as noisy/aliased on a mesh this low-poly.
     uShininess: { value: 20 },
     uSpecularStrength: { value: 0.5 },
-    uWater: { value: null },
+    uCaustics: { value: null },
     uWorldSize: { value: new THREE.Vector2(1, 1) }, // real size arrives via update() each frame
     uMargin: { value: new THREE.Vector2(0, 0) }, // ditto
-    uTexel: { value: new THREE.Vector2(1 / waterSimSize, 1 / waterSimSize) },
     uCausticsColor1: { value: new THREE.Color("#5cc594") },
     uCausticsColor2: { value: new THREE.Color("#123b28") },
-    uCausticsStrength: { value: 130 },
+    uCausticsStrength: { value: 18 },
     uFogColor: { value: FOG_COLOR },
     uFogDensity: { value: fogDensity(bounds) },
     uDepthDarkenRate: { value: depthDarkenRate(bounds) },
@@ -642,11 +777,6 @@ function buildSpeciesRenderer(
   const noseOffsetWorld = new THREE.Vector3();
   const centerPos = new THREE.Vector3();
 
-  // Real elapsed ms between update() calls, used to accumulate each fish's
-  // swim-cycle position (see SWIM_CYCLE_RATE above) — null on the first
-  // call, when there's no previous frame to measure from.
-  let lastT = null;
-
   // Writes every living fish's transform + swim-phase attributes for this
   // frame. `fish` is the live flock.fish array — dense (no holes), so
   // instance index i always means "the i-th currently-alive fish", never
@@ -656,14 +786,11 @@ function buildSpeciesRenderer(
   // range, with a small wobble and a slight pitch toward whichever way
   // that drift is currently heading so it still reads as swimming rather
   // than an elevator.
-  function update(fish, t, depthRange, waterSize, waterTexture, bounds) {
+  function update(fish, t, depthRange, waterSize, causticsTexture, bounds) {
     const { surfaceY, floorY } = depthRange;
-    const dt = lastT === null ? 0 : Math.max(0, t - lastT);
-    lastT = t;
     const count = Math.min(fish.length, maxCount);
     for (let i = 0; i < count; i++) {
       const f = fish[i];
-      const swimSpeed = Math.hypot(f.vx, f.vy);
       const heading = Math.atan2(f.vx, f.vy);
       quaternion.setFromAxisAngle(eulerY, heading);
 
@@ -685,19 +812,22 @@ function buildSpeciesRenderer(
       matrix.compose(centerPos, quaternion, scaleVec);
       mesh.setMatrixAt(i, matrix);
       phase[i] = f.wobblePhase;
-      // Ties tailbeat rate to how fast the fish is actually swimming (see
-      // boids.js flowWeight/maxSpeed) instead of a fixed per-fish random
-      // rate, so fish visibly beat their tails faster when cruising quickly
-      // and slower when drifting — same knob a faster/slower migration day
-      // (main.js applyDaySpeed) already turns. Accumulated frame-over-frame
-      // (rather than recomputed as elapsed-time * currentSpeed) so a change
-      // in speed changes the rate future frames accumulate at instead of
-      // retroactively rescaling all elapsed time, which was previously
-      // popping the sampled VAT frame — visible as stutter — every time a
-      // fish accelerated or decelerated.
-      f.swimCyclePos = (f.swimCyclePos || 0) + dt * SWIM_CYCLE_RATE * swimSpeed;
+      // Tailbeat rate, derived from how fast this fish is actually moving
+      // rather than set per species — see STRIDE_LENGTH above. `s` is the
+      // model-to-world scale computed above, so modelLength * s is this
+      // fish's rendered nose-to-tail length in the same world units its
+      // speed is measured in; dividing speed by it gives body lengths per
+      // step, and dividing that by the stride gives beats per step.
+      const bodyLength = modelLength * s;
+      const beatsPerStep =
+        (f.smoothSpeed ?? f.speed) / (bodyLength * STRIDE_LENGTH);
+      f.swimCyclePos =
+        (f.swimCyclePos || 0) +
+        Math.min(MAX_BEATS_PER_STEP, Math.max(MIN_BEATS_PER_STEP, beatsPerStep)) *
+          (f.swimRate ?? 1);
       cyclePos[i] = f.swimCyclePos;
       opacity[i] = f.opacity;
+      amplitude[i] = f.swimAmplitude ?? 1;
       const c = SPECIES_COLORS[f.species] ?? DEFAULT_COLOR;
       tint[i * 3] = c.r;
       tint[i * 3 + 1] = c.g;
@@ -708,12 +838,14 @@ function buildSpeciesRenderer(
     geometry.attributes.aPhase.needsUpdate = true;
     geometry.attributes.aCyclePos.needsUpdate = true;
     geometry.attributes.aOpacity.needsUpdate = true;
+    geometry.attributes.aAmplitude.needsUpdate = true;
     geometry.attributes.aTint.needsUpdate = true;
 
-    // The water sim's ping-pong texture swaps every frame, and waterSize/
-    // bounds can change on resize — all refreshed here rather than wired
-    // through a separate setter, since update() already runs once per frame.
-    uniforms.uWater.value = waterTexture;
+    // The caustics texture (causticsGenerator.js) is recomputed every
+    // frame, and waterSize/bounds can change on resize — all refreshed here
+    // rather than wired through a separate setter, since update() already
+    // runs once per frame.
+    uniforms.uCaustics.value = causticsTexture;
     uniforms.uWorldSize.value.set(waterSize.width, waterSize.height);
     uniforms.uMargin.value.set(waterSize.marginX, waterSize.marginZ);
     uniforms.uFogDensity.value = fogDensity(bounds);
@@ -734,19 +866,22 @@ function buildSpeciesRenderer(
 }
 
 // Groups the four DART species by which GLB backs them (see
-// SPECIES_MODEL_URL) and builds one InstancedMesh per distinct model —
-// jackChinook/shad currently share the steelhead placeholder and are drawn
-// from a single shared mesh (as before, told apart by aTint), while
-// steelhead and chinook each get their own mesh built from their own
-// geometry/VAT/texture. `maxPerSpecies` is the per-species cap (see
-// MAX_PER_SPECIES in main.js); a shared mesh's capacity scales with how
-// many species are riding it so none of them get starved for room.
-export function createFishInstancedMesh(
-  assetsByUrl,
-  maxPerSpecies,
-  waterSimSize,
-  bounds,
-) {
+// SPECIES_MODEL_URL) and builds one InstancedMesh per distinct model. In
+// this build all four share steelhead-final.glb, so that is a single mesh
+// with the species told apart by aTint alone; give a species its own URL and
+// it gets its own mesh built from its own geometry/VAT/texture, no other
+// change required.
+//
+// Every renderer is sized to the whole population rather than to a
+// per-species share. That is what the proportional species mix in main.js
+// costs: with counts scaled to preserve the day's real percentages instead
+// of clamped per species, a single-species day (2015's Chinook peak is
+// nearly one — see data.js) legitimately puts every fish on one renderer, so
+// any smaller capacity would silently drop the overflow. The waste is small
+// — roughly 88 bytes per unused slot across instanceMatrix and the
+// per-instance attributes above, so a few hundred KB even with four
+// renderers — and it buys a hard guarantee that no day can exceed capacity.
+export function createFishInstancedMesh(assetsByUrl, maxPopulation, bounds) {
   const speciesByUrl = new Map();
   for (const [species, url] of Object.entries(SPECIES_MODEL_URL)) {
     if (!speciesByUrl.has(url)) speciesByUrl.set(url, []);
@@ -763,14 +898,13 @@ export function createFishInstancedMesh(
   for (const [url, speciesList] of speciesByUrl) {
     const renderer = buildSpeciesRenderer(
       assetsByUrl.get(url),
-      maxPerSpecies * speciesList.length,
-      waterSimSize,
+      maxPopulation,
       bounds,
     );
     group.add(renderer.mesh);
     renderers.push({
       species: new Set(speciesList),
-      maxCount: maxPerSpecies * speciesList.length,
+      maxCount: maxPopulation,
       bucket: [],
       ...renderer,
     });
@@ -780,14 +914,14 @@ export function createFishInstancedMesh(
   // hands each renderer just its own slice — mirrors how a single shared
   // InstancedMesh used to read `fish` directly, just partitioned first so a
   // chinook-only mesh only ever sees chinook fish (and vice versa).
-  function update(fish, t, depthRange, waterSize, waterTexture, bounds) {
+  function update(fish, t, depthRange, waterSize, causticsTexture, bounds) {
     for (const r of renderers) r.bucket.length = 0;
     for (const f of fish) {
       const r = renderers.find((r) => r.species.has(f.species));
       if (r && r.bucket.length < r.maxCount) r.bucket.push(f);
     }
     for (const r of renderers) {
-      r.update(r.bucket, t, depthRange, waterSize, waterTexture, bounds);
+      r.update(r.bucket, t, depthRange, waterSize, causticsTexture, bounds);
     }
   }
 

@@ -3,14 +3,19 @@ import { runData } from "./data.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
 import {
   buildTerrainMesh,
-  setTerrainWaterTexture,
+  setTerrainCausticsTexture,
   setTerrainSeason,
   riverDepth,
 } from "./scene/terrain.js";
 import { buildWaterMesh, waterWorldSize } from "./scene/water.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
+import {
+  createCausticsGenerator,
+  CAUSTICS_TARGET_SIZE,
+} from "./scene/causticsGenerator.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
 import { dayOfYear } from "./scene/season.js";
+import { setFogSeason } from "./scene/fog.js";
 
 const canvas = document.getElementById("river-canvas");
 
@@ -24,10 +29,11 @@ const speciesCountEls = {
   steelhead: document.getElementById("count-steelhead"),
   shad: document.getElementById("count-shad"),
 };
+const fishLoadingEl = document.getElementById("fish-loading");
 
 // Drives the HUD's fish counts from the real per-day DART numbers (see
 // data.js) rather than flock.activeCount() — the simulated/rendered boid
-// count is capped well below these for performance (see MAX_PER_SPECIES
+// count is capped well below these for performance (see MAX_POPULATION
 // below), so it's not what a viewer wants to read as "how many fish passed
 // today." Falls back to 0 for a day with no species breakdown at all (see
 // generatePlaceholderRun() in data.js).
@@ -47,12 +53,14 @@ function updateFishCountDisplay(idx) {
 let bounds = { width: window.innerWidth, height: window.innerHeight };
 
 const sceneSetup = createSceneSetup(canvas, bounds);
-const { renderer, scene, camera, controls, setSeason } = sceneSetup;
+const { renderer, scene, camera, cameraTarget, setSeason } = sceneSetup;
+const renderScene = sceneSetup.render;
 
 // ---------------------------------------------------------------------
-// Camera debug readout — toggle with "D". Shows live distance-to-target
-// plus camera/target/bounds numbers so a sensible OrbitControls
-// minDistance/maxDistance can be read off directly instead of guessed.
+// Camera debug readout — toggle with "D". The camera is fixed now (see
+// sceneSetup.js), so these numbers no longer change frame to frame; they're
+// still the way to read off a new EYE_FRAC/TARGET_FRAC by eye if the
+// framing ever needs re-tuning.
 // ---------------------------------------------------------------------
 const debugPanel = document.getElementById("debug-panel");
 window.addEventListener("keydown", (e) => {
@@ -64,9 +72,10 @@ window.addEventListener("keydown", (e) => {
 // Water simulation (see scene/waterSim.js, ported from
 // martinRenou/threejs-caustics). The water sim's own [-1, 1] space is
 // square regardless of world aspect ratio, so ripple radii get corrected
-// by worldAspect to stay circular. The terrain and water surface both
-// read caustic glow straight off this sim's texture (see
-// scene/causticsChunk.js) rather than through a separate render pass.
+// by worldAspect to stay circular. The terrain, water surface, and fish all
+// read their caustic glow off a separate texture (see
+// scene/causticsGenerator.js, also ported from martinRenou/threejs-caustics)
+// that this sim's height field feeds into every frame.
 // ---------------------------------------------------------------------
 const WATER_SIM_SIZE = 600;
 
@@ -87,8 +96,8 @@ function worldToSim(x, z) {
   };
 }
 
-let terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
-// scene.add(terrainMesh);
+let terrainMesh = buildTerrainMesh(bounds, CAUSTICS_TARGET_SIZE);
+scene.add(terrainMesh);
 
 // Depth range fish swim within: a little below the surface down to just
 // above the riverbed floor. See boids.js's fish.depth and fishMesh.js.
@@ -100,7 +109,14 @@ let waterSim = createWaterSimulation(
   waterSize.height / waterSize.width,
 );
 
-let water = buildWaterMesh(bounds, WATER_SIM_SIZE);
+// Real-time caustics (see scene/causticsGenerator.js, ported from
+// martinRenou/threejs-caustics) — recomputed every frame from the water
+// sim's live height field, terrain/water/fish all sample its output
+// texture for their caustic glow (see scene/causticsChunk.js) instead of
+// reading the water sim texture directly.
+let causticsGenerator = createCausticsGenerator(renderer, bounds, terrainMesh);
+
+let water = buildWaterMesh(bounds, CAUSTICS_TARGET_SIZE);
 scene.add(water.mesh);
 
 // Tracks the day-of-year last passed to setSeason/water.setSeason, so
@@ -109,31 +125,45 @@ scene.add(water.mesh);
 // pre-season default — see water.js).
 let currentDayOfYear = 0;
 
-// Drives the sky/sun (sceneSetup.js), the water surface's reflected-sky
-// tint (water.js), the caustic glow on fish/riverbed, and the riverbed's
-// sun direction (terrain.js) from the same date, so the whole scene reads
-// as one consistent season instead of drifting independently.
+// Drives the sky/sun (sceneSetup.js), the distance fog every surface fades
+// into (fog.js), the water surface's body/reflection colors (water.js), the
+// riverbed's color and sun direction (terrain.js), and the caustic glow on
+// fish/riverbed from the same date, so the whole scene reads as one
+// consistent season instead of drifting independently.
+//
+// setFogSeason() is the odd one out: it takes no target, because it mutates
+// the single shared FOG_COLOR that every ShaderMaterial's uFogColor uniform
+// already points at (see fog.js).
 function applySeason(dateStr) {
   currentDayOfYear = dayOfYear(dateStr);
+  setFogSeason(currentDayOfYear);
   setSeason(currentDayOfYear);
   water.setSeason(currentDayOfYear);
   setTerrainSeason(terrainMesh, currentDayOfYear);
+  causticsGenerator.setSeason(currentDayOfYear);
   fishRenderer?.setSeason(currentDayOfYear);
 }
 
 const SPECIES_KEYS = ["chinook", "jackChinook", "steelhead", "shad"];
 
-// Caps how many fish of any single species are simulated/rendered at once.
-// Unlike a flat total cap, this is per-species: the real steelhead-
-// updated.glb mesh (see fishMesh.js) is far more expensive per instance
-// than a placeholder shape would be — texture sampling, VAT skinning
-// lookups, caustics/fog/specular — so an overwhelming single-species day
-// (2015's Chinook peak alone hits ~7500 — see data.js) needs its own
-// ceiling rather than sharing one pooled total with three other species
-// nowhere near it. MAX_POPULATION (the sum across all species) is what
-// createFishInstancedMesh's instance count is sized to below.
-const MAX_PER_SPECIES = 400;
-const MAX_POPULATION = MAX_PER_SPECIES * SPECIES_KEYS.length;
+// Caps how many fish are simulated/rendered at once, across all species.
+//
+// This is a single pooled total, deliberately, and the per-species clamp it
+// replaces was distorting exactly the days that matter most. Clamping each
+// species independently at 400 turned 2015's Chinook peak — ~7500 chinook
+// against a few hundred steelhead, a genuinely ~94% chinook day — into 400
+// of each, i.e. a 50/50 split on screen. The mix a viewer reads was an
+// artifact of the cap rather than the data. speciesCountsForDay() below now
+// scales the whole day proportionally instead, so the percentages survive
+// and only the absolute number is capped.
+//
+// The ceiling is set by vertex cost, not fish logic: the real mesh (see
+// fishMesh.js) is ~1300 vertices, each doing 2 VAT samples plus a caustics
+// read, on top of per-instance fog/specular/depth work. 1200 fish keeps that
+// near 2M vertex shader invocations per frame, which holds 60fps on
+// mid-range hardware. Raise it only alongside a cheaper vertex path (an LOD
+// for the ~80% of fish that are fogged past legibility is the obvious one).
+const MAX_POPULATION = 1200;
 
 // loadFishAssets() loads+bakes every distinct per-species GLB (see
 // SPECIES_MODEL_URL in fishMesh.js) — real async work, unlike a placeholder
@@ -142,27 +172,33 @@ const MAX_POPULATION = MAX_PER_SPECIES * SPECIES_KEYS.length;
 let fishRenderer = null;
 loadFishAssets()
   .then((assetsByUrl) => {
-    fishRenderer = createFishInstancedMesh(
-      assetsByUrl,
-      MAX_PER_SPECIES,
-      WATER_SIM_SIZE,
-      bounds,
-    );
+    fishRenderer = createFishInstancedMesh(assetsByUrl, MAX_POPULATION, bounds);
     scene.add(fishRenderer.mesh);
     // applySeason() may already have run once (jumpToDay(0) below) before
     // the model finished loading — the mesh didn't exist yet to receive it.
     fishRenderer.setSeason(currentDayOfYear);
+
+    // Fade the loading overlay out, then drop it from the DOM once the
+    // transition finishes (see style.css) rather than leaving a hidden-but-
+    // present element around indefinitely.
+    fishLoadingEl.classList.add("hidden");
+    fishLoadingEl.addEventListener(
+      "transitionend",
+      () => fishLoadingEl.remove(),
+      { once: true },
+    );
   })
   .catch((err) => console.error("Failed to load fish model:", err));
 
-// Window resize handler: everything bounds-shaped (terrain, water, the
-// water sim) is rebuilt from scratch at the new size, since these
+// Everything bounds-shaped (terrain, water, the water sim, the caustics
+// render targets) is rebuilt from scratch at the new size, since these
 // meshes/render targets are sized directly off `bounds` rather than being
 // resizable in place. Old GPU resources are disposed before their
 // replacements are created to avoid leaking memory.
-function resize() {
-  bounds = { width: window.innerWidth, height: window.innerHeight };
-  sceneSetup.resize(bounds);
+//
+// Deliberately NOT called straight off the resize event — see the debounce
+// below.
+function rebuildWorld() {
   flock.setBounds(bounds);
 
   scene.remove(terrainMesh, water.mesh);
@@ -171,20 +207,40 @@ function resize() {
   water.mesh.geometry.dispose();
   water.mesh.material.dispose();
   waterSim.dispose();
+  causticsGenerator.dispose();
 
   waterSize = waterWorldSize(bounds);
-  terrainMesh = buildTerrainMesh(bounds, WATER_SIM_SIZE);
+  terrainMesh = buildTerrainMesh(bounds, CAUSTICS_TARGET_SIZE);
   setTerrainSeason(terrainMesh, currentDayOfYear);
+  scene.add(terrainMesh);
   depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
   waterSim = createWaterSimulation(
     renderer,
     WATER_SIM_SIZE,
     waterSize.height / waterSize.width,
   );
-  water = buildWaterMesh(bounds, WATER_SIM_SIZE);
+  causticsGenerator = createCausticsGenerator(renderer, bounds, terrainMesh);
+  causticsGenerator.setSeason(currentDayOfYear);
+  water = buildWaterMesh(bounds, CAUSTICS_TARGET_SIZE);
   water.setSeason(currentDayOfYear);
   scene.add(water.mesh);
 }
+
+// A dragged window edge fires `resize` on nearly every frame of the drag,
+// and rebuildWorld() above is expensive enough — disposing and reallocating
+// the water sim's ping-pong targets, the two 1024x1024 caustics targets, and
+// two full plane meshes — that running it at that rate visibly hitches and
+// churns GPU memory for the whole duration of the drag.
+//
+// So the two halves are split by cost: the cheap half (renderer/composer
+// buffers, camera aspect, fog density) runs immediately on every event so
+// the canvas never looks stretched or wrongly-proportioned mid-drag, and
+// the expensive rebuild waits until the drag has been still this long. In
+// between, terrain/water/sim are simply still at their previous size —
+// visible only as the water plane not yet reaching a freshly-widened
+// viewport edge, which the plane's own fade margin already softens.
+const REBUILD_DEBOUNCE_MS = 150;
+let rebuildTimer = 0;
 
 // Was 2.4 — halved so a fish's spawn-to-exit crossing takes roughly twice as
 // long (see FRAMES_PER_DAY below, doubled to match), giving more time to
@@ -204,7 +260,14 @@ const flock = new Flock(bounds, {
   separationRadius: 45,
 });
 
-window.addEventListener("resize", resize);
+// Registered below `flock` because rebuildWorld() reads it (see the
+// debounce note above).
+window.addEventListener("resize", () => {
+  bounds = { width: window.innerWidth, height: window.innerHeight };
+  sceneSetup.resize(bounds);
+  clearTimeout(rebuildTimer);
+  rebuildTimer = setTimeout(rebuildWorld, REBUILD_DEBOUNCE_MS);
+});
 
 // ---------------------------------------------------------------------
 // Run timeline — ported unchanged from the Canvas2D version. All of this
@@ -219,16 +282,31 @@ const FRAMES_PER_DAY = 80;
 
 timelineInput.max = String(runData.length - 1);
 
-// Per-species counts for day `idx`, each capped at MAX_PER_SPECIES (see
-// above) — the shared source of truth for both how many fish that day
-// targets in total (targetFishForDay) and what mix new spawns should be
-// weighted toward (pickSpeciesForDay), so an over-cap species is
-// under-represented consistently in both instead of just at the total.
+// Per-species counts for day `idx`, scaled down proportionally if the day's
+// real total exceeds MAX_POPULATION — the shared source of truth for both
+// how many fish that day targets in total (targetFishForDay) and what mix
+// new spawns should be weighted toward (pickSpeciesForDay), so the two can
+// never disagree about the day's composition.
+//
+// Scaling the whole day by one factor (rather than clamping each species
+// separately — see MAX_POPULATION above) is what preserves the percentages:
+// every species keeps its exact share of the day, and only the absolute
+// number shrinks. A day already under the cap passes through untouched.
+//
+// Counts come back fractional after scaling. That's fine and intentional for
+// both consumers: pickSpeciesForDay treats them as weights, and
+// targetFishForDay rounds only the total.
 function speciesCountsForDay(idx) {
   const day = runData[idx];
   const counts = {};
+  let total = 0;
   for (const key of SPECIES_KEYS) {
-    counts[key] = Math.min(MAX_PER_SPECIES, day[key] ?? 0);
+    counts[key] = day[key] ?? 0;
+    total += counts[key];
+  }
+  if (total > MAX_POPULATION) {
+    const scale = MAX_POPULATION / total;
+    for (const key of SPECIES_KEYS) counts[key] *= scale;
   }
   return counts;
 }
@@ -243,7 +321,10 @@ function targetFishForDay(idx) {
   let total = 0;
   for (const key of SPECIES_KEYS) total += counts[key];
   if (total === 0) total = Math.min(MAX_POPULATION, runData[idx].count ?? 0);
-  return total;
+  // Rounded because callers compare it against integer fish counts —
+  // jumpToDay() spawns/removes until activeCount() matches, and a fractional
+  // target there would never be reachable.
+  return Math.round(total);
 }
 
 // Precomputed day-over-day change in target population, one entry per day,
@@ -263,11 +344,11 @@ function desiredPopulation(idx, progress) {
 }
 
 // Weighted-random species pick for a spawn on day `idx`, matching that day's
-// capped Chinook/Jack Chinook/Steelhead/Shad mix (see speciesCountsForDay) —
-// using the same capped counts as targetFishForDay so a species pinned at
-// MAX_PER_SPECIES is under-represented in new spawns to match, not just in
-// the total. Falls back to all-steelhead when a day has no species
-// breakdown at all.
+// real Chinook/Jack Chinook/Steelhead/Shad percentages (see
+// speciesCountsForDay) — the same counts targetFishForDay sums, so the mix
+// new spawns are drawn from always agrees with the population they're
+// filling. Falls back to all-steelhead when a day has no species breakdown
+// at all.
 function pickSpeciesForDay(idx) {
   const counts = speciesCountsForDay(idx);
   let total = 0;
@@ -406,23 +487,26 @@ function loop(t) {
   sceneSetup.updateCamera(t);
 
   if (!debugPanel.hidden) {
-    const dist = camera.position.distanceTo(controls.target);
+    const dist = camera.position.distanceTo(cameraTarget);
     debugPanel.textContent =
       `distance to target: ${dist.toFixed(1)}\n` +
       `camera: (${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)})\n` +
-      `target: (${controls.target.x.toFixed(0)}, ${controls.target.y.toFixed(0)}, ${controls.target.z.toFixed(0)})\n` +
+      `target: (${cameraTarget.x.toFixed(0)}, ${cameraTarget.y.toFixed(0)}, ${cameraTarget.z.toFixed(0)})\n` +
       `bounds: ${bounds.width.toFixed(0)} x ${bounds.height.toFixed(0)}\n` +
       `camera.far: ${camera.far.toFixed(0)}`;
   }
 
   // 2. Advance the water surface: drop this frame's ripples, relax the
-  // height field, then hand the resulting texture to the terrain and water
-  // shaders (both read their caustic glow straight off it — see
+  // height field, then re-render the caustics pass (see
+  // scene/causticsGenerator.js) off the freshly-stepped height field, then
+  // hand the resulting caustics texture to the terrain/water/fish shaders
+  // (all three read their caustic glow straight off it — see
   // scene/causticsChunk.js).
   emitRipples();
   waterSim.step();
-  setTerrainWaterTexture(terrainMesh, waterSim.texture);
-  water.setSources(waterSim.texture);
+  causticsGenerator.render(waterSim.texture);
+  setTerrainCausticsTexture(terrainMesh, causticsGenerator.texture);
+  water.setSources(waterSim.texture, causticsGenerator.texture);
 
   // 3. Sync the instanced fish mesh to the simulation's current fish array
   // (positions, headings, depth, swim-phase, species tint, caustic glow) —
@@ -433,11 +517,11 @@ function loop(t) {
       t,
       depthRange,
       waterSize,
-      waterSim.texture,
+      causticsGenerator.texture,
       bounds,
     );
 
-  renderer.render(scene, camera);
+  renderScene();
 
   // 4. Population pacing: while playing, continuously spawn fish so the
   // count tracks `desiredPopulation`'s smooth ramp (rather than snapping),

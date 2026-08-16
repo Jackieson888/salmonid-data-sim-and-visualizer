@@ -26,6 +26,26 @@
 const SPAWN_FADE_FRAMES = 24;
 const REMOVE_FADE_FRAMES = 24;
 
+// Per-frame blend factor for Fish.smoothSpeed's exponential moving average
+// (see the constructor). ~0.03 gives a time constant of roughly 33 frames,
+// about half a second at 60fps — long enough to swallow per-frame steering
+// jitter, short enough that a fish visibly picks up its tailbeat within a
+// stroke or two of actually accelerating.
+const SPEED_SMOOTHING = 0.03;
+
+// Real-world nose-to-tail length range per species, in inches (DART species —
+// see data.js/fishMesh.js SPECIES_MODEL_URL). fish.length uses these values
+// directly as sim units: the sim's pre-existing flat default (30 + rand*5)
+// already sat almost exactly inside the Steelhead range below, so 1 sim unit
+// == 1 inch rather than needing its own separate scale factor.
+const SPECIES_LENGTH_INCHES = {
+  shad: [12, 20],
+  jackChinook: [12, 20],
+  chinook: [30, 44],
+  steelhead: [24, 32],
+};
+const DEFAULT_LENGTH_INCHES = [30, 35];
+
 // Matches fishMesh.js's VISUAL_SCALE: a fish's rendered nose-to-tail body
 // length in world units is `fish.length * BODY_VISUAL_SCALE`. Flock.step's
 // overlap-resolution pass uses this to keep the boid-space minimum distance
@@ -43,13 +63,14 @@ const OVERLAP_CLEARANCE = 0.4;
 
 // Cell size for the overlap-resolution pass's spatial grid (see
 // buildSpatialGrid/gridKey below) — must be >= the largest possible minDist
-// between two fish, (35 + 35) * 0.5 * BODY_VISUAL_SCALE * OVERLAP_CLEARANCE
-// ≈ 33.6 at the top of fish.length's [30, 35] range, so 40 leaves comfortable
-// headroom without making cells so large that too many irrelevant fish share
-// one. Deliberately smaller than perceptionRadius (the flocking pass's grid
-// cell size, set per-Flock in the constructor below) since it only needs to
-// catch actual near-touching pairs, not the whole flocking neighborhood.
-const OVERLAP_GRID_CELL_SIZE = 40;
+// between two fish, (44 + 44) * 0.5 * BODY_VISUAL_SCALE * OVERLAP_CLEARANCE
+// ≈ 42.2 at the top of the largest species' range (Chinook, see
+// SPECIES_LENGTH_INCHES), so 48 leaves comfortable headroom without making
+// cells so large that too many irrelevant fish share one. Deliberately
+// smaller than perceptionRadius (the flocking pass's grid cell size, set
+// per-Flock in the constructor below) since it only needs to catch actual
+// near-touching pairs, not the whole flocking neighborhood.
+const OVERLAP_GRID_CELL_SIZE = 48;
 
 // Packs a grid cell's (cx, cy) into a single Map key without allocating a
 // string per lookup. Safe as long as cy always fits in [0, GRID_KEY_SCALE) —
@@ -97,9 +118,29 @@ export class Fish {
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
     this.bounds = bounds;
-    // Per-fish variation so the school doesn't look uniform/robotic.
-    this.length = 30 + Math.random() * 5;
+    // Per-fish variation so the school doesn't look uniform/robotic, sized to
+    // this species' real-world length range (see SPECIES_LENGTH_INCHES).
+    const [minLength, maxLength] =
+      SPECIES_LENGTH_INCHES[species] ?? DEFAULT_LENGTH_INCHES;
+    this.length = minLength + Math.random() * (maxLength - minLength);
     this.wobblePhase = Math.random() * Math.PI * 1;
+
+    // Per-fish swim variation, read by the renderer (see fishMesh.js
+    // update()). Both are fixed for the fish's whole life — this is
+    // individual variation between fish, not a per-frame effect.
+    //
+    // swimRate multiplies this species' tailbeat frequency
+    // (SPECIES_SWIM_HZ); swimAmplitude scales how far the baked clip bends
+    // the body (aAmplitude, 1 = exactly as authored). Every fish in a
+    // species otherwise plays one identical clip, and a school where all of
+    // them beat at exactly the same frequency reads as cloned however well
+    // their phases are spread — differing rates make the relative phases
+    // drift continuously instead of holding a fixed pattern. Ranges are
+    // deliberately narrow: these should read as individual variation within
+    // a species, not blur the frequency gap that distinguishes one species
+    // from another.
+    this.swimRate = 0.88 + Math.random() * 0.24;
+    this.swimAmplitude = 0.85 + Math.random() * 0.3;
 
     // Vertical wander: eases toward a randomly re-picked target depth,
     // occasionally retargeting, so fish drift up and down the water column
@@ -113,6 +154,19 @@ export class Fish {
     this.age = 0;
     this.removing = false;
     this.removeAge = 0;
+
+    // Low-passed swim speed, maintained in Flock.step() below and read by
+    // the renderer to set this fish's tailbeat rate (see fishMesh.js).
+    //
+    // Deliberately NOT the raw `speed` getter. Flocking forces change a
+    // fish's velocity abruptly frame to frame — a neighbor crossing its
+    // separation radius can swing it noticeably in one step — and driving a
+    // tailbeat straight off that reads as a rigid, hitching fish rather than
+    // a swimming one. A real fish's tailbeat doesn't stutter every time it
+    // adjusts course. Averaging over roughly half a second of frames keeps
+    // the genuine accelerations (a day's speed multiplier changing, a fish
+    // working out of a crowd) while discarding the steering noise on top.
+    this.smoothSpeed = Math.hypot(this.vx, this.vy);
   }
 
   get speed() {
@@ -320,6 +374,14 @@ export class Flock {
         fish.vx *= scale;
         fish.vy *= scale;
       }
+
+      // Track the low-passed speed the renderer drives tailbeat rate from
+      // (see Fish.smoothSpeed). Done here, after both speed clamps above, so
+      // it reflects the speed actually applied to position below rather than
+      // the pre-clamp value.
+      fish.smoothSpeed +=
+        (Math.hypot(fish.vx, fish.vy) - fish.smoothSpeed) *
+        Math.min(1, SPEED_SMOOTHING * dt);
 
       // Integrate: apply velocity to position.
       fish.x += fish.vx * dt;

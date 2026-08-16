@@ -6,16 +6,43 @@
 // water.js, and fishMesh.js are all custom ShaderMaterials, so each one
 // includes FOG_GLSL and calls applyFog() itself to actually show it.
 import * as THREE from "three";
+import { seasonForDay } from "./season.js";
 
-export const FOG_COLOR = new THREE.Color("#115243");
+// Fog is what every distant surface in the scene saturates into, which
+// makes it the single strongest color in frame — so it can't be a fixed
+// constant while the sky moves through the year, or the whole river reads
+// as hazing into a color the sky never contains. It's derived per season
+// from the same sky/depths pair everything else is (see season.js).
+//
+// Deliberately ONE shared, mutated-in-place instance rather than a value
+// copied out at build time: terrain.js, water.js, and fishMesh.js all pass
+// this exact object into their `uFogColor` uniform, so setFogSeason()
+// updating it here reaches every shader in the scene with no per-material
+// plumbing. Anything that needs its own copy must .clone() it — notably
+// THREE.FogExp2, whose constructor copies the color rather than holding the
+// reference (see sceneSetup.js, which re-syncs scene.fog.color itself).
+export const FOG_COLOR = new THREE.Color("#0d2f57");
 
 // Divided by the world's largest dimension so the falloff distance scales
 // with world size instead of being tuned in raw world units (bounds track
 // window size in this app — see main.js).
-const FOG_DENSITY_FACTOR = 1.2;
+//
+// Was 1.2, which left the far bank of the channel plainly legible. A
+// shallow inland river carries enough suspended sediment that visibility
+// underwater is only a few body lengths — fish a short distance off dissolve
+// into the murk entirely, and there is no visible "far side" at all. 3.6
+// puts the falloff roughly there: mostly saturated by a third of the way
+// across the channel.
+const FOG_DENSITY_FACTOR = 3.6;
 
 export function fogDensity(bounds) {
   return FOG_DENSITY_FACTOR / Math.max(bounds.width, bounds.height);
+}
+
+// Called from main.js's applySeason() alongside every other setSeason() —
+// see the note above on why mutating in place is the whole point here.
+export function setFogSeason(dayOfYear) {
+  FOG_COLOR.copy(seasonForDay(dayOfYear).fogColor);
 }
 
 export const FOG_GLSL = /* glsl */ `

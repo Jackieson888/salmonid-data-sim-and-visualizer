@@ -5,6 +5,16 @@
 // causticsChunk.js), so the sparkle on the surface and the light net on
 // the riverbed come from one consistent read of the same water texture.
 //
+// Vertex displacement (actually bumping this mesh's geometry from the sim's
+// height field, not just shading it) was attempted and reverted: sampling
+// the sim texture from this material's vertex shader reliably read back 0
+// no matter what (hardcoded UVs, a dedicated uniform not shared
+// with the fragment stage, bypassing the post-processing composer, removing
+// the fragment stage's own sample of the same texture — none of it changed
+// the result), despite the identical texture sampling fine in both this
+// material's own fragment shader and in causticsGenerator.js's vertex
+// shader. Root cause not identified; not worth blocking on further.
+//
 // The plane itself is drawn larger than the river bounds (WATER_SIZE_MULTIPLIER)
 // and the entire margin beyond the real bounds fades to 0 opacity — full
 // opacity right up to where the simulation actually is, then a gradual
@@ -29,6 +39,14 @@ import { seasonForDay } from "./season.js";
 // both the caustics fade zone and the region the sim can propagate ripples
 // into, so a bigger multiplier reads as a longer, softer dissolve.
 export const WATER_SIZE_MULTIPLIER = 2.4;
+
+// World-Y scale for the sim's raw height (.r channel) — the sim itself is
+// unitless (see waterSim.js). This mesh no longer displaces its own
+// geometry with it (see file header) but causticsGenerator.js's refraction
+// ray-march still needs a world-unit calibration for the sim height, and
+// imports this constant to stay consistent with whatever this file settles
+// on rather than guessing its own independent number.
+export const WATER_HEIGHT_SCALE = 150;
 
 // {width, height} = the sim/plane's actual world coverage, oversized by
 // WATER_SIZE_MULTIPLIER; {marginX, marginZ} = how far that coverage extends
@@ -58,6 +76,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   ${FOG_GLSL}
 
   uniform sampler2D uWater;
+  uniform sampler2D uCaustics;
   uniform vec2 uWorldSize;
   uniform vec2 uMargin;
   uniform vec2 uTexel;
@@ -89,8 +108,10 @@ const FRAGMENT_SHADER = /* glsl */ `
 
     // Same causticGlow() read terrain.js uses, at this same point — the
     // surface glints with the same light pattern that lands underwater
-    // instead of an unrelated procedural shimmer.
-    float glint = min(causticGlow(uWater, uv, uTexel) * uCausticsStrength, 1.4);
+    // instead of an unrelated procedural shimmer. Soft saturation instead
+    // of a hard clamp — see terrain.js's identical curve for why.
+    float glintStrength = causticGlow(uCaustics, uv, uTexel) * uCausticsStrength;
+    float glint = 1.4 * glintStrength / (glintStrength + 1.4);
     color += uCausticsColor * glint * 0.35;
 
     // Edge fade: fully opaque out to uCoreFrac (exactly where the real
@@ -112,7 +133,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-export function buildWaterMesh(bounds, waterSimSize) {
+export function buildWaterMesh(bounds, causticsTextureSize) {
   // Drawn WATER_SIZE_MULTIPLIER bigger than the river bounds, but
   // re-centered on the same center point, so the extra size grows evenly
   // past the edges rather than shifting the visible area.
@@ -131,21 +152,27 @@ export function buildWaterMesh(bounds, waterSimSize) {
 
   const uniforms = {
     uWater: { value: null },
+    uCaustics: { value: null },
     uWorldSize: { value: new THREE.Vector2(planeWidth, planeHeight) },
     uMargin: { value: new THREE.Vector2(marginX, marginZ) },
-    uTexel: { value: new THREE.Vector2(1 / waterSimSize, 1 / waterSimSize) },
-    uBaseColor: { value: new THREE.Color("#0c3636") },
+    uTexel: {
+      value: new THREE.Vector2(1 / causticsTextureSize, 1 / causticsTextureSize),
+    },
+    // The water body's own color, seen when looking straight down into it
+    // before fresnel mixes any sky back in — overwritten by setSeason() to
+    // track season.waterColor, which is derived from the same sky/depths
+    // pair as the fog and riverbed (see season.js). This starting value
+    // only shows before the first setSeason() call, as do the two below.
+    uBaseColor: { value: new THREE.Color("#09223f") },
     // Reflected-sky tint the fresnel term (below) mixes in at grazing
     // angles — overwritten by setSeason() to track the sky sphere's own
-    // atmosphereColor (see sceneSetup.js/season.js) so the water reads as
-    // reflecting the same sky rather than a fixed, season-blind tone. This
-    // starting value only shows before the first setSeason() call.
-    uSkyColor: { value: new THREE.Color("#366374") },
+    // skyColor (see sceneSetup.js/season.js) so the water reads as
+    // reflecting the same sky rather than a fixed, season-blind tone.
+    uSkyColor: { value: new THREE.Color("#1a56a8") },
     // Surface glint tint — overwritten by setSeason() to track the same
-    // causticsColor1 fishMesh.js's two-tone glow uses. Starting value only
-    // shows before the first setSeason() call.
+    // causticsColor1 fishMesh.js's two-tone glow uses.
     uCausticsColor: { value: new THREE.Color(0.75, 0.92, 0.98) },
-    uCausticsStrength: { value: 30 },
+    uCausticsStrength: { value: 8 },
     uCenter: { value: new THREE.Vector2(centerX, centerZ) },
     uPlaneHalfSize: {
       value: new THREE.Vector2(planeWidth / 2, planeHeight / 2),
@@ -163,29 +190,35 @@ export function buildWaterMesh(bounds, waterSimSize) {
     fragmentShader: FRAGMENT_SHADER,
     transparent: true,
     depthWrite: false,
-    // OrbitControls lets the camera go both above the surface and below it
-    // (looking up from underwater) — without this the plane back-face
-    // culls and disappears from whichever side isn't its default front face.
+    // The fixed camera (see sceneSetup.js) only ever views this plane from
+    // below, so single-sided would do — but the plane is a two-triangle
+    // quad that writes no depth, so culling saves nothing measurable here,
+    // and staying double-sided means moving the camera vantage can't make
+    // the surface silently vanish.
     side: THREE.DoubleSide,
   });
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "water";
 
-  // The water sim's ping-pong texture swaps every frame — refresh the
-  // uniform each frame (see main.js's loop).
-  function setSources(waterTexture) {
+  // The water sim's ping-pong texture and the caustics accumulation target
+  // (see causticsGenerator.js) both swap/update every frame — refresh both
+  // uniforms each frame (see main.js's loop). uWater still drives this
+  // surface's own normal/fresnel; uCaustics is only the glint overlay.
+  function setSources(waterTexture, causticsTexture) {
     uniforms.uWater.value = waterTexture;
+    uniforms.uCaustics.value = causticsTexture;
   }
 
-  // Ties the fresnel reflection tint to the same seasonal sky the sky
-  // sphere/sun use (see sceneSetup.js) — called from main.js whenever the
-  // displayed date changes, and again after any resize rebuilds this mesh
-  // (a fresh buildWaterMesh() call otherwise resets uSkyColor to its
-  // pre-season default above).
+  // Ties this surface's body color, its fresnel reflection tint, and its
+  // glint to the same season driving the sky sphere/sun (see sceneSetup.js)
+  // — called from main.js whenever the displayed date changes, and again
+  // after any resize rebuilds this mesh (a fresh buildWaterMesh() call
+  // otherwise resets these to the pre-season defaults above).
   function setSeason(dayOfYear) {
     const season = seasonForDay(dayOfYear);
-    uniforms.uSkyColor.value.copy(season.atmosphereColor);
+    uniforms.uBaseColor.value.copy(season.waterColor);
+    uniforms.uSkyColor.value.copy(season.skyColor);
     uniforms.uCausticsColor.value.copy(season.causticsColor1);
   }
 
