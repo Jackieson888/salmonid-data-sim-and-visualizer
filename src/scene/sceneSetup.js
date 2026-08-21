@@ -19,6 +19,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { FOG_COLOR, fogDensity } from "./fog.js";
 import { seasonForDay } from "./season.js";
+import { glslFloat } from "./glsl.js";
 
 // Sun disc/glow tuning for the sky shader below. The tight exponent is the
 // disc itself, the loose one the halo bleeding off it; both are fed by the
@@ -44,13 +45,6 @@ const SKY_FOG_SCALE = 0.45;
 // surface at all (pure murk). Also keeps the 1/dir.y path-length division
 // below away from zero.
 const MIN_UPWARD_COMPONENT = 0.001;
-
-// Interpolating a JS number into GLSL needs care: a whole number stringifies
-// without a decimal point ("350"), which GLSL types as an int, and int
-// arguments find no matching overload for float builtins like pow() — the
-// shader then fails to compile and the sky renders as nothing at all. This
-// forces a fractional part on so the literal is always a float.
-const glslFloat = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
 const FOV = 90;
 const NEAR = 1;
@@ -115,11 +109,14 @@ export function createSceneSetup(canvas, bounds) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.55;
 
+  // No scene.fog here, deliberately. THREE only applies it inside materials
+  // that pull in its fog shader chunks, and every material in this scene is a
+  // hand-written ShaderMaterial — which defaults to fog: false and would need
+  // those chunks added by hand anyway. A THREE.FogExp2 used to sit here and
+  // affected nothing; all the fog you can actually see comes from FOG_GLSL's
+  // applyFog(), called explicitly by terrain.js/water.js/fishMesh.js (see
+  // fog.js).
   const scene = new THREE.Scene();
-  // FogExp2's constructor copies the color rather than holding the shared
-  // reference every ShaderMaterial's uFogColor uniform does (see fog.js), so
-  // setSeason() below has to re-sync this one by hand.
-  scene.fog = new THREE.FogExp2(FOG_COLOR, fogDensity(bounds));
 
   // Every one of these is overwritten by the first setSeason() call — the
   // starting values only exist so the material compiles with something in
@@ -308,12 +305,14 @@ export function createSceneSetup(canvas, bounds) {
     applyFraming(b);
     camera.updateProjectionMatrix();
     sky.scale.setScalar(camera.far * SKY_RADIUS_FRAC);
-    scene.fog.density = fogDensity(b);
     // The sky's murk path length is in world units, so its density has to
-    // track bounds exactly the way scene.fog's does (see fog.js).
+    // track bounds the same way every other surface's fog does (see fog.js).
     skyUniforms.uFogDensity.value = fogDensity(b);
+    // Resizes the composer's own buffers AND calls setSize() on every pass,
+    // which is what re-allocates UnrealBloomPass's mip chain. (Assigning
+    // bloomPass.resolution here as well used to look like the line doing
+    // that, but the pass only reads `resolution` in its constructor.)
     composer.setSize(b.width, b.height);
-    bloomPass.resolution.set(b.width, b.height);
   }
 
   resize(bounds);
@@ -338,12 +337,8 @@ export function createSceneSetup(canvas, bounds) {
   // reassigned, since the sky material already holds a reference to these
   // exact Color/Vector3 objects.
   //
-  // scene.fog.color is re-synced here too: setFogSeason() (see fog.js)
-  // updates the shared FOG_COLOR that every ShaderMaterial's uFogColor
-  // points at, but FogExp2 copied its color at construction, so this one
-  // instance would otherwise stay stuck on the startup season. Read off
-  // season.fogColor rather than FOG_COLOR so it doesn't matter which of the
-  // two runs first within applySeason().
+  // The sky's own uFogColor needs no update here: it points at the shared
+  // FOG_COLOR instance that setFogSeason() mutates in place (see fog.js).
   function setSeason(dayOfYear) {
     const season = seasonForDay(dayOfYear);
     skyUniforms.uSkyColor.value.copy(season.skyColor);
@@ -354,7 +349,6 @@ export function createSceneSetup(canvas, bounds) {
     skyUniforms.uSunDirection.value.copy(season.sunDirection);
     skyUniforms.uSunIntensity.value = season.sunIntensity;
     skyUniforms.uHorizonStrength.value = season.horizonStrength;
-    scene.fog.color.copy(season.fogColor);
   }
 
   return {

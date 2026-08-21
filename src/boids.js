@@ -24,7 +24,11 @@
 // neighbor search down to roughly the fish actually near it.
 
 const SPAWN_FADE_FRAMES = 24;
-const REMOVE_FADE_FRAMES = 24;
+
+// Exported because the renderer has to size its instance capacity to cover
+// fish that are still in the array mid-fade-out on top of the live
+// population — see FISH_RENDER_HEADROOM in main.js.
+export const REMOVE_FADE_FRAMES = 24;
 
 // Per-frame blend factor for Fish.smoothSpeed's exponential moving average
 // (see the constructor). ~0.03 gives a time constant of roughly 33 frames,
@@ -46,12 +50,18 @@ const SPECIES_LENGTH_INCHES = {
 };
 const DEFAULT_LENGTH_INCHES = [30, 35];
 
-// Matches fishMesh.js's VISUAL_SCALE: a fish's rendered nose-to-tail body
-// length in world units is `fish.length * BODY_VISUAL_SCALE`. Flock.step's
-// overlap-resolution pass uses this to keep the boid-space minimum distance
-// between fish tied to how big they actually render, instead of an
-// arbitrary boid-space number that has no relation to the mesh size.
-const BODY_VISUAL_SCALE = 2.4;
+// A fish's rendered nose-to-tail body length in world units is
+// `fish.length * BODY_VISUAL_SCALE`. Flock.step's overlap-resolution pass uses
+// this to keep the boid-space minimum distance between fish tied to how big
+// they actually render, instead of an arbitrary boid-space number that has no
+// relation to the mesh size.
+//
+// Exported (and imported by fishMesh.js, which scales the mesh by it) because
+// the sim and the renderer have to agree on this exactly: they used to declare
+// it separately as BODY_VISUAL_SCALE and VISUAL_SCALE, two copies of 2.4 that
+// nothing stopped from drifting apart. It lives here because the sim owns
+// `fish.length`, which is the thing it scales.
+export const BODY_VISUAL_SCALE = 2.4;
 
 // Fraction of the world-space "how much are these two fish's bodies
 // overlapping" that counts as too close and gets corrected each frame — see
@@ -104,7 +114,7 @@ function buildSpatialGrid(fish, cellSize) {
 }
 
 export class Fish {
-  constructor(x, y, bounds, species = "steelhead") {
+  constructor(x, y, species = "steelhead") {
     this.x = x;
     this.y = y;
     // Which of the four DART species (see data.js) this fish represents —
@@ -117,30 +127,41 @@ export class Fish {
     const speed = 1 + Math.random() * 0.5;
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
-    this.bounds = bounds;
     // Per-fish variation so the school doesn't look uniform/robotic, sized to
     // this species' real-world length range (see SPECIES_LENGTH_INCHES).
     const [minLength, maxLength] =
       SPECIES_LENGTH_INCHES[species] ?? DEFAULT_LENGTH_INCHES;
     this.length = minLength + Math.random() * (maxLength - minLength);
-    this.wobblePhase = Math.random() * Math.PI * 1;
+    this.wobblePhase = Math.random() * Math.PI;
 
     // Per-fish swim variation, read by the renderer (see fishMesh.js
     // update()). Both are fixed for the fish's whole life — this is
     // individual variation between fish, not a per-frame effect.
     //
-    // swimRate multiplies this species' tailbeat frequency
-    // (SPECIES_SWIM_HZ); swimAmplitude scales how far the baked clip bends
-    // the body (aAmplitude, 1 = exactly as authored). Every fish in a
-    // species otherwise plays one identical clip, and a school where all of
-    // them beat at exactly the same frequency reads as cloned however well
-    // their phases are spread — differing rates make the relative phases
-    // drift continuously instead of holding a fixed pattern. Ranges are
-    // deliberately narrow: these should read as individual variation within
-    // a species, not blur the frequency gap that distinguishes one species
-    // from another.
+    // swimRate multiplies the tailbeat rate the renderer derives from this
+    // fish's actual speed (see STRIDE_LENGTH in fishMesh.js); swimAmplitude
+    // scales how far the baked clip bends the body (aAmplitude, 1 = exactly
+    // as authored). Every fish in a species otherwise plays one identical
+    // clip, and a school where all of them beat at exactly the same frequency
+    // reads as cloned however well their phases are spread — differing rates
+    // make the relative phases drift continuously instead of holding a fixed
+    // pattern. Ranges are deliberately narrow: these should read as individual
+    // variation within a species, not blur the frequency gap that
+    // distinguishes one species from another.
     this.swimRate = 0.88 + Math.random() * 0.24;
     this.swimAmplitude = 0.85 + Math.random() * 0.3;
+
+    // Position within the current tailbeat cycle, in [0, 1). Advanced by the
+    // renderer each frame (see fishMesh.js's update()) at a rate derived from
+    // this fish's speed, and wrapped there rather than allowed to accumulate:
+    // the shader only ever reads fract() of it, so an ever-growing integer
+    // part is pure float32 precision loss in the aCyclePos attribute.
+    //
+    // Declared here rather than materialized on the fish by the renderer, so
+    // every Fish has the same shape from birth. Starts at 0 for every fish —
+    // the school's phase spread comes from wobblePhase above (aPhase in the
+    // shader), not from where each fish starts in the cycle.
+    this.swimCyclePos = 0;
 
     // Vertical wander: eases toward a randomly re-picked target depth,
     // occasionally retargeting, so fish drift up and down the water column
@@ -202,7 +223,7 @@ export class Flock {
   }
 
   spawn(x, y, species) {
-    const fish = new Fish(x, y, this.bounds, species);
+    const fish = new Fish(x, y, species);
     this.fish.push(fish);
     return fish;
   }
@@ -225,6 +246,31 @@ export class Flock {
     let n = 0;
     for (const fish of this.fish) if (!fish.removing) n++;
     return n;
+  }
+
+  // Flags up to `n` not-yet-removing fish to fade out, in array order.
+  //
+  // Exists so a caller draining the population to a target (main.js's
+  // jumpToDay) can do it in one pass. The obvious loop —
+  // `while (activeCount() > target) remove(fish.find(f => !f.removing))` —
+  // is quadratic twice over: activeCount() rescans the whole array per
+  // iteration, and find() restarts from index 0 each time, so every removal
+  // re-walks the run of already-flagged fish ahead of it. This walks the
+  // array once with a cursor instead.
+  //
+  // Measured on the worst case (one jump from empty straight to the cap and
+  // back down, i.e. clicking the slider onto the Chinook peak): 8.0ms before,
+  // 0.37ms after. Half a frame is a hitch rather than a stall at today's
+  // MAX_POPULATION — but the old shape degrades quadratically, so the same
+  // jump at 5000 fish was 148ms, and that is what this keeps off the table if
+  // the cap ever rises.
+  removeActive(n) {
+    for (let i = 0; i < this.fish.length && n > 0; i++) {
+      const fish = this.fish[i];
+      if (fish.removing) continue;
+      this.remove(fish);
+      n--;
+    }
   }
 
   // Immediately drops any fish still mid-fade-out from a previous remove(),
@@ -484,13 +530,24 @@ export class Flock {
 
     // River flow-through: fish that cross the right edge have finished
     // their run — flag them to fade out (see remove()) rather than
-    // wrapping back to the start or vanishing outright.
+    // wrapping back to the start or vanishing outright. The same pass notes
+    // whether anything has finished fading, so the filter below can be
+    // skipped entirely on the (common) frames where nothing has.
     const exitX = this.bounds.width + 40;
+    let anyFaded = false;
     for (const fish of this.fish) {
       if (fish.x > exitX) this.remove(fish);
+      if (fish.removing && fish.removeAge >= REMOVE_FADE_FRAMES) anyFaded = true;
     }
 
-    // Finalize: drop any fish whose fade-out has fully played out.
-    this.fish = this.fish.filter((f) => !(f.removing && f.removeAge >= REMOVE_FADE_FRAMES));
+    // Finalize: drop any fish whose fade-out has fully played out. Guarded
+    // because an unconditional filter() rebuilds the whole (up to ~1200
+    // entry) array every single frame just to hand back the same contents —
+    // same reason finalizeRemovals() guards its own filter.
+    if (anyFaded) {
+      this.fish = this.fish.filter(
+        (f) => !(f.removing && f.removeAge >= REMOVE_FADE_FRAMES),
+      );
+    }
   }
 }

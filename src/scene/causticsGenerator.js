@@ -26,10 +26,10 @@
 // Scope: only the flat terrain floor is a receiver/occluder. Fish are
 // excluded — they move every frame and are already this scene's most
 // expensive draw (VAT skinning, per-instance caustics/fog/specular — see
-// fishMesh.js's file header), so adding up to 1600 of them to a second
-// camera-rendered pass each frame isn't worth it for an occlusion effect
-// that would be subtle on an otherwise-open water column anyway. Fish still
-// *receive* the caustics glow (see causticsChunk.js), same as before.
+// fishMesh.js's file header), so adding a full MAX_POPULATION of them to a
+// second camera-rendered pass each frame isn't worth it for an occlusion
+// effect that would be subtle on an otherwise-open water column anyway. Fish
+// still *receive* the caustics glow (see glsl.js), same as before.
 //
 // Light camera: rather than aiming it along the real (slightly tilted, see
 // season.js's sunDirection) sun direction the way Renou's demo does, it
@@ -46,6 +46,7 @@ import * as THREE from "three";
 import { waterWorldSize, WATER_HEIGHT_SCALE } from "./water.js";
 import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
+import { WATER_NORMAL_GLSL } from "./glsl.js";
 
 // Segment count for the dense grid the caustics pass refracts/marches per
 // vertex. A deliberate step down from the water sim's own resolution
@@ -106,6 +107,8 @@ const ENV_FRAGMENT_SHADER = /* glsl */ `
 // rasterized through the light camera's own projection, never drawn as
 // real geometry.
 const CAUSTICS_VERTEX_SHADER = /* glsl */ `
+  ${WATER_NORMAL_GLSL}
+
   uniform vec3 light;
   uniform sampler2D water;
   uniform sampler2D env;
@@ -124,10 +127,9 @@ const CAUSTICS_VERTEX_SHADER = /* glsl */ `
     vec4 waterInfo = texture2D(water, uv);
 
     vec3 waterPosition = vec3(worldXZ.x, waterInfo.r * ${WATER_HEIGHT_SCALE.toFixed(1)}, worldXZ.y);
-    // Same normal reconstruction water.js's own fragment shader uses — no
-    // axis swizzle needed, our Y-up world already matches this convention
-    // (Renou's Z-up demo needs a .xzy swizzle here; we don't).
-    vec3 waterNormal = normalize(vec3(waterInfo.b, sqrt(max(0.0, 1.0 - dot(waterInfo.ba, waterInfo.ba))), waterInfo.a));
+    // The same normal reconstruction water.js's own fragment shader lights
+    // the surface with (see glsl.js) — this pass refracts through it.
+    vec3 waterNormal = waterSurfaceNormal(waterInfo);
 
     vOldPosition = waterPosition;
 
@@ -182,8 +184,8 @@ const CAUSTICS_VERTEX_SHADER = /* glsl */ `
 // degenerate case is NOT reused here: his demo relies on a depth-tested PCF
 // receiver blur to keep that sentinel from ever really showing (rare,
 // isolated texels smoothed away). We sample this texture directly with a
-// plain box blur (see causticsChunk.js) and additively accumulate hundreds
-// of thousands of triangles into it — a single 2e20 texel survives both of
+// plain box blur (see glsl.js) and additively accumulate hundreds of
+// thousands of triangles into it — a single 2e20 texel survives both of
 // those and swamps the entire output regardless of any downstream strength
 // constant. RATIO_CAP keeps a genuinely bright focal point very bright
 // without that unbounded blowout.
@@ -320,12 +322,16 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
   const causticsMesh = new THREE.Mesh(causticsGeometry, causticsMaterial);
 
   const black = new THREE.Color(0, 0, 0);
+  // Scratch for saving/restoring the renderer's clear color around the two
+  // passes below. Hoisted out of render() because that runs every frame, and
+  // allocating a Color per frame to hold a value that is immediately thrown
+  // away is pure garbage-collector pressure.
+  const previousClearColor = new THREE.Color();
 
   function render(waterTexture) {
     causticsMaterial.uniforms.water.value = waterTexture;
 
     const previousTarget = renderer.getRenderTarget();
-    const previousClearColor = new THREE.Color();
     renderer.getClearColor(previousClearColor);
     const previousClearAlpha = renderer.getClearAlpha();
 

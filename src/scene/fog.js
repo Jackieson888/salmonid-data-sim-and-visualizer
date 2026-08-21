@@ -1,10 +1,12 @@
 // fog.js
-// Shared source of truth for the scene's distance fog: the color/density
-// feeding THREE.FogExp2 on scene.fog (see sceneSetup.js), plus the same
-// exponential-squared falloff reimplemented as GLSL. THREE only applies
-// scene.fog automatically inside its own built-in materials — terrain.js,
-// water.js, and fishMesh.js are all custom ShaderMaterials, so each one
-// includes FOG_GLSL and calls applyFog() itself to actually show it.
+// Shared source of truth for the scene's distance fog: the color and
+// density, plus an exponential-squared falloff implemented as GLSL.
+//
+// THREE's own scene.fog only reaches materials that pull in its fog shader
+// chunks, and every material in this scene is a hand-written ShaderMaterial
+// (terrain.js, water.js, fishMesh.js, and the sky in sceneSetup.js) — so each
+// one includes FOG_GLSL and calls applyFog() itself. This is the whole fog
+// implementation; there is no scene.fog to keep in step with it.
 import * as THREE from "three";
 import { seasonForDay } from "./season.js";
 
@@ -15,12 +17,12 @@ import { seasonForDay } from "./season.js";
 // from the same sky/depths pair everything else is (see season.js).
 //
 // Deliberately ONE shared, mutated-in-place instance rather than a value
-// copied out at build time: terrain.js, water.js, and fishMesh.js all pass
-// this exact object into their `uFogColor` uniform, so setFogSeason()
-// updating it here reaches every shader in the scene with no per-material
-// plumbing. Anything that needs its own copy must .clone() it — notably
-// THREE.FogExp2, whose constructor copies the color rather than holding the
-// reference (see sceneSetup.js, which re-syncs scene.fog.color itself).
+// copied out at build time: terrain.js, water.js, fishMesh.js and the sky
+// (sceneSetup.js) all pass this exact object into their `uFogColor` uniform,
+// so setFogSeason() updating it here reaches every shader in the scene with
+// no per-material plumbing. Anything that needs its own copy must .clone()
+// it — a consumer that copies the color at construction instead of holding
+// the reference would silently stay stuck on the startup season.
 export const FOG_COLOR = new THREE.Color("#0d2f57");
 
 // Divided by the world's largest dimension so the falloff distance scales

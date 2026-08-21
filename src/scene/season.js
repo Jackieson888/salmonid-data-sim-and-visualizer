@@ -29,8 +29,8 @@
 // here, not its own color.
 //
 // causticsColor1/2 (the light net on the riverbed/fish/water surface — see
-// causticsChunk.js) stay hand-picked and in the cyan-green "light net"
-// family across all four seasons rather than following the sky, since real
+// glsl.js) stay hand-picked and in the cyan-green "light net" family across
+// all four seasons rather than following the sky, since real
 // underwater caustics read as refracted sunlight, not a sky reflection —
 // only their warmth/saturation/value shift with the season.
 import * as THREE from "three";
@@ -246,8 +246,20 @@ export function seasonForDay(dayOfYear) {
 
 // `dateStr` is "YYYY-MM-DD" (see data.js) — parsed as UTC midnight so the
 // result doesn't shift with the browser's local timezone.
+//
+// Guarded because the failure is otherwise silent and total: an unparseable
+// date yields NaN, seasonForDay() then lerps every color in the palette by
+// NaN, and the whole scene renders as garbage with nothing thrown and nothing
+// logged. The only thing keeping that from firing is DART returning the date
+// format we expect (see parseDartCsv in data.js), which is not something this
+// end can guarantee.
 export function dayOfYear(dateStr) {
   const date = new Date(dateStr + "T00:00:00Z");
+  const time = date.getTime();
+  if (!Number.isFinite(time)) {
+    console.warn(`Unparseable date "${dateStr}", falling back to day 0`);
+    return 0;
+  }
   const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
-  return Math.floor((date.getTime() - yearStart) / 86400000);
+  return Math.floor((time - yearStart) / 86400000);
 }

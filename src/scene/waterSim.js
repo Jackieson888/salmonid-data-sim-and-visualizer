@@ -109,7 +109,7 @@ export function createWaterSimulation(renderer, size, aspect) {
 
   const dropMaterial = new THREE.RawShaderMaterial({
     uniforms: {
-      center: { value: [0, 0] },
+      center: { value: new THREE.Vector2() },
       radius: { value: 0 },
       strength: { value: 0 },
       aspect: { value: new THREE.Vector2(1, 1) },
@@ -151,8 +151,10 @@ export function createWaterSimulation(renderer, size, aspect) {
 
   // Adds a single "raindrop" disturbance to the height field at `center`.
   // center: {x, z} in [-1, 1] sim-space. radius/strength: sim-space units.
+  // Written into the existing Vector2 rather than swapping in a fresh array,
+  // so a drop allocates nothing.
   function addDrop(center, radius, strength) {
-    dropMaterial.uniforms.center.value = [center.x, center.z];
+    dropMaterial.uniforms.center.value.set(center.x, center.z);
     dropMaterial.uniforms.radius.value = radius;
     dropMaterial.uniforms.strength.value = strength;
     render(dropMesh);

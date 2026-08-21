@@ -1,18 +1,20 @@
 {
   "name": "salmon-population-visualizer",
   "version": "1.0.0",
-  "description": "A Three.js flocking simulation (Reynolds boids: separation, alignment, cohesion) styled as a Chinook salmon run through the Snake River, with a timeline scrubber driven by real daily passage counts.",
+  "description": "A Three.js flocking simulation (Reynolds boids: separation, alignment, cohesion) styled as a salmon run past Lower Granite Dam on the Snake River, with a timeline scrubber driven by real daily passage counts.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "keywords": [],
   "dependencies": {
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "playwright": "^1.62.1",
     "vite": "^8.2.1"
   }
 }

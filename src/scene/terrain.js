@@ -1,11 +1,16 @@
 // terrain.js
 // Flat riverbed floor: a simple plane sitting below the water surface that
-// exists mainly to catch the real-time caustic glow (see causticsChunk.js/
+// exists mainly to catch the real-time caustic glow (see glsl.js/
 // causticsGenerator.js). No banks or island — fish swim through the open
 // water column above it.
 
 import * as THREE from "three";
-import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
+import {
+  CAUSTIC_GLOW_GLSL,
+  CAUSTIC_SATURATE_GLSL,
+  EDGE_FADE_GLSL,
+  glslFloat as f,
+} from "./glsl.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
 import { seasonForDay } from "./season.js";
 import { waterWorldSize, WATER_SIZE_MULTIPLIER } from "./water.js";
@@ -26,7 +31,7 @@ const SHADE_NOISE = 0.05; // per-vertex brightness jitter, keeps the floor from 
 // Average world-unit width of one stone, for the two Voronoi layers in the
 // fragment shader: rounded cobbles with finer gravel packed between them.
 // Scaled against a fish, which renders 72-84 world units nose-to-tail (see
-// fishMesh.js's VISUAL_SCALE) — so a COBBLE_SIZE of 9 is roughly a fist-
+// boids.js's BODY_VISUAL_SCALE) — so a COBBLE_SIZE of 9 is roughly a fist-
 // sized rock next to a three-foot Chinook, which is what the Snake's bed
 // actually looks like.
 const COBBLE_SIZE = 9;
@@ -97,11 +102,6 @@ const CAUSTIC_PARALLAX = 1.0;
 // directionality at all, which is what the riverbed had before.
 const CAUSTIC_LIGHT_WRAP = 0.3;
 
-// GLSL types a literal without a decimal point as an int, which finds no
-// matching overload on float builtins and fails the whole shader compile —
-// so every interpolated number below goes through toFixed().
-const f = (n) => n.toFixed(4);
-
 export function riverDepth(bounds) {
   return bounds.height * RIVER_DEPTH_FRAC;
 }
@@ -141,7 +141,17 @@ export function buildTerrainMesh(bounds, causticsTextureSize) {
     shades[i] = 1 + (Math.random() * 2 - 1) * SHADE_NOISE;
   }
   geometry.setAttribute("shade", new THREE.BufferAttribute(shades, 1));
-  geometry.computeVertexNormals();
+
+  // Neither shader that ever sees this geometry reads `normal` or `uv`: the
+  // terrain fragment shader synthesizes its own per-stone normals (a real
+  // plane normal is (0,1,0) everywhere and told it nothing), and
+  // causticsGenerator.js's env-map pass — the only other consumer, since it
+  // shares this exact geometry — uses `position` alone. Dropping them saves
+  // ~550KB of pointless vertex upload at this grid density, and the
+  // computeVertexNormals() pass that used to fill one of them was doing that
+  // work on every rebuild for a buffer nothing sampled.
+  geometry.deleteAttribute("normal");
+  geometry.deleteAttribute("uv");
 
   const material = buildTerrainMaterial(bounds, causticsTextureSize, {
     planeWidth,
@@ -185,6 +195,8 @@ const TERRAIN_VERTEX_SHADER = /* glsl */ `
 
 const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
   ${CAUSTIC_GLOW_GLSL}
+  ${CAUSTIC_SATURATE_GLSL}
+  ${EDGE_FADE_GLSL}
   ${FOG_GLSL}
 
   uniform sampler2D caustics;
@@ -389,13 +401,9 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
     // same oversized, margin-shifted area (see buildTerrainMesh/
     // waterWorldSize/causticsGenerator.js), so both need the same margin
     // offset to sample the same point instead of drifting apart as bounds
-    // gets bigger.
-    // Soft (Reinhard-style) saturation instead of a hard min() clamp — real
-    // caustics are an extremely peaky signal (a few tiny, very bright focal
-    // points against a mostly-dim field), and a hard clamp made "dim" and
-    // "very bright" both read as either invisible or maxed-out with no
-    // gradation between — see fishMesh.js's identical curve, which this
-    // matches so terrain/water/fish stay visually consistent.
+    // gets bigger. softSaturate() below is the shared curve water.js and
+    // fishMesh.js also run their glow through (see glsl.js), so all three
+    // surfaces stay visually consistent.
     //
     // The caustic net is sampled and lit as light *arriving on the stones*
     // rather than as a flat overlay printed across them. Four separate
@@ -436,9 +444,9 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
     float facing = mix(
       max(dot(rockNormal, sunDir), 0.0), 1.0, ${f(CAUSTIC_LIGHT_WRAP)}
     );
-    float glowStrength =
-      causticGlow(caustics, uv, texel) * causticsStrength * facing * crease;
-    float glow = 1.4 * glowStrength / (glowStrength + 1.4);
+    float glow = softSaturate(
+      causticGlow(caustics, uv, texel) * causticsStrength * facing * crease
+    );
 
     vec3 color = base + causticsColor * glow * rockTint;
     color = applyFog(color, vWorldPos);
@@ -452,14 +460,11 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
     // the gravel right under the camera is being seen through silt.
     color = mix(color, uFogColor, ${f(TERRAIN_HAZE)});
 
-    // Edge fade: same treatment as buildWaterMesh's edgeFade (see water.js)
-    // — fully opaque out to coreFrac (exactly where the real river bounds
-    // end), then a smooth dissolve across the rest of the oversized plane
-    // out to its own edge, so the plane's rectangular boundary disappears
-    // into the fog instead of cutting off as a visible hard edge.
-    vec2 t = abs(vWorldPos.xz - center) / planeHalfSize;
-    float edgeT = max(t.x, t.y);
-    float edgeFade = 1.0 - smoothstep(coreFrac, 1.0, edgeT);
+    // The same dissolve the water surface uses at the same real-world edge
+    // (see planeEdgeFade in glsl.js), so the plane's rectangular boundary
+    // disappears into the fog instead of cutting off as a visible hard edge.
+    float edgeFade =
+      planeEdgeFade(vWorldPos.xz, center, planeHalfSize, coreFrac);
 
     gl_FragColor = vec4(color, edgeFade);
   }

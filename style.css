@@ -60,7 +60,7 @@ body {
 
 /* Real per-day DART counts (see data.js/main.js) — not the simulated boid
    count, which is capped well below these for performance (see
-   MAX_PER_SPECIES in main.js). Colors match each species' InstancedMesh
+   MAX_POPULATION in main.js). Colors match each species' InstancedMesh
    tint in scene/fishMesh.js's SPECIES_COLORS. */
 #species-breakdown {
   pointer-events: none;

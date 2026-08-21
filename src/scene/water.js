@@ -2,8 +2,8 @@
 // Water surface: a flat plane at world Y=0, fragment-shaded from the live
 // GPU height-field simulation in waterSim.js (real ripples, not a canned
 // texture) and lit by the same causticGlow() helper terrain.js uses (see
-// causticsChunk.js), so the sparkle on the surface and the light net on
-// the riverbed come from one consistent read of the same water texture.
+// glsl.js), so the sparkle on the surface and the light net on the riverbed
+// come from one consistent read of the same water texture.
 //
 // Vertex displacement (actually bumping this mesh's geometry from the sim's
 // height field, not just shading it) was attempted and reverted: sampling
@@ -26,11 +26,16 @@
 // genuinely propagate out into the fade margin via the sim's own wave
 // diffusion, instead of the margin just clamping to (and stretching) the
 // sim texture's edge texel. Anything else that converts a world position
-// into this sim's uv space (main.js's worldToSim, fishMesh.js's caustic
+// into this sim's uv space (main.js's ripple placement, fishMesh.js's caustic
 // sampling) must use the same waterWorldSize() to stay in registration.
 
 import * as THREE from "three";
-import { CAUSTIC_GLOW_GLSL } from "./causticsChunk.js";
+import {
+  CAUSTIC_GLOW_GLSL,
+  CAUSTIC_SATURATE_GLSL,
+  EDGE_FADE_GLSL,
+  WATER_NORMAL_GLSL,
+} from "./glsl.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
 import { seasonForDay } from "./season.js";
 
@@ -73,6 +78,9 @@ const VERTEX_SHADER = /* glsl */ `
 
 const FRAGMENT_SHADER = /* glsl */ `
   ${CAUSTIC_GLOW_GLSL}
+  ${CAUSTIC_SATURATE_GLSL}
+  ${EDGE_FADE_GLSL}
+  ${WATER_NORMAL_GLSL}
   ${FOG_GLSL}
 
   uniform sampler2D uWater;
@@ -97,8 +105,7 @@ const FRAGMENT_SHADER = /* glsl */ `
     // whole oversized area, centered on bounds rather than corner-anchored,
     // hence the margin shift before normalizing into [0, 1] uv space.
     vec2 uv = (vWorldPos.xz + uMargin) / uWorldSize;
-    vec4 info = texture2D(uWater, uv);
-    vec3 normal = normalize(vec3(info.b, sqrt(max(0.0, 1.0 - dot(info.ba, info.ba))), info.a));
+    vec3 normal = waterSurfaceNormal(texture2D(uWater, uv));
 
     // Fresnel: water looks more like a mirror (sky-colored) at grazing
     // angles and more like its base color when viewed head-on.
@@ -108,20 +115,19 @@ const FRAGMENT_SHADER = /* glsl */ `
 
     // Same causticGlow() read terrain.js uses, at this same point — the
     // surface glints with the same light pattern that lands underwater
-    // instead of an unrelated procedural shimmer. Soft saturation instead
-    // of a hard clamp — see terrain.js's identical curve for why.
-    float glintStrength = causticGlow(uCaustics, uv, uTexel) * uCausticsStrength;
-    float glint = 1.4 * glintStrength / (glintStrength + 1.4);
+    // instead of an unrelated procedural shimmer, through the same
+    // softSaturate() curve (see glsl.js).
+    float glint = softSaturate(
+      causticGlow(uCaustics, uv, uTexel) * uCausticsStrength
+    );
     color += uCausticsColor * glint * 0.35;
 
-    // Edge fade: fully opaque out to uCoreFrac (exactly where the real
-    // river bounds end — see buildWaterMesh), then a smooth dissolve across
-    // the rest of the oversized plane out to its own edge. max() so the
-    // fade wraps all four sides/corners of the rectangle evenly instead of
-    // rounding it off into a circle.
-    vec2 t = abs(vWorldPos.xz - uCenter) / uPlaneHalfSize;
-    float edgeT = max(t.x, t.y);
-    float edgeFade = 1.0 - smoothstep(uCoreFrac, 1.0, edgeT);
+    // Fully opaque out to uCoreFrac (exactly where the real river bounds end
+    // — see buildWaterMesh), then a smooth dissolve across the rest of the
+    // oversized plane out to its own edge; the riverbed does the same at the
+    // same edge (see planeEdgeFade in glsl.js).
+    float edgeFade =
+      planeEdgeFade(vWorldPos.xz, uCenter, uPlaneHalfSize, uCoreFrac);
 
     color = applyFog(color, vWorldPos);
 
@@ -201,12 +207,18 @@ export function buildWaterMesh(bounds, causticsTextureSize) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "water";
 
-  // The water sim's ping-pong texture and the caustics accumulation target
-  // (see causticsGenerator.js) both swap/update every frame — refresh both
-  // uniforms each frame (see main.js's loop). uWater still drives this
-  // surface's own normal/fresnel; uCaustics is only the glint overlay.
-  function setSources(waterTexture, causticsTexture) {
+  // The water sim alternates between two ping-pong render targets, so the
+  // texture driving this surface's normal/fresnel is a different object from
+  // one frame to the next — hence a per-frame setter (see main.js's loop).
+  function setWaterTexture(waterTexture) {
     uniforms.uWater.value = waterTexture;
+  }
+
+  // The caustics glint overlay, by contrast, comes from a single accumulation
+  // target that is cleared and re-rendered in place (see
+  // causticsGenerator.js), so its texture object never changes identity.
+  // Bound once when the world is built rather than re-assigned every frame.
+  function setCausticsTexture(causticsTexture) {
     uniforms.uCaustics.value = causticsTexture;
   }
 
@@ -222,5 +234,5 @@ export function buildWaterMesh(bounds, causticsTextureSize) {
     uniforms.uCausticsColor.value.copy(season.causticsColor1);
   }
 
-  return { mesh, setSources, setSeason };
+  return { mesh, setWaterTexture, setCausticsTexture, setSeason };
 }
