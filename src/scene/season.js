@@ -74,8 +74,27 @@ const SILT_MIX = 0.3;
 //
 // The seasons still differentiate underneath it: the mix is well under 1,
 // so a winter fog stays colder and darker than a summer one.
-const RIVER_TINT = new THREE.Color("#4e7361");
-const RIVER_TINT_MIX = 0.45;
+//
+// Tuned against underwater footage of shallow freshwater runs, where the
+// water column is a saturated green-teal and the blue only survives up near
+// the surface where the sky is refracting through. The previous values
+// (#4e7361 at 0.45) were too weak and too cyan to overcome the blue sky at
+// the top of the ramp: the derived summer fog landed at hue 178 / 23%
+// saturation, which reads as grey-blue haze rather than river water. These
+// put it at hue 165 / 34%.
+//
+// The tint is deliberately LIGHTER than the color it is correcting, not just
+// greener. Mixing toward a darker green gets the hue but drags the whole
+// underwater half down with it, and the result is a murky bottle-green that
+// buries the fish — the reference look is saturated green *and* luminous.
+// Holding lightness while the saturation climbs is what separates the two.
+//
+// 0.55 is near the top of the mix's useful range. Push much past 0.6 and
+// every season converges on the same color: the tint starts dominating the
+// sky/depths ramp instead of correcting it, and winter stops reading any
+// colder than summer.
+const RIVER_TINT = new THREE.Color("#3f9068");
+const RIVER_TINT_MIX = 0.55;
 
 // THREE.Color holds linear-sRGB values (ColorManagement is on by default in
 // r152+), and lerping there drives midpoints noticeably darker than the eye
@@ -242,6 +261,83 @@ export function seasonForDay(dayOfYear) {
   );
 
   return scratch;
+}
+
+// ---------------------------------------------------------------------
+// Diurnal sweep
+// ---------------------------------------------------------------------
+// seasonForDay() gives the season's sun at its daily high point. This walks
+// it either side of that along an arc, so the sun rises, peaks, and sets
+// rather than hanging at one fixed spot forever.
+//
+// The point of it is the light net. causticsGenerator.js refracts this exact
+// direction through the water surface and ray-marches it down to the bed, so
+// moving the sun slides the whole caustic pattern across the riverbed — and
+// the sun shafts (godRays.js), the surface glints (water.js) and the glow on
+// the fish (fishMesh.js) all read that same texture, so every one of them
+// sweeps together, for free, off one uniform. Faking the motion in the shafts
+// alone would have slid them out of step with the net they are supposed to be
+// beneath.
+//
+// Elevation is the term that does the work. The net's offset from a point on
+// the surface is depth * tan(refracted angle), which is nearly zero for a sun
+// overhead and grows fast as it drops — so a sun changing height translates
+// the net a long way, while one merely changing compass bearing at high
+// summer barely moves it at all. Azimuth is the smaller, perpendicular term
+// that turns the straight slide into an arc.
+const SUN_SWEEP_ELEVATION_ARC = 0.34;
+const SUN_SWEEP_AZIMUTH_ARC = 0.38;
+
+// Seconds for one full rise-peak-set-return. Deliberately NOT tied to the
+// timeline's day rate (see FRAMES_PER_DAY in main.js): at peak run the
+// timeline crosses a calendar day every couple of seconds, and a sun keeping
+// literal time with that would strobe. This is set by what reads as a calm,
+// noticeable drift instead.
+const SUN_SWEEP_PERIOD = 120;
+
+// Floor on how low the sun may get, in radians (~17 degrees). Below this the
+// refracted ray runs so flat that the net smears off the far side of the
+// river, and godRays.js's own max(uSunDir.y, 0.3) guard starts clamping — so
+// the shafts would stop tracking the sun they are supposed to be coming from.
+const MIN_SUN_ELEVATION = 0.3;
+
+// Where the season puts the sun at its daily high point, and the swept result.
+// Held here rather than in main.js for the same reason fog.js holds FOG_COLOR:
+// the base is a pure function of the day, the sweep is a pure function of the
+// base and the clock, and nothing outside this file has any business
+// recombining them. setSunSeason() is called from applySeason(), exactly
+// alongside setFogSeason().
+const _sweptSun = new THREE.Vector3(0, 1, 0);
+// Decomposed once per day rather than once per frame — the sweep below runs
+// every frame and only ever needs these two angles.
+let azimuth = 0;
+let elevation = Math.PI / 2;
+
+export function setSunSeason(dayOfYear) {
+  const sun = seasonForDay(dayOfYear).sunDirection;
+  azimuth = Math.atan2(sun.z, sun.x);
+  elevation = Math.atan2(sun.y, Math.hypot(sun.x, sun.z));
+}
+
+// The current sun, `seconds` into the day's arc. Returns a shared vector —
+// copy out of it if you need to keep the value.
+export function sweptSunDirection(seconds) {
+  const phase = (seconds / SUN_SWEEP_PERIOD) * Math.PI * 2;
+  // (1 - cos) rather than sin, so phase 0 is the peak and the sun only ever
+  // descends from the season's own elevation — never climbs above it, which
+  // would undo the whole point of hand-picking it per season.
+  const sweptElevation = Math.max(
+    MIN_SUN_ELEVATION,
+    elevation - SUN_SWEEP_ELEVATION_ARC * (1 - Math.cos(phase)),
+  );
+  const sweptAzimuth = azimuth + SUN_SWEEP_AZIMUTH_ARC * Math.sin(phase);
+
+  const cosE = Math.cos(sweptElevation);
+  return _sweptSun.set(
+    Math.cos(sweptAzimuth) * cosE,
+    Math.sin(sweptElevation),
+    Math.sin(sweptAzimuth) * cosE,
+  );
 }
 
 // `dateStr` is "YYYY-MM-DD" (see data.js) — parsed as UTC midnight so the

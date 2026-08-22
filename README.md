@@ -6,10 +6,19 @@ with a timeline scrubber driven by real daily passage counts fetched from
 Columbia Basin Research DART.
 
 The shot is a fixed underwater camera in the water column: the school sweeps
-left-to-right past it, the lit surface sits overhead, and a caustic-lit gravel
-riverbed sits below. Everything — sky, sun, fog, water color, riverbed,
-caustics — shifts with the date on the timeline, so scrubbing through the year
-reads as the seasons passing.
+left-to-right past it, the lit surface sits overhead, and the riverbed falls
+away into the murk below. Sunlight comes down through the surface as shafts,
+silt drifts past in the water column, and everything — sky, sun, fog, water
+color, riverbed, caustics — shifts with the date on the timeline, so scrubbing
+through the year reads as the seasons passing.
+
+The sun also moves within the day. That is not decoration: the caustics pass
+refracts the sun direction and marches it down to the bed, so moving the sun
+slides the whole light net, and the shafts, the surface glints and the glow on
+the fish sweep with it off a single uniform.
+
+The HUD is styled as a fish-passage report rather than a consumer overlay,
+since the numbers in it are real published daily counts.
 
 ## Structure
 
@@ -32,19 +41,30 @@ Rendering (`src/scene/`):
   bloom/tone-mapping composer chain. No THREE lights: every material here is a
   hand-written `ShaderMaterial`, so lighting arrives as uniforms.
 - `season.js` — maps a date to a blended seasonal palette. Only three colors
-  per season are hand-picked; every underwater color is derived from them.
+  per season are hand-picked; every underwater color is derived from them and
+  pulled toward the river's own green. Also owns the sun, including the daily
+  arc it sweeps along.
 - `fog.js` — the shared fog color/density, plus the same falloff as GLSL,
   since custom `ShaderMaterial`s don't get `scene.fog` for free.
-- `terrain.js` — the flat riverbed: a plane whose fragment shader synthesizes
-  two Voronoi layers of cobble and gravel, lit per-stone and catching the
-  caustics.
+- `terrain.js` — the riverbed: two triangles, a color, and a fog falloff. It
+  draws no caustics itself but stays in the caustics environment pass as the
+  surface the refracted rays terminate against.
 - `water.js` — the water surface plane: fresnel-shaded from the live sim's
   height field, with a caustic glint and an edge fade into the fog.
 - `waterSim.js` — GPU height-field water simulation (ping-pong render targets),
   ported from martinRenou/threejs-caustics.
 - `causticsGenerator.js` — the real-time caustics pass: an environment map of
   the riverbed plus a refraction ray-march, also ported from the same source.
-  Its output texture is what terrain, water, and fish all read.
+  Its output texture is what the water surface, the fish, the shafts and the
+  silt all read.
+- `godRays.js` — shafts of sunlight, as additive vertical quads whose every
+  fragment traces back up the sun direction to its entry point on the surface
+  and samples the caustics net there. Derived from the same texture as
+  everything else rather than from independent noise, which is what keeps a
+  shaft under the bright knot it belongs to.
+- `particles.js` — suspended silt. Entirely GPU-driven: drift and wrap happen
+  in the vertex shader, so the per-frame CPU cost is one uniform write no
+  matter how many motes there are.
 - `glsl.js` — shared GLSL: the caustics read (4-tap for surfaces, 1-tap for
   the fish vertex shader), the soft-saturation curve, the plane edge fade, and
   water-normal reconstruction.
@@ -83,7 +103,10 @@ node scripts/screenshot.mjs out.png --day 250
 
 ## Controls
 
-- **Play/Pause** and the timeline slider drive the date.
+- **Play/Pause** and the timeline slider drive the date. While playing, each
+  day gets `FRAMES_PER_DAY` frames (240 — about four seconds) and the HUD's
+  figures count toward the next day's across that span rather than snapping at
+  the boundary.
 - **D** toggles a camera debug readout — the way to read off a new
   `EYE_FRAC`/`TARGET_FRAC` by eye if the framing ever needs re-tuning.
 

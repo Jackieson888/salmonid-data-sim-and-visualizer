@@ -10,41 +10,82 @@
   <main id="app">
     <canvas id="river-canvas"></canvas>
 
+    <!-- The HUD is deliberately styled as a fish-passage report rather than a
+         consumer overlay: the numbers in it are real daily counts off the
+         Columbia Basin Research DART feed for a Corps of Engineers project
+         (see data.js), and reading them in the register they are actually
+         published in is truer to the data than friendly rounded chips were.
+         Hence the uppercase Helvetica labels, hairline rules, tabular
+         numerals, and hard corners throughout — see style.css. -->
     <div id="hud">
-      <div id="title-block">
-        <h1>Snake River Salmon Run</h1>
-        <p id="date-label">Loading run data…</p>
-      </div>
+      <header id="masthead">
+        <p class="station">Project LWG &middot; Lower Granite Lock &amp; Dam</p>
+        <h1>Adult Fish Passage</h1>
+        <p class="reach">Snake River &middot; Counting Season 2015</p>
+        <div class="rule"></div>
+        <p class="readout">
+          <span id="date-label">Loading run data…</span>
+          <span id="day-ordinal"></span>
+        </p>
+      </header>
 
-      <div id="bottom-block">
-        <div id="species-breakdown">
-          <span class="species-chip" data-species="chinook">
-            <i></i>Chinook <b id="count-chinook">0</b>
-          </span>
-          <span class="species-chip" data-species="jackChinook">
-            <i></i>Jack Chinook <b id="count-jackChinook">0</b>
-          </span>
-          <span class="species-chip" data-species="steelhead">
-            <i></i>Steelhead <b id="count-steelhead">0</b>
-          </span>
-          <span class="species-chip" data-species="shad">
-            <i></i>Shad <b id="count-shad">0</b>
-          </span>
+      <section id="report">
+        <div class="report-head">
+          <h2>Daily Adult Passage</h2>
+          <p class="total"><span class="label">Total</span> <b id="fish-count">0</b></p>
         </div>
+
+        <!-- Real per-day DART counts, not the simulated boid count (which is
+             capped well below them — see MAX_POPULATION in main.js). Key
+             colors match each species' InstancedMesh tint in
+             scene/fishMesh.js's SPECIES_COLORS. -->
+        <table id="species-breakdown">
+          <tbody>
+            <tr data-species="chinook">
+              <td class="key"><i></i>Chinook</td>
+              <td class="count" id="count-chinook">0</td>
+              <td class="key"><i></i>Steelhead</td>
+              <td class="count" id="count-steelhead">0</td>
+            </tr>
+            <tr data-species="jackChinook">
+              <td class="key"><i></i>Jack Chinook</td>
+              <td class="count" id="count-jackChinook">0</td>
+              <td class="key"><i></i>Shad</td>
+              <td class="count" id="count-shad">0</td>
+            </tr>
+          </tbody>
+        </table>
 
         <div id="controls">
           <button id="play-pause" aria-label="Play or pause">Pause</button>
-          <input type="range" id="timeline" min="0" max="100" value="0" />
-          <span id="fish-count">0 fish</span>
+          <div id="timeline-block">
+            <input
+              type="range"
+              id="timeline"
+              min="0"
+              max="100"
+              value="0"
+              aria-label="Date in the counting season"
+            />
+            <!-- Month ticks, positioned from runData at boot (see
+                 buildTimelineAxis in main.js) rather than spaced evenly: the
+                 record only covers the dam's counting season, so the months
+                 are not equal fractions of the track. -->
+            <div id="timeline-axis" aria-hidden="true"></div>
+          </div>
         </div>
-      </div>
+
+        <p class="source">
+          Source &middot; Columbia Basin Research DART, adult daily counts
+        </p>
+      </section>
     </div>
 
     <pre id="debug-panel" hidden></pre>
 
     <div id="fish-loading">
-      <div class="spinner"></div>
-      <p>Loading fish…</p>
+      <div class="bar"></div>
+      <p>Loading fish assets</p>
     </div>
   </main>
 

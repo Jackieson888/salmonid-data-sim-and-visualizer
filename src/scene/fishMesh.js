@@ -115,11 +115,46 @@ const MODEL_ROTATION_FIX = {
 // rosy-striped steelhead, cold silver-blue shad — so the frame doesn't read
 // as arbitrarily color-coded. Set steelhead back to identity once its own
 // textured model lands.
+// How far from neutral the casts below are pushed. The hand-picked values are
+// the *direction* of each species' color; this is the only magnitude knob.
+//
+// Raised from 1 (the casts used verbatim) because at that strength the four
+// were only just separable in the near field and indistinguishable past a
+// body length or two: the water is green (see RIVER_TINT in season.js) and
+// every fish fades toward that same green with distance (DEPTH_FOG_FACTOR
+// below), so both ends of the pipeline are actively compressing the hue
+// differences this has to survive.
+const TINT_STRENGTH = 2.1;
+
+// Rec. 709 luminance weights, for the renormalization in speciesTint().
+const LUMA_R = 0.2126;
+const LUMA_G = 0.7152;
+const LUMA_B = 0.0722;
+
+// Pushes a cast away from neutral by TINT_STRENGTH, then renormalizes it to
+// unit luminance so the four species differ in hue and not in brightness.
+//
+// That second step is the important one. Brightness already means something
+// specific in this scene — near/far, via the depth dimming and the fog — so a
+// tint that also carried brightness would make a distant chinook and a nearby
+// shad ambiguous in exactly the way the tint exists to prevent. Scaling a cast
+// like (1.15, 1.05, 0.8) without renormalizing brightens it as a side effect,
+// and the brighter a species got the further away it would appear to be.
+function speciesTint(r, g, b) {
+  const tint = new THREE.Color(
+    1 + (r - 1) * TINT_STRENGTH,
+    1 + (g - 1) * TINT_STRENGTH,
+    1 + (b - 1) * TINT_STRENGTH,
+  );
+  const luminance = LUMA_R * tint.r + LUMA_G * tint.g + LUMA_B * tint.b;
+  return tint.multiplyScalar(1 / luminance);
+}
+
 const SPECIES_COLORS = {
-  steelhead: new THREE.Color(1.05, 0.9, 1.0),
-  chinook: new THREE.Color(1.15, 1.05, 0.8),
-  jackChinook: new THREE.Color(0.95, 1.1, 1.0),
-  shad: new THREE.Color(0.85, 1.0, 1.35),
+  steelhead: speciesTint(1.05, 0.9, 1.0),
+  chinook: speciesTint(1.15, 1.05, 0.8),
+  jackChinook: speciesTint(0.95, 1.1, 1.0),
+  shad: speciesTint(0.85, 1.0, 1.35),
 };
 const DEFAULT_COLOR = SPECIES_COLORS.steelhead;
 
@@ -157,6 +192,21 @@ const STRIDE_LENGTH = 0.7;
 // roughly 0.25Hz and 3.6Hz.
 const MIN_BEATS_PER_STEP = 0.004;
 const MAX_BEATS_PER_STEP = 0.06;
+
+// Tailbeat rate while playback is paused, as a fraction of the derived rate.
+//
+// Not zero: a school frozen mid-stroke reads as a bug, and fish holding
+// station with their tails still working reads as alive. But it has to be
+// *much* slower than cruising, and the useful range turned out to be far
+// lower than it looks — a fish beating at anything near full rate while
+// covering no ground is exactly what reads as broken. A quarter still looked
+// like a glitch; a tenth read as slow motion; a twentieth reads as barely
+// moving at all, which is the intent.
+//
+// Applied only to the beat — everything else about a paused fish (position,
+// heading, bob) is frozen, because it is driven off the simulation clock in
+// main.js, which stops.
+const PAUSED_SWIM_RATE = 0.05;
 
 // Accumulated per-fish frame-over-frame in update() below (f.swimCyclePos)
 // rather than recomputed from absolute time each frame — recomputing as
@@ -203,6 +253,31 @@ const DEPTH_FOG_FACTOR = Math.log(20);
 function depthFogRate(bounds) {
   return DEPTH_FOG_FACTOR / riverDepth(bounds);
 }
+
+// Distance culling, expressed in units of the fog's own falloff rather than
+// world units, so it tracks whatever fogDensity() is tuned to.
+//
+// applyFog (see fog.js) blends toward the fog color by
+// 1 - exp(-(density * dist)^2), so `density * dist` is the only number that
+// matters. At 2.2 a fish is 99.2% fog color; at 2.6, 99.9%. Past that it is
+// costing ~1300 vertices of VAT sampling and caustics work to contribute
+// well under one percent of one pixel's color.
+//
+// So fish fade out across that band and are then skipped entirely. The fade
+// reuses the same aOpacity path the spawn/despawn fades use, which is what
+// makes this invisible rather than a pop: by the time a fish is dropped it
+// has already been faded to nothing *and* was 99.9% fog color anyway.
+//
+// Measured at a full 1200-fish day, this drops 18-20% of the flock across
+// viewports from 1280x800 to 2560x1080 — a fifth of the scene's dominant
+// vertex cost, for pixels that were already indistinguishable from fog.
+//
+// The thresholds are deliberately conservative. Pulling them inward would cull
+// more, but 2.2 is the last point where the fish being faded is still provably
+// below one percent of its own color; past that the saving starts being paid
+// for in things you could actually see.
+const CULL_FADE_START_FOG = 2.2;
+const CULL_FADE_END_FOG = 2.6;
 
 const VERTEX_SHADER = /* glsl */ `
   ${CAUSTIC_GLOW_POINT_GLSL}
@@ -736,6 +811,16 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
   let surfaceY = 0;
   let floorY = 0;
 
+  // Distance-cull band, in world XZ around the camera (see the CULL_FADE_*
+  // constants). Squared so the per-fish test needs no sqrt unless the fish is
+  // actually inside the fade band. Also set by setBounds().
+  let cullX = 0;
+  let cullZ = 0;
+  let fadeStart = Infinity;
+  let fadeEnd = Infinity;
+  let fadeStartSq = Infinity;
+  let fadeEndSq = Infinity;
+
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
   const pitchQuat = new THREE.Quaternion();
@@ -758,19 +843,46 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
   const noseOffsetWorld = new THREE.Vector3();
   const centerPos = new THREE.Vector3();
 
-  // Writes every living fish's transform + swim-phase attributes for this
-  // frame. `fish` is the live flock.fish array — dense (no holes), so
-  // instance index i always means "the i-th currently-alive fish", never
-  // a stale slot. Horizontal motion (x, y -> world x, z) is the flock's
-  // real swim; f.depth (0 = surface .. 1 = riverbed, see boids.js) is a
-  // slow, independent secondary drift mapped into the surfaceY..floorY
-  // range, with a small wobble and a slight pitch toward whichever way
-  // that drift is currently heading so it still reads as swimming rather
-  // than an elevator.
-  function update(fish, t) {
-    const count = Math.min(fish.length, maxCount);
-    for (let i = 0; i < count; i++) {
+  // Writes the visible fish's transform + swim-phase attributes for this
+  // frame. Horizontal motion (x, y -> world x, z) is the flock's real swim;
+  // f.depth (0 = surface .. 1 = riverbed, see boids.js) is a slow,
+  // independent secondary drift mapped into the surfaceY..floorY range, with
+  // a small wobble and a slight pitch toward whichever way that drift is
+  // currently heading so it still reads as swimming rather than an elevator.
+  //
+  // Fish past the fog's saturation distance are skipped entirely (see the
+  // CULL_FADE_* constants), so `n` — the write cursor — runs ahead
+  // independently of the loop index: instance slots have to stay dense from 0
+  // to mesh.count, and a culled fish must not leave a hole behind.
+  // `playing` is the pause state from main.js. A paused frame freezes the
+  // flock, so the fish hold position — but their tails keep going at
+  // PAUSED_SWIM_RATE rather than stopping dead, which reads as a school
+  // holding station in the current instead of a photograph.
+  //
+  // Only the tailbeat is scaled, not `t`: everything else this function reads
+  // off the clock is already frozen upstream (see the simulation clock in
+  // main.js), and that is the point — the beat is the one motion deliberately
+  // left running through a pause.
+  function update(fish, t, playing = true) {
+    // Hoisted out of the loop — it is the same for every instance, and the
+    // loop runs up to MAX_POPULATION times a frame.
+    const beatScale = playing ? 1 : PAUSED_SWIM_RATE;
+    let n = 0;
+    for (let i = 0; i < fish.length && n < maxCount; i++) {
       const f = fish[i];
+
+      // Cheap reject first — before any quaternion/matrix work.
+      const dx = f.x - cullX;
+      const dz = f.y - cullZ;
+      const distSq = dx * dx + dz * dz;
+      if (distSq >= fadeEndSq) continue;
+
+      let visibility = f.opacity;
+      if (distSq > fadeStartSq) {
+        visibility *=
+          1 - (Math.sqrt(distSq) - fadeStart) / (fadeEnd - fadeStart);
+      }
+
       const heading = Math.atan2(f.vx, f.vy);
       quaternion.setFromAxisAngle(eulerY, heading);
 
@@ -790,8 +902,8 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
         .applyQuaternion(quaternion);
       centerPos.set(f.x, y, f.y).sub(noseOffsetWorld);
       matrix.compose(centerPos, quaternion, scaleVec);
-      mesh.setMatrixAt(i, matrix);
-      phase[i] = f.wobblePhase;
+      mesh.setMatrixAt(n, matrix);
+      phase[n] = f.wobblePhase;
       // Tailbeat rate, derived from how fast this fish is actually moving
       // rather than set per species — see STRIDE_LENGTH above. `s` is the
       // model-to-world scale computed above, so modelLength * s is this
@@ -809,16 +921,17 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
       // reads fract() of this, so an unbounded integer part is dead weight
       // that eats the float32 attribute's mantissa — after a few hours the
       // remaining precision is coarse enough to quantize the tailbeat.
-      f.swimCyclePos = (f.swimCyclePos + advance) % 1;
-      cyclePos[i] = f.swimCyclePos;
-      opacity[i] = f.opacity;
-      amplitude[i] = f.swimAmplitude;
+      f.swimCyclePos = (f.swimCyclePos + advance * beatScale) % 1;
+      cyclePos[n] = f.swimCyclePos;
+      opacity[n] = visibility;
+      amplitude[n] = f.swimAmplitude;
       const c = SPECIES_COLORS[f.species] ?? DEFAULT_COLOR;
-      tint[i * 3] = c.r;
-      tint[i * 3 + 1] = c.g;
-      tint[i * 3 + 2] = c.b;
+      tint[n * 3] = c.r;
+      tint[n * 3 + 1] = c.g;
+      tint[n * 3 + 2] = c.b;
+      n++;
     }
-    mesh.count = count;
+    mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
     geometry.attributes.aPhase.needsUpdate = true;
     geometry.attributes.aCyclePos.needsUpdate = true;
@@ -832,9 +945,24 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
   // createWorld) instead of being recomputed inside update() on every frame
   // the way it used to be — which also gets four resize-invariant arguments
   // out of the per-frame call.
-  function setBounds(bounds, waterSize, depthRange) {
+  //
+  // `cameraPosition` is only used to place the distance-cull band; the camera
+  // is fixed (see sceneSetup.js) and re-framed on resize, so it belongs on
+  // exactly the same cadence as the rest of this.
+  function setBounds(bounds, waterSize, depthRange, cameraPosition) {
     surfaceY = depthRange.surfaceY;
     floorY = depthRange.floorY;
+
+    // The cull band, converted from fog units into world units. Vertical
+    // distance is ignored: the whole water column is riverDepth deep, a small
+    // fraction of the fog's reach, so XZ distance is what decides this.
+    const density = fogDensity(bounds);
+    cullX = cameraPosition.x;
+    cullZ = cameraPosition.z;
+    fadeStart = CULL_FADE_START_FOG / density;
+    fadeEnd = CULL_FADE_END_FOG / density;
+    fadeStartSq = fadeStart * fadeStart;
+    fadeEndSq = fadeEnd * fadeEnd;
     // uWorldSize/uMargin match water.js's waterWorldSize() — the caustics
     // cover a bigger, bounds-centered area, not just the raw bounds.
     uniforms.uWorldSize.value.set(waterSize.width, waterSize.height);
@@ -919,17 +1047,22 @@ export function createFishInstancedMesh(assetsByUrl, capacity) {
   // includes headroom for fish still fading out (see FISH_RENDER_HEADROOM in
   // main.js), so a bucket reaching it means the population overran even that,
   // and dropping the overflow is better than writing past the buffer.
-  function update(fish, t) {
+  function update(fish, t, playing = true) {
     for (const r of renderers) r.bucket.length = 0;
     for (const f of fish) {
       const r = rendererBySpecies.get(f.species);
       if (r && r.bucket.length < capacity) r.bucket.push(f);
     }
-    for (const r of renderers) r.update(r.bucket, t);
+    // `playing` has to be forwarded, not just accepted: this is the only
+    // caller of the per-renderer update(), so anything it drops silently
+    // falls back to that function's default.
+    for (const r of renderers) r.update(r.bucket, t, playing);
   }
 
-  function setBounds(bounds, waterSize, depthRange) {
-    for (const r of renderers) r.setBounds(bounds, waterSize, depthRange);
+  function setBounds(bounds, waterSize, depthRange, cameraPosition) {
+    for (const r of renderers) {
+      r.setBounds(bounds, waterSize, depthRange, cameraPosition);
+    }
   }
 
   function setCausticsTexture(causticsTexture) {
@@ -940,5 +1073,21 @@ export function createFishInstancedMesh(assetsByUrl, capacity) {
     for (const r of renderers) r.setSeason(dayOfYear);
   }
 
-  return { mesh: group, update, setBounds, setCausticsTexture, setSeason };
+  // Instances actually drawn last frame, summed across renderers — i.e. the
+  // flock minus everything the distance cull dropped. Only read by main.js's
+  // debug panel, which is where you can see what the cull is actually buying.
+  function renderedCount() {
+    let n = 0;
+    for (const r of renderers) n += r.mesh.count;
+    return n;
+  }
+
+  return {
+    mesh: group,
+    update,
+    setBounds,
+    setCausticsTexture,
+    setSeason,
+    renderedCount,
+  };
 }

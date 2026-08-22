@@ -39,7 +39,18 @@ const SUN_HALO_STRENGTH = 0.12;
 // window until the sky reads across the top of frame. Purely an artistic
 // control; it is the one place in this file that isn't trying to be
 // physical.
-const SKY_FOG_SCALE = 0.45;
+//
+// It does have a lower bound, though, and 0.45 was under it. The water
+// surface plane (water.js) is finite, so rays angled only slightly up pass
+// over its far edge and hit this sphere directly, while steeper rays go
+// through the plane — which is fully fog-saturated at that distance. Widen
+// the window too far and the sky under the plane's edge angle stays visibly
+// warmer and lighter than the fogged plane just above it, and the edge shows
+// up as a horizontal seam straight across the frame. Most obvious in autumn,
+// where the horizon band is at its most golden and least like the water.
+// 0.62 murks that shallow-angle band to match without closing the window
+// overhead, where the seasonal sky still needs to read.
+const SKY_FOG_SCALE = 0.62;
 
 // Below this much upward tilt, a view ray is treated as never reaching the
 // surface at all (pure murk). Also keeps the 1/dir.y path-length division
@@ -65,7 +76,28 @@ const SKY_RADIUS_FRAC = 0.9;
 // proportionally identical at every window size rather than being frozen at
 // whatever the startup dimensions happened to be.
 //
-// Two constraints these have to keep satisfying:
+// The shot is BROADSIDE to the run, not down it. The camera sits just inside
+// the near bank (EYE_FRAC.z is about 1.0, i.e. the far edge of the channel's
+// width) and looks across and slightly upstream, so the flow crosses the frame
+// left to right with only a modest component swimming toward the lens.
+//
+// That framing is the one that answers the question the piece is actually
+// about — how many fish are moving through this stretch of river. Aimed down
+// the run, the school arrives head-on: fish overlap along the view axis, near
+// ones hide far ones, and a busy day and a quiet one look much the same.
+// Broadside, the same fish spread across the frame and the count reads
+// directly. Measured against the flow direction (+x), the split is:
+//
+//        screen-right   toward lens
+//   down-the-run   0.44        0.89     <- what this used to be
+//   broadside      0.89        0.45     <- what it is now
+//
+// The residual 0.45 toward the lens is deliberate rather than a pure side-on
+// view: it keeps fish growing as they cross, which reads as depth, and it
+// keeps the bodies at a three-quarter angle instead of showing every fish as a
+// flat silhouette.
+//
+// Constraints these have to keep satisfying:
 //
 // EYE_FRAC.y must stay comfortably negative (underwater) and above the
 // riverbed at -RIVER_DEPTH_FRAC (see terrain.js) — the sky shader's murk
@@ -74,20 +106,14 @@ const SKY_RADIUS_FRAC = 0.9;
 //
 // EYE_FRAC.x must stay BELOW 1.0. Fish are flagged for removal once they
 // cross exitX = bounds.width + 40 (see boids.js) and then spend
-// REMOVE_FADE_FRAMES fading out while still swimming downstream. The eye
-// used to sit at 1.0501, i.e. *downstream* of that line, so fish began
-// dissolving before they ever reached the camera and the removal played out
-// in full view in the foreground. Keeping the eye upstream of exitX puts
-// the entire fade behind the camera: fish sweep past and vanish unseen.
-// Anything under 1.0 holds at every window size, since exitX is
-// bounds.width plus a constant while this is a fraction of bounds.width.
-//
-// These were dollied in from {1.0501, -0.2362, 0.9289} along the eye->target
-// axis (all three scaled by the same 0.84 about TARGET_FRAC) rather than
-// just pulling x back, so the viewing angle is identical and only the
-// distance changed.
-const EYE_FRAC = { x: 0.876, y: -0.2072, z: 0.7924 };
-const TARGET_FRAC = { x: -0.0381, y: -0.055, z: 0.0757 };
+// REMOVE_FADE_FRAMES fading out while still swimming downstream, and that
+// dissolve should not play out in shot. Broadside this is less delicate than
+// it was head-on — the exit line is off the right-hand edge, and anything on
+// the far side of the channel that could still catch it is beyond the fish
+// distance cull (see fishMesh.js) and already faded — but keeping the eye
+// upstream of exitX is what makes it true at every window size.
+const EYE_FRAC = { x: 0.648, y: -0.2, z: 0.853 };
+const TARGET_FRAC = { x: 0.4, y: -0.075, z: 0.22 };
 
 export function createSceneSetup(canvas, bounds) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -299,6 +325,10 @@ export function createSceneSetup(canvas, bounds) {
   // since the framing is defined as fractions of bounds, not re-applying it
   // would leave the shot subtly mis-composed after any window change.
   function resize(b) {
+    // Re-read devicePixelRatio here, not just at startup: dragging the window
+    // to a monitor with a different DPI fires resize but leaves a pixel ratio
+    // set for the old screen, which renders soft (or needlessly large).
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(b.width, b.height);
     camera.aspect = b.width / b.height;
     camera.far = Math.max(b.width, b.height) * 5;
@@ -346,9 +376,20 @@ export function createSceneSetup(canvas, bounds) {
     skyUniforms.uWaterColor.value.copy(season.waterColor);
     skyUniforms.uDepthsColor.value.copy(season.depthsColor);
     skyUniforms.uSunColor.value.copy(season.sunColor);
-    skyUniforms.uSunDirection.value.copy(season.sunDirection);
     skyUniforms.uSunIntensity.value = season.sunIntensity;
     skyUniforms.uHorizonStrength.value = season.horizonStrength;
+    // uSunDirection is deliberately absent: the sun moves within the day as
+    // well as across the year, so it is pushed every frame by
+    // setSunDirection() instead. Setting it here too would snap the disc back
+    // to the season's noon position on every day boundary.
+  }
+
+  // The season's sun, swept along its daily arc (see sweptSunDirection in
+  // season.js). Called every frame from main.js's loop, with the same vector
+  // that drives the caustics — so the disc in the sky and the light net on
+  // the bed are always the same sun.
+  function setSunDirection(direction) {
+    skyUniforms.uSunDirection.value.copy(direction);
   }
 
   return {
@@ -359,6 +400,7 @@ export function createSceneSetup(canvas, bounds) {
     resize,
     updateCamera,
     setSeason,
+    setSunDirection,
     render,
   };
 }

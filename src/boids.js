@@ -190,10 +190,6 @@ export class Fish {
     this.smoothSpeed = Math.hypot(this.vx, this.vy);
   }
 
-  get speed() {
-    return Math.hypot(this.vx, this.vy);
-  }
-
   get opacity() {
     if (this.removing) {
       return Math.max(0, 1 - this.removeAge / REMOVE_FADE_FRAMES);

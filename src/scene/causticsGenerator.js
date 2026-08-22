@@ -23,8 +23,13 @@
 //     area = bright; diverging = dim — additively splatted (custom
 //     ONE,ONE blending) so overlapping rays accumulate.
 //
-// Scope: only the flat terrain floor is a receiver/occluder. Fish are
-// excluded — they move every frame and are already this scene's most
+// Scope: the only receiver is the flat riverbed. It is in here purely as the
+// surface the refracted rays terminate against — it does not draw caustics on
+// itself (see terrain.js). Without something for the march to land on, the
+// accumulated light net loses its structure, and that net is what the water
+// surface and the fish read.
+//
+// Fish are excluded. They move every frame and are already this scene's most
 // expensive draw (VAT skinning, per-instance caustics/fog/specular — see
 // fishMesh.js's file header), so adding a full MAX_POPULATION of them to a
 // second camera-rendered pass each frame isn't worth it for an occlusion
@@ -45,7 +50,6 @@
 import * as THREE from "three";
 import { waterWorldSize, WATER_HEIGHT_SCALE } from "./water.js";
 import { riverDepth } from "./terrain.js";
-import { seasonForDay } from "./season.js";
 import { WATER_NORMAL_GLSL } from "./glsl.js";
 
 // Segment count for the dense grid the caustics pass refracts/marches per
@@ -285,8 +289,10 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
   const causticsTarget = makeTarget(CAUSTICS_TARGET_SIZE);
 
   // Shares terrainMesh's geometry (already baked to world-space positions —
-  // see terrain.js) rather than cloning it, so this pass automatically
-  // tracks whatever shape the riverbed actually has.
+  // see terrain.js) rather than cloning it, so this pass automatically tracks
+  // whatever shape the riverbed actually has. A separate Mesh rather than the
+  // riverbed itself, because adding an object to a second scene would reparent
+  // it out of the one the camera renders.
   const envMaterial = new THREE.ShaderMaterial({
     vertexShader: ENV_VERTEX_SHADER,
     fragmentShader: ENV_FRAGMENT_SHADER,
@@ -322,44 +328,64 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
   const causticsMesh = new THREE.Mesh(causticsGeometry, causticsMaterial);
 
   const black = new THREE.Color(0, 0, 0);
-  // Scratch for saving/restoring the renderer's clear color around the two
-  // passes below. Hoisted out of render() because that runs every frame, and
+  // Scratch for saving/restoring the renderer's clear color around the passes
+  // below. Hoisted out of render() because that runs every frame, and
   // allocating a Color per frame to hold a value that is immediately thrown
   // away is pure garbage-collector pressure.
   const previousClearColor = new THREE.Color();
 
-  function render(waterTexture) {
-    causticsMaterial.uniforms.water.value = waterTexture;
-
+  // Renders `mesh` into `target` through the light camera, leaving the
+  // renderer's target and clear color exactly as it found them.
+  function renderToTarget(mesh, target) {
     const previousTarget = renderer.getRenderTarget();
     renderer.getClearColor(previousClearColor);
     const previousClearAlpha = renderer.getClearAlpha();
 
-    renderer.setRenderTarget(envMapTarget);
+    renderer.setRenderTarget(target);
     renderer.setClearColor(black, 0);
     renderer.clear();
-    renderer.render(envMesh, lightCamera);
-
-    renderer.setRenderTarget(causticsTarget);
-    renderer.setClearColor(black, 0);
-    renderer.clear();
-    renderer.render(causticsMesh, lightCamera);
+    renderer.render(mesh, lightCamera);
 
     renderer.setRenderTarget(previousTarget);
     renderer.setClearColor(previousClearColor, previousClearAlpha);
   }
 
-  // Mirrors setTerrainSeason/water.setSeason (see terrain.js/water.js) —
-  // called from main.js's applySeason() with the same dayOfYear. GLSL
-  // refract()'s `I` param wants the incident light *travel* direction, but
-  // season.sunDirection (like terrain.js's own sunDir uniform) is the
-  // direction *to* the light — see terrain.js's `dot(worldNormal, sunDir)`
-  // Lambertian usage — hence the negation.
-  function setSeason(dayOfYear) {
-    const season = seasonForDay(dayOfYear);
-    causticsMaterial.uniforms.light.value
-      .copy(season.sunDirection)
-      .multiplyScalar(-1);
+  // Only the caustics accumulation pass runs per frame — see renderEnvMap()
+  // below for why its input doesn't.
+  function render(waterTexture) {
+    causticsMaterial.uniforms.water.value = waterTexture;
+    renderToTarget(causticsMesh, causticsTarget);
+  }
+
+  // The environment map is rendered ONCE, here, not every frame.
+  //
+  // It stores the receiver geometry's world position + depth per texel, and
+  // every input to that is static: envMaterial declares no uniforms at all,
+  // the light camera never moves, and the riverbed is built once and never
+  // animates. Re-rendering it per frame — which this used to do —
+  // re-rasterized the receiver 60 times a second to produce a byte-identical
+  // texture.
+  //
+  // Anything that changes the receiver therefore has to call this again.
+  // Today nothing does: a resize disposes this whole generator and builds a
+  // fresh one (see createWorld in main.js), which runs the line below.
+  function renderEnvMap() {
+    renderToTarget(envMesh, envMapTarget);
+  }
+
+  renderEnvMap();
+
+  // The sun this pass refracts. Pushed every frame from main.js's loop rather
+  // than per season, because the sun also moves within the day (see
+  // sweptSunDirection in season.js) — and moving it here is what makes the
+  // whole light net slide across the bed, which is the entire mechanism
+  // behind the sweeping shafts, glints and fish highlights. It is the only
+  // per-frame input this generator has other than the water surface itself.
+  //
+  // Negated because GLSL refract()'s `I` param wants the incident light's
+  // *travel* direction, while season.sunDirection points *toward* the sun.
+  function setSunDirection(direction) {
+    causticsMaterial.uniforms.light.value.copy(direction).multiplyScalar(-1);
   }
 
   function dispose() {
@@ -372,7 +398,8 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
 
   return {
     render,
-    setSeason,
+    renderEnvMap,
+    setSunDirection,
     dispose,
     get texture() {
       return causticsTarget.texture;

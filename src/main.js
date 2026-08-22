@@ -3,25 +3,32 @@ import { runData } from "./data.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
 import {
   buildTerrainMesh,
-  setTerrainCausticsTexture,
   setTerrainSeason,
   riverDepth,
 } from "./scene/terrain.js";
 import { buildWaterMesh, waterWorldSize } from "./scene/water.js";
+import { buildParticles } from "./scene/particles.js";
+import { buildGodRays } from "./scene/godRays.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
 import {
   createCausticsGenerator,
   CAUSTICS_TARGET_SIZE,
 } from "./scene/causticsGenerator.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
-import { dayOfYear } from "./scene/season.js";
+import {
+  dayOfYear,
+  setSunSeason,
+  sweptSunDirection,
+} from "./scene/season.js";
 import { setFogSeason } from "./scene/fog.js";
 
 const canvas = document.getElementById("river-canvas");
 
 const dateLabel = document.getElementById("date-label");
+const dayOrdinalLabel = document.getElementById("day-ordinal");
 const playPauseBtn = document.getElementById("play-pause");
 const timelineInput = document.getElementById("timeline");
+const timelineAxis = document.getElementById("timeline-axis");
 const fishCountLabel = document.getElementById("fish-count");
 const speciesCountEls = {
   chinook: document.getElementById("count-chinook"),
@@ -31,18 +38,96 @@ const speciesCountEls = {
 };
 const fishLoadingEl = document.getElementById("fish-loading");
 
-// Drives the HUD's fish counts from the real per-day DART numbers (see
-// data.js) rather than flock.activeCount() — the simulated/rendered boid
-// count is capped well below these for performance (see MAX_POPULATION
-// below), so it's not what a viewer wants to read as "how many fish passed
-// today." Falls back to 0 for a day with no species breakdown at all (see
-// generatePlaceholderRun() in data.js).
-function updateFishCountDisplay(idx) {
-  const day = runData[idx];
-  fishCountLabel.textContent = `${(day.count ?? 0).toLocaleString()} fish`;
+// Writes a number into the HUD, guarded on the rendered string rather than
+// the value: while playing these are re-derived every frame, but the
+// interpolation below only crosses an integer every few frames, and an
+// unchanged textContent assignment still dirties layout.
+function setReadout(el, value) {
+  const text = value.toLocaleString();
+  if (el.textContent !== text) el.textContent = text;
+}
+
+// The HUD's counts "partway through day `idx`", where progress is 0 at the
+// start of the day and 1 at the end.
+//
+// These are the real per-day DART numbers (see data.js), not
+// flock.activeCount(): the simulated population is capped well below them for
+// performance (see MAX_POPULATION), so it is not what a viewer wants to read
+// as "how many fish passed today."
+//
+// The figures tick between one day and the next across the day rather than
+// snapping at the boundary — the same linear interpolation
+// desiredPopulation() uses to spawn fish in smoothly, wrapping onto day 0
+// the same way, so the readout never disagrees with the school it describes.
+// At progress 1 it is already showing tomorrow's figure, so when the day
+// actually advances there is nothing left to jump.
+//
+// The total is summed from the four displayed species rather than
+// interpolated on its own, so the column always adds up: `count` is exactly
+// that sum in the source data (see parseDartCsv in data.js), but rounding
+// four interpolated values independently and a fifth separately would let
+// them disagree by a digit or two mid-day. Days with no breakdown at all —
+// generatePlaceholderRun()'s fallback entries — have only `count`, and fall
+// back to interpolating it.
+function updateFishCountDisplay(idx, progress = 0) {
+  const today = runData[idx];
+  const tomorrow = runData[(idx + 1) % runData.length];
+  const at = (key) =>
+    Math.round(
+      (today[key] ?? 0) + ((tomorrow[key] ?? 0) - (today[key] ?? 0)) * progress,
+    );
+
+  let total = 0;
   for (const key of Object.keys(speciesCountEls)) {
-    speciesCountEls[key].textContent = (day[key] ?? 0).toLocaleString();
+    const value = at(key);
+    total += value;
+    setReadout(speciesCountEls[key], value);
   }
+  // Bare number: the HUD labels it (see index.html), the way a report column
+  // is headed once rather than repeating its unit on every row.
+  setReadout(fishCountLabel, today.chinook === undefined ? at("count") : total);
+}
+
+// The masthead's date line. Both halves move together, and three call sites
+// used to set only the first — hence the one function.
+//
+// The ordinal counts position in the *record*, not day-of-year: DART only
+// publishes rows for the dam's counting season (see data.js), so this is
+// "day 172 of the 275 counted", which is what the timeline is actually
+// indexing.
+function setDateReadout(idx) {
+  dateLabel.textContent = runData[idx].date;
+  dayOrdinalLabel.textContent = `Rec ${idx + 1} / ${runData.length}`;
+}
+
+// Month ticks under the timeline, built once at boot. Positions come from
+// runData rather than being spaced evenly, for the same reason the ordinal
+// above is a record index: the season starts partway through March and the
+// months are not equal fractions of the track.
+const MONTH_ABBREVIATIONS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function buildTimelineAxis() {
+  const last = runData.length - 1;
+  if (last <= 0) return;
+
+  const marks = [];
+  let previousMonth = -1;
+  for (let i = 0; i <= last; i++) {
+    // "YYYY-MM-DD" (see parseDartCsv in data.js).
+    const month = Number(runData[i].date.slice(5, 7)) - 1;
+    if (month === previousMonth || !MONTH_ABBREVIATIONS[month]) continue;
+    previousMonth = month;
+    const percent = ((i / last) * 100).toFixed(3);
+    marks.push(
+      `<i style="left:${percent}%"><b>${MONTH_ABBREVIATIONS[month]}</b></i>`,
+    );
+  }
+  // Only ever the fixed abbreviations above and numbers derived from the
+  // array index — nothing off the network reaches this string.
+  timelineAxis.innerHTML = marks.join("");
 }
 
 // ---------------------------------------------------------------------
@@ -86,6 +171,24 @@ const WATER_SIM_SIZE = 600;
 let currentDayOfYear = 0;
 
 // ---------------------------------------------------------------------
+// The simulation clock.
+//
+// Pause used to stop only the timeline: the flock kept swimming, the water
+// kept rippling and the sun kept crossing the sky, so the one thing that
+// didn't advance was the date. This is the clock everything time-driven now
+// reads instead of the rAF timestamp — the fish bob, the tailbeats, the silt
+// drift, the shaft sway and the sun's daily arc — and it only accumulates
+// while `isPlaying`. Pause is a freeze-frame.
+//
+// It has to be a separate accumulator rather than an offset subtracted from
+// `t`, because the render loop keeps running while paused (the canvas still
+// has to repaint, and resize still has to work) and would otherwise resume
+// having skipped however long the pause lasted.
+// ---------------------------------------------------------------------
+let simTime = 0;
+let lastFrameTime = null;
+
+// ---------------------------------------------------------------------
 // The bounds-shaped half of the scene. Every one of these is sized directly
 // off `bounds` rather than being resizable in place, so a resize disposes
 // and rebuilds the whole set (see destroyWorld/rebuildWorld below).
@@ -98,6 +201,8 @@ let currentDayOfYear = 0;
 // ---------------------------------------------------------------------
 let waterSize;
 let terrainMesh;
+let particles;
+let godRays;
 let depthRange;
 let waterSim;
 let causticsGenerator;
@@ -110,7 +215,7 @@ function createWorld() {
   // the edge texel just clamping/stretching across that whole margin.
   waterSize = waterWorldSize(bounds);
 
-  terrainMesh = buildTerrainMesh(bounds, CAUSTICS_TARGET_SIZE);
+  terrainMesh = buildTerrainMesh(bounds);
 
   // Depth range fish swim within: a little below the surface down to just
   // above the riverbed floor. See boids.js's fish.depth and fishMesh.js.
@@ -124,45 +229,70 @@ function createWorld() {
 
   // Real-time caustics (see scene/causticsGenerator.js, ported from
   // martinRenou/threejs-caustics) — recomputed every frame from the water
-  // sim's live height field, terrain/water/fish all sample its output
-  // texture for their caustic glow (see scene/glsl.js) instead of reading
-  // the water sim texture directly.
+  // sim's live height field. The riverbed is the surface the refracted light
+  // is marched against, but it no longer displays the result (see terrain.js)
+  // — the caustics you can actually see are on the water surface and the fish.
   causticsGenerator = createCausticsGenerator(renderer, bounds, terrainMesh);
 
   water = buildWaterMesh(bounds, CAUSTICS_TARGET_SIZE);
+
+  // Suspended silt and the light shafts coming down through the surface (see
+  // particles.js/godRays.js). Both are placed relative to the fixed camera and
+  // both read the caustics texture, so they belong to the same lifecycle as
+  // everything else here.
+  particles = buildParticles(bounds, camera.position, cameraTarget);
+  godRays = buildGodRays(bounds, camera.position, cameraTarget);
 
   // The caustics render target is reused every frame, so its texture object
   // never changes identity — bind it once here rather than re-assigning the
   // same object to the same uniforms 60 times a second. (The water sim's own
   // texture genuinely does alternate between two ping-pong targets, so that
   // one still has to be handed over per frame — see the render loop.)
-  setTerrainCausticsTexture(terrainMesh, causticsGenerator.texture);
   water.setCausticsTexture(causticsGenerator.texture);
+  particles.setCausticsTexture(causticsGenerator.texture);
+  godRays.setCausticsTexture(causticsGenerator.texture);
+  particles.setWorldSize(waterSize, bounds);
+  godRays.setWorldSize(waterSize, bounds);
+  particles.setSeason(currentDayOfYear);
+  godRays.setSeason(currentDayOfYear);
 
   setTerrainSeason(terrainMesh, currentDayOfYear);
-  causticsGenerator.setSeason(currentDayOfYear);
   water.setSeason(currentDayOfYear);
+  // The caustics pass needs a sun before its first render(): the loop pushes
+  // one every frame, but createWorld() runs ahead of the first frame, and on a
+  // resize rebuild it runs with a brand-new generator whose light uniform is
+  // still at its constructed default.
+  //
+  // Then one render right here, rather than leaving it to the loop, because
+  // the loop's own caustics pass is gated on `isPlaying` — resize the window
+  // while paused and this brand-new target would otherwise stay empty, and
+  // the water surface and fish would lose their glints until playback
+  // resumed.
+  causticsGenerator.setSunDirection(sweptSunDirection(simTime * 0.001));
+  causticsGenerator.render(waterSim.texture);
 
   // Everything the fish shaders derive from bounds — fog density, the two
   // depth-attenuation rates, and the world->sim UV mapping. Only changes on
   // resize, so it's pushed here rather than recomputed inside the per-frame
   // update(). Null until the models finish loading, which re-pushes it.
-  fishRenderer?.setBounds(bounds, waterSize, depthRange);
+  fishRenderer?.setBounds(bounds, waterSize, depthRange, camera.position);
   fishRenderer?.setCausticsTexture(causticsGenerator.texture);
 
-  scene.add(terrainMesh, water.mesh);
+  scene.add(terrainMesh, water.mesh, particles.mesh, godRays.mesh);
 }
 
 // Old GPU resources are disposed before their replacements are created to
 // avoid leaking memory across a resize.
 function destroyWorld() {
-  scene.remove(terrainMesh, water.mesh);
+  scene.remove(terrainMesh, water.mesh, particles.mesh, godRays.mesh);
   terrainMesh.geometry.dispose();
   terrainMesh.material.dispose();
   water.mesh.geometry.dispose();
   water.mesh.material.dispose();
   waterSim.dispose();
   causticsGenerator.dispose();
+  particles.dispose();
+  godRays.dispose();
 }
 
 // Deliberately NOT called straight off the resize event — see the debounce
@@ -233,8 +363,14 @@ function applySeason(dateStr) {
   setSeason(currentDayOfYear);
   water.setSeason(currentDayOfYear);
   setTerrainSeason(terrainMesh, currentDayOfYear);
-  causticsGenerator.setSeason(currentDayOfYear);
+  particles.setSeason(currentDayOfYear);
+  godRays.setSeason(currentDayOfYear);
   fishRenderer?.setSeason(currentDayOfYear);
+  // The season fixes where the sun sits at its daily high point; the render
+  // loop sweeps it either side of that (see sweptSunDirection in season.js).
+  // Like setFogSeason above, this takes no target — season.js holds the sun
+  // itself, and the loop asks it for the current one.
+  setSunSeason(currentDayOfYear);
 }
 
 // A dragged window edge fires `resize` on nearly every frame of the drag,
@@ -286,10 +422,20 @@ const flock = new Flock(bounds, {
 let dayIndex = 0;
 let isPlaying = true;
 let frameCounter = 0;
-// Was 40 — doubled so each simulated day plays out over twice as long.
-const FRAMES_PER_DAY = 80;
+// Frames a simulated day is given before the timeline advances. 40 -> 80 ->
+// 240: at 60fps that is four seconds a day, and a little over twenty minutes
+// for the whole counting season.
+//
+// The last tripling is for the HUD. Now that the day's figures count toward
+// tomorrow's across the day (see updateFishCountDisplay) rather than snapping
+// at midnight, the readout is something to actually watch, and at 80 frames
+// the numbers moved too fast to follow. It also stretches the spawn ramp that
+// shares this progress value, so the school fills in and thins out more
+// gradually.
+const FRAMES_PER_DAY = 240;
 
 timelineInput.max = String(runData.length - 1);
+buildTimelineAxis();
 
 // ---------------------------------------------------------------------
 // Per-day population/species tables, precomputed once at load.
@@ -401,10 +547,14 @@ function spawnAtLeftEdge() {
   flock.spawn(x, y, pickSpeciesForDay(dayIndex));
 }
 
-// Scrubbing the timeline jumps straight to a day: spawn/flag-for-removal
-// fish until the population matches that day's target (they still fade
-// in/out — see boids.js — rather than popping), then reset the per-day
-// animation state (frame counter, spawn accumulator, speed, HUD).
+// Scrubbing the timeline jumps straight to a day: spawn/remove fish until the
+// population matches that day's target, then reset the per-day animation
+// state (frame counter, spawn accumulator, speed, HUD).
+//
+// Spawns still fade in over their first frames (see boids.js). Removals used
+// to fade out too, but scrubbing pauses playback and a paused flock never
+// steps, so there is nothing left to drive that fade — see the note at the
+// removeActive() call below.
 function jumpToDay(idx) {
   // A fresh jump is a hard resync point: flush any fade-out still pending
   // from a previous jump rather than layering more on top of it (see
@@ -427,13 +577,22 @@ function jumpToDay(idx) {
       pickSpeciesForDay(idx),
     );
   }
-  if (active > target) flock.removeActive(active - target);
+  if (active > target) {
+    flock.removeActive(active - target);
+    // removeActive() only *flags* fish, and Flock.step() is what fades and
+    // then drops them — but scrubbing pauses playback, so step() is not going
+    // to run. Without this the flagged fish would hang at full opacity
+    // forever and the school would visibly disagree with the count the HUD
+    // just wrote. A hard cut is right here anyway: nothing else in the frame
+    // is animating for a fade to be visible against.
+    if (!isPlaying) flock.finalizeRemovals();
+  }
 
   dayIndex = idx;
   frameCounter = 0;
   spawnAccumulator = 0;
   applyDaySpeed(idx);
-  dateLabel.textContent = runData[idx].date;
+  setDateReadout(idx);
   updateFishCountDisplay(idx);
   timelineInput.value = String(idx);
   applySeason(runData[idx].date);
@@ -464,6 +623,9 @@ timelineInput.addEventListener("input", (e) => {
 // the matching propagation/damping tuning in waterSim.js).
 const AMBIENT_DROP_INTERVAL_FRAMES = 30;
 let rippleFrame = 0;
+
+// Parity counter for the half-rate caustics pass — see the render loop.
+let causticsFrame = 0;
 
 // Reused across drops to hold the ripple's position in the water sim's
 // normalized [-1, 1] uv space. Shifted by the sim's margin below, since the
@@ -496,12 +658,19 @@ function emitRipples() {
 // Animation loop
 // ---------------------------------------------------------------------
 function loop(t) {
+  // Advance the simulation clock (see its declaration above). Everything
+  // below that moves reads `simTime`, never `t`, so pausing stops the whole
+  // scene rather than just the date.
+  if (lastFrameTime !== null && isPlaying) simTime += t - lastFrameTime;
+  lastFrameTime = t;
+  const seconds = simTime * 0.001;
+
   // 1. Advance the flocking simulation one tick. The HUD's fish counts are
   // driven by the real per-day DART data instead (see
   // updateFishCountDisplay), not this simulated count, so nothing here
   // needs to run every frame — only when dayIndex actually changes (see
   // jumpToDay and the day-rollover below).
-  flock.step(1);
+  if (isPlaying) flock.step(1);
 
   sceneSetup.updateCamera();
 
@@ -513,7 +682,8 @@ function loop(t) {
       `target: (${cameraTarget.x.toFixed(0)}, ${cameraTarget.y.toFixed(0)}, ${cameraTarget.z.toFixed(0)})\n` +
       `bounds: ${bounds.width.toFixed(0)} x ${bounds.height.toFixed(0)}\n` +
       `camera.far: ${camera.far.toFixed(0)}\n` +
-      `fish: ${flock.activeCount()} active / ${flock.fish.length} total`;
+      `fish: ${flock.activeCount()} active / ${flock.fish.length} total\n` +
+      `drawn: ${fishRenderer?.renderedCount() ?? 0} instances`;
   }
 
   // 2. Advance the water surface: drop this frame's ripples, relax the
@@ -523,16 +693,66 @@ function loop(t) {
   // construction (see createWorld) — only the water sim's own texture has to
   // be re-handed each frame, since it alternates between two ping-pong
   // targets rather than staying one object.
-  emitRipples();
-  waterSim.step();
-  causticsGenerator.render(waterSim.texture);
+  // Gated on play, so a paused frame holds its ripples exactly where they
+  // are. setWaterTexture stays outside: the sim only swaps ping-pong targets
+  // when it steps, so re-handing the same one costs nothing, and it keeps the
+  // surface correct if the world is rebuilt (a resize) while paused.
+  if (isPlaying) {
+    emitRipples();
+    waterSim.step();
+  }
   water.setWaterTexture(waterSim.texture);
+
+  // Walk the sun along the day's arc and hand the same direction to everything
+  // that needs to agree on where the light is: the disc in the sky, the
+  // refraction the caustics pass traces, and the shafts tracing back up to
+  // their surface entry points. Pushed before the caustics render below so the
+  // net this frame accumulates is the one belonging to this frame's sun.
+  //
+  // This is what makes the shafts sweep instead of standing still — see
+  // sweptSunDirection in season.js for why moving the sun (rather than the
+  // shafts) is the thing that does it.
+  const sun = sweptSunDirection(seconds);
+  sceneSetup.setSunDirection(sun);
+  causticsGenerator.setSunDirection(sun);
+  godRays.setSunDirection(sun);
+
+  // The caustics accumulation pass is the most expensive thing in the frame
+  // after the fish — a 256x256 grid whose vertex shader ray-marches the
+  // environment map up to 40 steps per vertex. It runs at half rate because
+  // the thing it is tracking barely moves: the water sim damps at 0.9975 and
+  // gets a drop every 30 frames (see AMBIENT_DROP_INTERVAL_FRAMES), so the
+  // light net is a slow swell, not something with per-frame detail to lose.
+  //
+  // Deliberately NOT applied to waterSim.step() as well. That is a discrete
+  // wave equation stepped once per frame, so halving its rate would halve the
+  // propagation speed of every ripple — a change to how the water behaves,
+  // not just how often it is sampled.
+  //
+  // Also gated on play: with the water frozen and the sun stopped, the net it
+  // would produce is identical to the one already in the target. createWorld()
+  // renders it once directly, so a resize while paused still gets a valid net
+  // rather than an empty one.
+  if (isPlaying && causticsFrame++ % 2 === 0) {
+    causticsGenerator.render(waterSim.texture);
+  }
 
   // 3. Sync the instanced fish mesh to the simulation's current fish array
   // (positions, headings, depth, swim-phase, species tint, caustic glow) —
   // only once the model has loaded. Everything else the fish shaders need is
   // resize-invariant and was pushed by setBounds() (see createWorld).
-  if (fishRenderer) fishRenderer.update(flock.fish, t);
+  //
+  // Still called while paused — a resize rebuilds depthRange and the cull
+  // distances, and the instance buffers have to be rewritten against them
+  // even with the fish standing still. `isPlaying` is passed through so the
+  // tailbeat can keep running at a fraction of its rate through a pause while
+  // everything else holds; see PAUSED_SWIM_RATE in fishMesh.js.
+  if (fishRenderer) fishRenderer.update(flock.fish, simTime, isPlaying);
+
+  // Silt drift and shaft sway are driven entirely from this one uniform each
+  // — see particles.js for why nothing per-mote happens on the CPU.
+  particles.update(seconds);
+  godRays.update(seconds);
 
   renderScene();
 
@@ -541,6 +761,13 @@ function loop(t) {
   // and advance to the next day once this day's frame budget is spent.
   if (isPlaying) {
     const progress = frameCounter / FRAMES_PER_DAY;
+
+    // Tick the HUD's figures toward tomorrow's across the day, on the same
+    // `progress` the spawn ramp below runs on — so the readout climbs at the
+    // rate the school is actually filling in rather than announcing the whole
+    // day's change in one step at midnight.
+    updateFishCountDisplay(dayIndex, progress);
+
     const target = desiredPopulation(dayIndex, progress);
     const error = target - flock.activeCount();
     spawnAccumulator += Math.max(0, error) * POPULATION_CORRECTION_GAIN;
@@ -554,7 +781,7 @@ function loop(t) {
       frameCounter = 0;
       dayIndex = (dayIndex + 1) % runData.length;
       applyDaySpeed(dayIndex);
-      dateLabel.textContent = runData[dayIndex].date;
+      setDateReadout(dayIndex);
       updateFishCountDisplay(dayIndex);
       timelineInput.value = String(dayIndex);
       applySeason(runData[dayIndex].date);
@@ -582,7 +809,7 @@ loadFishAssets()
     scene.add(fishRenderer.mesh);
     // createWorld()/applySeason() have both already run by now — the mesh
     // didn't exist yet to receive either, so hand it the current state.
-    fishRenderer.setBounds(bounds, waterSize, depthRange);
+    fishRenderer.setBounds(bounds, waterSize, depthRange, camera.position);
     fishRenderer.setCausticsTexture(causticsGenerator.texture);
     fishRenderer.setSeason(currentDayOfYear);
 
