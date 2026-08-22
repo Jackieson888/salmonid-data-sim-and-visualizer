@@ -52,8 +52,8 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { CAUSTIC_GLOW_POINT_GLSL, CAUSTIC_SATURATE_GLSL } from "./glsl.js";
-import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
+import { causticGlowChunk, CAUSTIC_SATURATE_GLSL } from "./glsl.js";
+import { FOG_GLSL, FOG_COLOR, fogDensity, fogDepthRate } from "./fog.js";
 import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
 import { BODY_VISUAL_SCALE } from "../boids.js";
@@ -280,7 +280,7 @@ const CULL_FADE_START_FOG = 2.2;
 const CULL_FADE_END_FOG = 2.6;
 
 const VERTEX_SHADER = /* glsl */ `
-  ${CAUSTIC_GLOW_POINT_GLSL}
+  ${causticGlowChunk()}
 
   attribute float aVertexIndex;
   attribute float aPhase;
@@ -297,6 +297,9 @@ const VERTEX_SHADER = /* glsl */ `
   uniform vec2 uMargin;
   uniform float uDepthDarkenRate;
   uniform float uDepthFogRate;
+  // Drives the procedural caustics at the low tier, where no accumulation
+  // target exists to sample (see quality.js). Pushed from update()'s clock.
+  uniform float uTime;
 
   varying vec2 vUv;
   varying vec3 vWorldNormal;
@@ -371,7 +374,7 @@ const VERTEX_SHADER = /* glsl */ `
     // *after* the intensity curve (see FRAGMENT_SHADER) so it stays visible
     // instead of getting swallowed by saturation at high uCausticsStrength.
     vec2 waterUv = (worldPos.xz + uMargin) / uWorldSize;
-    vCausticGlow = causticGlowPoint(uCaustics, waterUv);
+    vCausticGlow = causticGlowAt(uCaustics, waterUv, vec2(0.0), worldPos.xz, uTime);
 
     vec4 mvPosition = modelViewMatrix * worldPos;
     gl_Position = projectionMatrix * mvPosition;
@@ -389,6 +392,8 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uCausticsStrength;
   uniform float uShininess;
   uniform float uSpecularStrength;
+  uniform float uRimStrength;
+  uniform float uRimExponent;
 
   varying vec2 vUv;
   varying vec3 vWorldNormal;
@@ -456,6 +461,34 @@ const FRAGMENT_SHADER = /* glsl */ `
     float tone = clamp(glowNorm * vDepthDim, 0.0, 1.0);
     vec3 causticsColor = mix(uCausticsColor2, uCausticsColor1, tone);
 
+    // Rim light. At the silhouette the body turns away from the eye, and
+    // the light coming down from the surface wraps around it there — the
+    // bright outline that separates a fish from the murk in underwater
+    // footage, and the term that keeps a fish readable at the depths where
+    // the water column has gone dark (see the depth ramp in fog.js).
+    float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), uRimExponent);
+
+    // Only on the sun's side. A rim is light wrapping around the body, so
+    // it belongs on the edges the sun can actually reach — dorsal ones
+    // under a high summer sun, flank ones under a low winter one, and it
+    // travels around the fish as the sun crosses the sky (see
+    // sweptSunDirection in season.js). Ungated, every fish gets the same
+    // even outline, which reads as a shader effect rather than as light.
+    rim *= smoothstep(-0.15, 0.55, dot(normal, lightDir));
+
+    // Tinted with the light net's own lighter tone rather than a color of
+    // its own, and dimmed by the same depth falloff as everything else: it
+    // is the same sunlight the caustics are, so it can't outlive them on
+    // the way down.
+    //
+    // Faded by distance with fogAmount() (see fog.js) rather than being run
+    // through applyFog with the rest of the body — an edge highlight that
+    // survived out into the murk would read as fish-shaped outlines drawn
+    // on the haze.
+    vec3 rimLight =
+      uCausticsColor1 * rim * uRimStrength * vDepthDim
+      * (1.0 - fogAmount(vWorldPos));
+
     // Specular dimmed by the same depth falloff as everything else — a fish
     // deep in murky water shouldn't throw as bright a glint as one near the
     // surface.
@@ -468,7 +501,22 @@ const FRAGMENT_SHADER = /* glsl */ `
     // DEPTH_FOG_FACTOR above) — deep fish camouflage into the murk instead
     // of just going dark, on top of (and independent from) the
     // camera-distance fog applyFog() just applied.
-    color = mix(color, uFogColor, vDepthFog);
+    //
+    // fogColorAt(), not uFogColor: the murk a fish disappears into is the
+    // one at its own depth (see fog.js), so a fish near the bed vanishes
+    // into the dark bottom of the column rather than into the brighter
+    // mid-column color — which would leave it reading as a pale patch
+    // against the water behind it.
+    color = mix(color, fogColorAt(vWorldPos), vDepthFog);
+
+    // The rim goes on last, after that blend rather than into it. Everything
+    // else about a deep fish is supposed to dissolve into the murk, but the
+    // outline is the one thing that has to survive it — a fish at the bed is
+    // ~95% fog color, so a rim mixed in beforehand is 95% erased and the
+    // term does nothing exactly where it was added to help. It still dims
+    // with depth (vDepthDim) and fades with distance (above); what it no
+    // longer does is get camouflaged away.
+    color += rimLight;
     gl_FragColor = vec4(color, vOpacity);
   }
 `;
@@ -773,10 +821,25 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
     // hotspot, which reads as noisy/aliased on a mesh this low-poly.
     uShininess: { value: 20 },
     uSpecularStrength: { value: 0.5 },
-    // All five below are pushed by setCausticsTexture()/setBounds() before
-    // the first frame is drawn; these placeholders only exist so the material
-    // has something to compile against.
+    // Rim/edge light (see FRAGMENT_SHADER) — the exponent sets how far in
+    // from the silhouette the glow reaches, the strength how bright that
+    // edge gets.
+    //
+    // The exponent is the one that matters, and it has to be tight. Nothing
+    // else here fades a fish for being CLOSE — the rim is the only term
+    // that survives at full strength in the near field, since fogAmount()
+    // is ~0 there — so a broad band lights most of the flank on the fish
+    // that fill the most pixels, and the school reads as glowing rather
+    // than as backlit. At 5 it stays a thin edge on a fish crossing the
+    // lens while still being wide enough not to break into facets on a
+    // mesh with this few faces.
+    uRimStrength: { value: 0.45 },
+    uRimExponent: { value: 5.0 },
+    // Everything below is pushed by setCausticsTexture()/setBounds()/
+    // setSeason() before the first frame is drawn; these placeholders only
+    // exist so the material has something to compile against.
     uCaustics: { value: null },
+    uTime: { value: 0 },
     uWorldSize: { value: new THREE.Vector2(1, 1) },
     uMargin: { value: new THREE.Vector2(0, 0) },
     uCausticsColor1: { value: new THREE.Color("#5cc594") },
@@ -784,6 +847,7 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
     uCausticsStrength: { value: 18 },
     uFogColor: { value: FOG_COLOR },
     uFogDensity: { value: 0 },
+    uFogDepthRate: { value: 0 },
     uDepthDarkenRate: { value: 0 },
     uDepthFogRate: { value: 0 },
   };
@@ -820,6 +884,16 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
   let fadeEnd = Infinity;
   let fadeStartSq = Infinity;
   let fadeEndSq = Infinity;
+
+  // Flags an instanced attribute for upload of just its first `instances`
+  // entries. three's update ranges are expressed in array elements rather
+  // than in instances, hence the itemSize multiply — 16 floats for a matrix,
+  // 3 for a color, 1 for a scalar.
+  const uploadRange = (attribute, instances) => {
+    attribute.clearUpdateRanges();
+    attribute.addUpdateRange(0, instances * attribute.itemSize);
+    attribute.needsUpdate = true;
+  };
 
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -867,6 +941,10 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
     // Hoisted out of the loop — it is the same for every instance, and the
     // loop runs up to MAX_POPULATION times a frame.
     const beatScale = playing ? 1 : PAUSED_SWIM_RATE;
+    // Seconds, matching what every other consumer of the procedural caustics
+    // is handed (see quality.js); `t` is the simulation clock in milliseconds.
+    // Compiled out on the tiers that sample the real accumulation target.
+    uniforms.uTime.value = t * 0.001;
     let n = 0;
     for (let i = 0; i < fish.length && n < maxCount; i++) {
       const f = fish[i];
@@ -932,12 +1010,25 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
       n++;
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    geometry.attributes.aPhase.needsUpdate = true;
-    geometry.attributes.aCyclePos.needsUpdate = true;
-    geometry.attributes.aOpacity.needsUpdate = true;
-    geometry.attributes.aAmplitude.needsUpdate = true;
-    geometry.attributes.aTint.needsUpdate = true;
+
+    // Upload only the `n` instances actually drawn, not all `capacity` slots.
+    //
+    // A bare `needsUpdate = true` re-uploads the entire backing buffer, and
+    // these are sized to MAX_POPULATION + FISH_RENDER_HEADROOM (see main.js) —
+    // so the frame was pushing ~128KB across the bus every frame regardless of
+    // how many fish were on screen, most of it stale slots past `count` that
+    // the draw call never reads. The loop above fills slots 0..n densely, so a
+    // single update range covers exactly the live data.
+    //
+    // This matters more than it looks: capacity is per-renderer, so once
+    // Chinook and Shad get their own meshes the untrimmed version would be
+    // uploading three full buffers a frame instead of one.
+    uploadRange(mesh.instanceMatrix, n);
+    uploadRange(geometry.attributes.aPhase, n);
+    uploadRange(geometry.attributes.aCyclePos, n);
+    uploadRange(geometry.attributes.aOpacity, n);
+    uploadRange(geometry.attributes.aAmplitude, n);
+    uploadRange(geometry.attributes.aTint, n);
   }
 
   // Everything the fish shaders derive from the world's dimensions. All of it
@@ -968,6 +1059,7 @@ function buildSpeciesRenderer({ geometry, modelLength, texture, vat }, maxCount)
     uniforms.uWorldSize.value.set(waterSize.width, waterSize.height);
     uniforms.uMargin.value.set(waterSize.marginX, waterSize.marginZ);
     uniforms.uFogDensity.value = fogDensity(bounds);
+    uniforms.uFogDepthRate.value = fogDepthRate(bounds);
     uniforms.uDepthDarkenRate.value = depthDarkenRate(bounds);
     uniforms.uDepthFogRate.value = depthFogRate(bounds);
   }
@@ -1048,6 +1140,19 @@ export function createFishInstancedMesh(assetsByUrl, capacity) {
   // main.js), so a bucket reaching it means the population overran even that,
   // and dropping the overflow is better than writing past the buffer.
   function update(fish, t, playing = true) {
+    // Fast path for the current asset set. All four species still map to the
+    // one steelhead GLB (see SPECIES_MODEL_URL), so there is exactly one
+    // renderer and the partition below would spend a full walk of the flock
+    // plus a Map lookup per fish building a bucket that is a verbatim copy of
+    // `fish`. Hand the array straight over instead.
+    //
+    // This disappears on its own the moment the Chinook and Shad meshes land
+    // and speciesByUrl stops collapsing to a single entry.
+    if (renderers.length === 1) {
+      renderers[0].update(fish, t, playing);
+      return;
+    }
+
     for (const r of renderers) r.bucket.length = 0;
     for (const f of fish) {
       const r = rendererBySpecies.get(f.species);

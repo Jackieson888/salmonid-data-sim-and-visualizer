@@ -20,12 +20,18 @@
 // *world* size as they recede, which is exactly the cue this is here to give.
 
 import * as THREE from "three";
-import { CAUSTIC_GLOW_POINT_GLSL, glslFloat as f } from "./glsl.js";
+import { causticGlowChunk, glslFloat as f } from "./glsl.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
 import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
+import { QUALITY } from "../quality.js";
 
-const PARTICLE_COUNT = 4200;
+// The mote count is no longer a constant here — it comes from QUALITY.
+// particleCount (see quality.js), read at build time below. Every mote is a
+// transparent, blended, camera-facing quad that also does a caustics lookup in
+// its vertex shader, so this is a fill-rate number rather than a geometry one,
+// which is exactly the budget a phone has least of. At the low tier it is zero
+// and buildParticles returns an inert stub rather than an empty mesh.
 
 // The drift volume, as a fraction of the world's largest dimension. Sized so
 // density lands where motes are actually resolvable — fog has anything beyond
@@ -66,7 +72,7 @@ const BOB_AMPLITUDE = 5.5;
 const BOB_SPEED = 0.22;
 
 const VERTEX_SHADER = /* glsl */ `
-  ${CAUSTIC_GLOW_POINT_GLSL}
+  ${causticGlowChunk()}
 
   attribute vec3 aOrigin;
   attribute float aSize;
@@ -110,7 +116,7 @@ const VERTEX_SHADER = /* glsl */ `
     // through a bright patch flares briefly. Sampled per vertex — a mote is a
     // few pixels across, so this is already far finer than it needs to be.
     vec2 waterUv = (worldPos.xz + uMargin) / uWorldSize;
-    vGlow = causticGlowPoint(uCaustics, waterUv);
+    vGlow = causticGlowAt(uCaustics, waterUv, vec2(0.0), worldPos.xz, uTime);
 
     vDepthDim = exp(-max(0.0, -worldPos.y) * uDepthDarkenRate);
 
@@ -140,12 +146,9 @@ const FRAGMENT_SHADER = /* glsl */ `
     // color. Tinting a mote to fog color makes it vanish against the
     // background but still lays a visible speck over any fish in front of it;
     // fading it out removes it from the frame entirely, which is what a mote
-    // too far away to resolve should do. This is the same
-    // 1 - exp(-(density * dist)^2) falloff applyFog uses (see fog.js), reused
-    // here for its factor instead of its result.
-    float dist = length(cameraPosition - vWorldPos);
-    float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
-    alpha *= 1.0 - clamp(fogFactor, 0.0, 1.0);
+    // too far away to resolve should do. fogAmount() is applyFog's own
+    // falloff (see fog.js), taken here for its factor instead of its result.
+    alpha *= 1.0 - fogAmount(vWorldPos);
     if (alpha < 0.004) discard;
 
     vec3 color = (uColor + uGlowColor * vGlow * ${f(GLOW_GAIN)}) * vDepthDim;
@@ -154,6 +157,24 @@ const FRAGMENT_SHADER = /* glsl */ `
 `;
 
 export function buildParticles(bounds, cameraPosition, cameraTarget) {
+  const PARTICLE_COUNT = QUALITY.particleCount;
+
+  // Nothing to draw at the low tier. Returns a stub with the same shape as the
+  // real thing — an empty Group so createWorld's scene.add() and destroyWorld's
+  // scene.remove() still have an Object3D to work with, and no-op methods so
+  // every caller stays unconditional. Cheaper and much less error-prone than
+  // sprinkling `particles?.` through the render loop.
+  if (PARTICLE_COUNT === 0) {
+    return {
+      mesh: new THREE.Group(),
+      update() {},
+      setCausticsTexture() {},
+      setWorldSize() {},
+      setSeason() {},
+      dispose() {},
+    };
+  }
+
   const span = Math.max(bounds.width, bounds.height);
   const depth = riverDepth(bounds);
 

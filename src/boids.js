@@ -18,7 +18,7 @@
 // the array. The renderer (fishMesh.js) reads `fish.opacity` each frame.
 //
 // Flock.step()'s two neighbor searches (flocking forces, then overlap
-// resolution) each run through a spatial grid (see buildSpatialGrid) rather
+// resolution) each run through a spatial grid (see SpatialGrid) rather
 // than a straight all-pairs scan — a straight O(n^2) scan is what made a
 // few thousand fish visibly stall the sim; gridding keeps each fish's
 // neighbor search down to roughly the fish actually near it.
@@ -72,7 +72,7 @@ export const BODY_VISUAL_SCALE = 2.4;
 const OVERLAP_CLEARANCE = 0.4;
 
 // Cell size for the overlap-resolution pass's spatial grid (see
-// buildSpatialGrid/gridKey below) — must be >= the largest possible minDist
+// SpatialGrid/gridKey below) — must be >= the largest possible minDist
 // between two fish, (44 + 44) * 0.5 * BODY_VISUAL_SCALE * OVERLAP_CLEARANCE
 // ≈ 42.2 at the top of the largest species' range (Chinook, see
 // SPECIES_LENGTH_INCHES), so 48 leaves comfortable headroom without making
@@ -102,15 +102,53 @@ function gridKey(cx, cy) {
 // every fish in the sim. Requires cellSize >= the largest radius any caller
 // will query with with this grid, so that neighborhood is guaranteed to be
 // found within one cell step in either axis.
-function buildSpatialGrid(fish, cellSize) {
-  const grid = new Map();
-  for (const f of fish) {
-    const key = gridKey(Math.floor(f.x / cellSize), Math.floor(f.y / cellSize));
-    let bucket = grid.get(key);
-    if (bucket === undefined) grid.set(key, (bucket = []));
-    bucket.push(f);
+//
+// Reuses its Map and its bucket arrays between frames rather than allocating
+// fresh ones. The previous shape built `new Map()` plus one `[]` per occupied
+// cell, twice per step() — several hundred short-lived arrays a frame at the
+// population cap, all of them garbage a millisecond later. That is exactly the
+// allocation pattern that turns into a visible periodic hitch on a phone,
+// where the GC has far less headroom to hide in. The pool converges on the
+// high-water mark of occupied cells within a second or two of running and
+// then allocates nothing at all.
+class SpatialGrid {
+  constructor() {
+    this.cells = new Map();
+    this.pool = [];
+    this.used = 0;
   }
-  return grid;
+
+  build(fish, cellSize) {
+    const previousUsed = this.used;
+    this.cells.clear();
+    this.used = 0;
+
+    for (const f of fish) {
+      const key = gridKey(
+        Math.floor(f.x / cellSize),
+        Math.floor(f.y / cellSize),
+      );
+      let bucket = this.cells.get(key);
+      if (bucket === undefined) {
+        bucket = this.pool[this.used];
+        if (bucket === undefined) bucket = this.pool[this.used] = [];
+        else bucket.length = 0;
+        this.used++;
+        this.cells.set(key, bucket);
+      }
+      bucket.push(f);
+    }
+
+    // Release fish references held by buckets the pool no longer hands out.
+    // Without this, a flock that shrinks leaves the tail of the pool pinning
+    // Fish objects that are otherwise dead — a slow leak that only shows up
+    // after a long session, which is the worst kind to go looking for.
+    for (let i = this.used; i < previousUsed; i++) this.pool[i].length = 0;
+  }
+
+  get(key) {
+    return this.cells.get(key);
+  }
 }
 
 export class Fish {
@@ -203,6 +241,21 @@ export class Flock {
     this.bounds = bounds;
     this.fish = [];
 
+    // Fish that crossed the exit line on the most recent step(). Read by
+    // main.js's population pacing, which spawns replacements upstream at the
+    // rate fish are leaving downstream so the run always has something
+    // swimming in — see the replacement term there for why that matters.
+    this.exitedLastStep = 0;
+
+    // The two grids step() rebuilds each frame, held across frames so their
+    // bucket pools survive (see SpatialGrid). Separate instances because they
+    // use different cell sizes and are both live at once.
+    this.flockGrid = new SpatialGrid();
+    this.overlapGrid = new SpatialGrid();
+
+    // Maintained rather than recounted — see activeCount().
+    this._activeCount = 0;
+
     this.options = {
       perceptionRadius: options.perceptionRadius ?? 55,
       separationRadius: options.separationRadius ?? 22,
@@ -221,6 +274,7 @@ export class Flock {
   spawn(x, y, species) {
     const fish = new Fish(x, y, species);
     this.fish.push(fish);
+    this._activeCount++;
     return fish;
   }
 
@@ -231,6 +285,7 @@ export class Flock {
     if (fish.removing) return;
     fish.removing = true;
     fish.removeAge = 0;
+    this._activeCount--;
   }
 
   // Count of fish that are logically still part of the run — excludes ones
@@ -238,10 +293,16 @@ export class Flock {
   // uses this instead of fish.length so a pending fade-out doesn't get
   // double-counted or cause a removal loop to spin forever waiting for
   // fish that are already flagged to disappear.
+  //
+  // Maintained incrementally rather than recounted. It is read every frame by
+  // the population pacing (and again by the debug panel when it is open), and
+  // an O(n) walk of the whole flock to answer a question that only changes by
+  // one at a time is a scan the frame does not need. spawn() and remove() are
+  // the only two things that can move it — the array filters in step() and
+  // finalizeRemovals() drop only fish already flagged `removing`, which by
+  // definition are not counted here.
   activeCount() {
-    let n = 0;
-    for (const fish of this.fish) if (!fish.removing) n++;
-    return n;
+    return this._activeCount;
   }
 
   // Flags up to `n` not-yet-removing fish to fade out, in array order.
@@ -295,11 +356,12 @@ export class Flock {
     // Spatial grid sized to perceptionRadius — the largest radius queried
     // below — so the 3x3-cell neighborhood scanned per fish is guaranteed to
     // contain every other fish within perceptionRadius (see
-    // buildSpatialGrid). Rebuilt fresh each step since fish move every
+    // SpatialGrid). Rebuilt fresh each step since fish move every
     // frame; building it is itself only O(n), so this is still a huge win
     // over the O(n^2) full-flock scan it replaces once fish counts climb
     // into the thousands.
-    const grid = buildSpatialGrid(this.fish, perceptionRadius);
+    const grid = this.flockGrid;
+    grid.build(this.fish, perceptionRadius);
 
     for (const fish of this.fish) {
       let sepX = 0,
@@ -375,7 +437,13 @@ export class Flock {
       // Clamp steering force so no single frame can yank a fish's heading
       // around too sharply, regardless of how strong the combined flocking
       // forces are.
-      const forceMag = Math.hypot(ax, ay);
+      // Math.sqrt(x*x + y*y) rather than Math.hypot(x, y), here and in the two
+      // speed clamps below. hypot() is specified to avoid intermediate
+      // overflow/underflow, which it pays for with a scaling pass that makes it
+      // several times slower in V8 — and these are plain screen-space
+      // magnitudes in the low hundreds, nowhere near the range that protection
+      // exists for. Three of these run per fish per frame.
+      const forceMag = Math.sqrt(ax * ax + ay * ay);
       const maxForce = this.options.maxForce;
       if (forceMag > maxForce) {
         ax = (ax / forceMag) * maxForce;
@@ -405,7 +473,7 @@ export class Flock {
       fish.vy += ay * dt;
 
       // Clamp speed
-      const speed = Math.hypot(fish.vx, fish.vy);
+      const speed = Math.sqrt(fish.vx * fish.vx + fish.vy * fish.vy);
       const maxSpeed = this.options.maxSpeed;
       if (speed > maxSpeed) {
         fish.vx = (fish.vx / speed) * maxSpeed;
@@ -422,7 +490,7 @@ export class Flock {
       // it reflects the speed actually applied to position below rather than
       // the pre-clamp value.
       fish.smoothSpeed +=
-        (Math.hypot(fish.vx, fish.vy) - fish.smoothSpeed) *
+        (Math.sqrt(fish.vx * fish.vx + fish.vy * fish.vy) - fish.smoothSpeed) *
         Math.min(1, SPEED_SMOOTHING * dt);
 
       // Integrate: apply velocity to position.
@@ -470,7 +538,7 @@ export class Flock {
     // of it at once) so a pair that ends up overlapping eases apart smoothly
     // over a few frames instead of visibly popping to new positions.
     //
-    // Own spatial grid (see buildSpatialGrid), built fresh here rather than
+    // Own spatial grid (see SpatialGrid), built fresh here rather than
     // reused from above — positions just moved during the flocking pass
     // above, and this pass needs a smaller cell size anyway (see
     // OVERLAP_GRID_CELL_SIZE) since it only cares about actual near-touching
@@ -482,7 +550,8 @@ export class Flock {
     // O(n^2) loop this replaces) instead of twice as hard.
     const CORRECTION_FRACTION = 0.5;
     for (let i = 0; i < this.fish.length; i++) this.fish[i].__gridIdx = i;
-    const overlapGrid = buildSpatialGrid(this.fish, OVERLAP_GRID_CELL_SIZE);
+    const overlapGrid = this.overlapGrid;
+    overlapGrid.build(this.fish, OVERLAP_GRID_CELL_SIZE);
 
     for (const a of this.fish) {
       const acx = Math.floor(a.x / OVERLAP_GRID_CELL_SIZE);
@@ -531,8 +600,16 @@ export class Flock {
     // skipped entirely on the (common) frames where nothing has.
     const exitX = this.bounds.width + 40;
     let anyFaded = false;
+    this.exitedLastStep = 0;
     for (const fish of this.fish) {
-      if (fish.x > exitX) this.remove(fish);
+      // The `!removing` guard is what makes the tally a count of *this*
+      // step's departures rather than of everything still mid-fade: a fish
+      // sits past exitX for the whole REMOVE_FADE_FRAMES of its fade-out, so
+      // without it the same departure would be counted ~24 times over.
+      if (fish.x > exitX && !fish.removing) {
+        this.remove(fish);
+        this.exitedLastStep++;
+      }
       if (fish.removing && fish.removeAge >= REMOVE_FADE_FRAMES) anyFaded = true;
     }
 

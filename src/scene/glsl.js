@@ -7,6 +7,8 @@
 // reconstruction in two — each carrying a comment saying it matched the
 // others. Keeping one definition is the only way that stays true.
 
+import { QUALITY } from "../quality.js";
+
 // ---------------------------------------------------------------------
 // Interpolating numbers into GLSL
 // ---------------------------------------------------------------------
@@ -67,6 +69,177 @@ export const CAUSTIC_GLOW_POINT_GLSL = /* glsl */ `
   }
 `;
 
+// ---------------------------------------------------------------------
+// Caustics, faked
+// ---------------------------------------------------------------------
+//
+// The low tier does not run the caustics pipeline at all — no water
+// simulation, no environment map, no ray-marched accumulation target (see
+// createWorld in main.js, which skips constructing both). This is what every
+// consumer reads instead.
+//
+// Why the real one goes first on a weak device: causticsGenerator.js
+// rasterizes a 257x257 grid whose *vertex* shader runs a 40-iteration loop
+// with a texture fetch per iteration, and the height field feeding it is a
+// 600^2 ping-pong relax pass doing seven fetches per texel per frame. Vertex
+// texture fetch inside a loop is close to the worst case for older mobile
+// GPUs. Between them they were the two most expensive things in the frame by
+// a wide margin — far more than the fish, despite what this file used to say
+// about vertex counts.
+//
+// What replaces them is not a cheaper simulation, it is a drawing of one.
+// Real caustics are the bright network of lines where a rippled surface
+// focuses sunlight, so what actually has to survive is a moving net of bright
+// filaments with dark cells between them, at roughly the right scale. Two
+// pairs of crossed travelling sine waves interfere into exactly that: the
+// zero crossings of the sum form a shifting web, and raising the inverted
+// distance-from-a-crossing to a power turns that web into thin bright lines
+// with a soft falloff. Four sin() calls and a pow(), evaluated in-place,
+// against five dependent reads from a half-float render target that something
+// else had to fill first.
+//
+// It will not match the real light net and is not trying to. It preserves the
+// presence of moving caustics everywhere the scene currently reads them —
+// which is what the water, the shafts, the silt and the fish are all lit by.
+//
+// PROC_CAUSTIC_SCALE is in world units (a fish is 72-84 units nose to tail,
+// see boids.js), so the cell size is set to read as roughly the same spacing
+// the real pass produces at this scene's depth.
+const PROC_CAUSTIC_SCALE = 0.055;
+
+export const CAUSTIC_GLOW_PROC_GLSL = /* glsl */ `
+  float causticGlowProc(vec2 worldXZ, float time) {
+    vec2 p = worldXZ * ${glslFloat(PROC_CAUSTIC_SCALE)};
+
+    // Two crossed wave pairs, at deliberately non-harmonic frequencies and
+    // drift rates so the interference pattern never visibly repeats or
+    // pulses in step with itself.
+    float a = sin(p.x + time * 0.9) + sin(p.y * 1.17 - time * 0.7);
+    float b = sin((p.x + p.y) * 0.73 + time * 1.1)
+            + sin((p.x - p.y) * 0.91 - time * 0.5);
+
+    // |a| + |b| is near zero along the crossings and rises away from them,
+    // so this is a distance-to-the-web term. Inverted and sharpened into
+    // thin filaments; the exponent is what separates "bright web on dark
+    // water" from "generally mottled".
+    float web = 1.0 - clamp((abs(a) + abs(b)) * 0.38, 0.0, 1.0);
+    return pow(web, 3.0) * 1.6;
+  }
+`;
+
+// Procedural stand-in for one sample of the water simulation's height field,
+// in the same RGBA convention waterSim.js writes and WATER_NORMAL_GLSL reads:
+// (height, velocity, normal.x, normal.z).
+//
+// Only water.js needs this — it is the one surface that lights itself from the
+// surface normal (Snell's window, the mirror, the glint) rather than just
+// reading the caustic net. The normal comes from the analytic derivative of
+// the height sum rather than from differencing neighbouring samples, which is
+// both cheaper and exact.
+//
+// `velocity` is returned as 0: nothing downstream reads .g.
+const PROC_WAVE_SCALE = 0.02;
+const PROC_WAVE_HEIGHT = 0.35;
+
+export const WATER_INFO_PROC_GLSL = /* glsl */ `
+  vec4 proceduralWaterInfo(vec2 worldXZ, float time) {
+    vec2 p = worldXZ * ${glslFloat(PROC_WAVE_SCALE)};
+
+    float h = sin(p.x + time * 0.6) * 0.55
+            + sin(p.y * 1.31 - time * 0.8) * 0.32
+            + sin((p.x + p.y) * 0.67 + time * 1.2) * 0.22;
+
+    // d/dworldXZ of the sum above — the inner scale factor comes back out
+    // through the chain rule, and each term carries its own frequency.
+    float s = ${glslFloat(PROC_WAVE_SCALE)};
+    float dhdx = cos(p.x + time * 0.6) * 0.55 * s
+               + cos((p.x + p.y) * 0.67 + time * 1.2) * 0.22 * 0.67 * s;
+    float dhdz = cos(p.y * 1.31 - time * 0.8) * 0.32 * 1.31 * s
+               + cos((p.x + p.y) * 0.67 + time * 1.2) * 0.22 * 0.67 * s;
+
+    // The surface is a height field over XZ, so its normal is
+    // (-dh/dx, 1, -dh/dz) normalized. Scaled up before normalizing so the
+    // ripples actually tilt the normal enough to move Snell's window, which
+    // is the whole visual point of it.
+    vec3 n = normalize(vec3(-dhdx * 60.0, 1.0, -dhdz * 60.0));
+    return vec4(h * ${glslFloat(PROC_WAVE_HEIGHT)}, 0.0, n.x, n.z);
+  }
+`;
+
+// ---------------------------------------------------------------------
+// Picking between them
+// ---------------------------------------------------------------------
+
+// The one entry point every caustics consumer calls, resolved at material
+// build time from the current tier. Returns GLSL defining:
+//
+//   float causticGlowAt(sampler2D caustics, vec2 uv, vec2 texel,
+//                       vec2 worldXZ, float time)
+//
+// The signature deliberately carries the inputs BOTH paths could want, and
+// each implementation ignores the ones it doesn't — the texture path never
+// looks at worldXZ or time, the procedural path never looks at the sampler or
+// uv. Passing the sampler as a parameter (which GLSL permits, and which the
+// two functions above already did) is what keeps this a pure drop-in: a
+// consumer's uniform block, its declaration order, and the chunk's position at
+// the top of the shader all stay exactly as they were. In procedural mode the
+// unused sampler is dead code and the compiler drops it, so nothing has to
+// bind a texture that no longer exists.
+//
+// `taps` selects the 5-tap box blur (large close-up surfaces, where the
+// accumulation target's texel grid would otherwise be visible) or a single
+// tap (per-vertex reads, and anything small enough on screen that the grid
+// never resolved). It is ignored entirely on the procedural path, which has
+// no texels to blur.
+export function causticGlowChunk({ taps = 1 } = {}) {
+  if (!QUALITY.realCaustics) {
+    return /* glsl */ `
+      ${CAUSTIC_GLOW_PROC_GLSL}
+      float causticGlowAt(sampler2D caustics, vec2 uv, vec2 texel,
+                          vec2 worldXZ, float time) {
+        return causticGlowProc(worldXZ, time);
+      }
+    `;
+  }
+
+  const read =
+    taps >= 5 ? "causticGlow(caustics, uv, texel)" : "causticGlowPoint(caustics, uv)";
+
+  return /* glsl */ `
+    ${taps >= 5 ? CAUSTIC_GLOW_GLSL : CAUSTIC_GLOW_POINT_GLSL}
+    float causticGlowAt(sampler2D caustics, vec2 uv, vec2 texel,
+                        vec2 worldXZ, float time) {
+      return ${read};
+    }
+  `;
+}
+
+// Same idea for the water surface's own height/normal sample. Only water.js
+// calls this — it is the one surface lit from the surface normal itself
+// (Snell's window, the mirror outside it, the glint) rather than just reading
+// the caustic net.
+//
+//   vec4 waterInfoAt(sampler2D water, vec2 uv, vec2 worldXZ, float time)
+//
+// Returns waterSim.js's (height, velocity, normal.x, normal.z) either way, so
+// WATER_NORMAL_GLSL's waterSurfaceNormal() consumes both identically.
+export function waterInfoChunk() {
+  if (!QUALITY.realCaustics) {
+    return /* glsl */ `
+      ${WATER_INFO_PROC_GLSL}
+      vec4 waterInfoAt(sampler2D water, vec2 uv, vec2 worldXZ, float time) {
+        return proceduralWaterInfo(worldXZ, time);
+      }
+    `;
+  }
+
+  return /* glsl */ `
+    vec4 waterInfoAt(sampler2D water, vec2 uv, vec2 worldXZ, float time) {
+      return texture2D(water, uv);
+    }
+  `;
+}
+
 // Soft (Reinhard-style) saturation, applied to the raw caustic intensity by
 // terrain.js, water.js and fishMesh.js alike.
 //
@@ -94,7 +267,7 @@ export const CAUSTIC_SATURATE_GLSL = /* glsl */ `
 // Surfaces
 // ---------------------------------------------------------------------
 
-// The water surface and the riverbed are both drawn WATER_SIZE_MULTIPLIER
+// The water surface and the riverbed are both drawn waterSizeMultiplier()
 // bigger than the real river bounds (see water.js), fully opaque out to
 // `coreFrac` — exactly where those bounds end — and then dissolving across the
 // added margin to nothing at the plane's own edge, so the rectangle disappears

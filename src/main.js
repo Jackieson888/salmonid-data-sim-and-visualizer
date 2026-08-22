@@ -291,7 +291,13 @@ window.addEventListener("keydown", (e) => {
 // scene/causticsGenerator.js, also ported from martinRenou/threejs-caustics)
 // that this sim's height field feeds into every frame.
 // ---------------------------------------------------------------------
-const WATER_SIM_SIZE = 600;
+// From the device tier (see quality.js). The relax pass does seven texture
+// fetches per texel every frame, so this is quadratic in cost: 600^2 was ~2.5M
+// fetches a frame, and 600 is not even a power of two — the high tier's 512
+// drops 27% of them for no visible change in the height field. At the low tier
+// it is 0 and the simulation is not constructed at all; the surface and the
+// caustics both switch to the procedural stand-ins in glsl.js.
+const waterSimSize = () => QUALITY.waterSimSize;
 
 // Tracks the day-of-year last passed to the various setSeason() calls, so
 // createWorld() can re-apply it after a resize rebuilds these meshes from
@@ -339,7 +345,7 @@ let water;
 
 function createWorld() {
   // The sim actually covers a bigger area than the river bounds (see
-  // waterWorldSize()/WATER_SIZE_MULTIPLIER in water.js) so ripples can
+  // waterWorldSize()/waterSizeMultiplier() in water.js) so ripples can
   // propagate all the way out to the water plane's faded edges instead of
   // the edge texel just clamping/stretching across that whole margin.
   waterSize = waterWorldSize(bounds);
@@ -350,20 +356,35 @@ function createWorld() {
   // above the riverbed floor. See boids.js's fish.depth and fishMesh.js.
   depthRange = { surfaceY: -8, floorY: -riverDepth(bounds) + 6 };
 
-  waterSim = createWaterSimulation(
-    renderer,
-    WATER_SIM_SIZE,
-    waterSize.height / waterSize.width,
-  );
+  // The water simulation and the caustics generator are the two most expensive
+  // things in this scene, and at the low tier neither one is built (see
+  // quality.js). Everything that reads them switches to the procedural
+  // stand-ins in glsl.js, chosen when each material is compiled — so there is
+  // no per-frame branch anywhere downstream, only these two nulls.
+  //
+  // They are nulled rather than stubbed because, unlike particles/godRays,
+  // they are not scene objects with a uniform interface — the loop has to skip
+  // stepping and rendering them, which is a real difference in what the frame
+  // does rather than a no-op call.
+  if (QUALITY.realCaustics) {
+    waterSim = createWaterSimulation(
+      renderer,
+      waterSimSize(),
+      waterSize.height / waterSize.width,
+    );
 
-  // Real-time caustics (see scene/causticsGenerator.js, ported from
-  // martinRenou/threejs-caustics) — recomputed every frame from the water
-  // sim's live height field. The riverbed is the surface the refracted light
-  // is marched against, but it no longer displays the result (see terrain.js)
-  // — the caustics you can actually see are on the water surface and the fish.
-  causticsGenerator = createCausticsGenerator(renderer, bounds, terrainMesh);
+    // Real-time caustics (see scene/causticsGenerator.js, ported from
+    // martinRenou/threejs-caustics) — recomputed every frame from the water
+    // sim's live height field. The riverbed is the surface the refracted light
+    // is marched against, but it no longer displays the result (see terrain.js)
+    // — the caustics you can actually see are on the water surface and the fish.
+    causticsGenerator = createCausticsGenerator(renderer, bounds, terrainMesh);
+  } else {
+    waterSim = null;
+    causticsGenerator = null;
+  }
 
-  water = buildWaterMesh(bounds, CAUSTICS_TARGET_SIZE);
+  water = buildWaterMesh(bounds, causticsTargetSize() || 1);
 
   // Suspended silt and the light shafts coming down through the surface (see
   // particles.js/godRays.js). Both are placed relative to the fixed camera and
@@ -377,9 +398,14 @@ function createWorld() {
   // same object to the same uniforms 60 times a second. (The water sim's own
   // texture genuinely does alternate between two ping-pong targets, so that
   // one still has to be handed over per frame — see the render loop.)
-  water.setCausticsTexture(causticsGenerator.texture);
-  particles.setCausticsTexture(causticsGenerator.texture);
-  godRays.setCausticsTexture(causticsGenerator.texture);
+  //
+  // Null at the low tier, which is harmless: those materials were compiled
+  // against the procedural path, so the sampler is dead code the shader
+  // compiler drops, and three never looks the uniform up.
+  const causticsTexture = causticsGenerator?.texture ?? null;
+  water.setCausticsTexture(causticsTexture);
+  particles.setCausticsTexture(causticsTexture);
+  godRays.setCausticsTexture(causticsTexture);
   particles.setWorldSize(waterSize, bounds);
   godRays.setWorldSize(waterSize, bounds);
   particles.setSeason(currentDayOfYear);
@@ -397,15 +423,15 @@ function createWorld() {
   // while paused and this brand-new target would otherwise stay empty, and
   // the water surface and fish would lose their glints until playback
   // resumed.
-  causticsGenerator.setSunDirection(sweptSunDirection(simTime * 0.001));
-  causticsGenerator.render(waterSim.texture);
+  causticsGenerator?.setSunDirection(sweptSunDirection(simTime * 0.001));
+  if (causticsGenerator) causticsGenerator.render(waterSim.texture);
 
   // Everything the fish shaders derive from bounds — fog density, the two
   // depth-attenuation rates, and the world->sim UV mapping. Only changes on
   // resize, so it's pushed here rather than recomputed inside the per-frame
   // update(). Null until the models finish loading, which re-pushes it.
   fishRenderer?.setBounds(bounds, waterSize, depthRange, camera.position);
-  fishRenderer?.setCausticsTexture(causticsGenerator.texture);
+  fishRenderer?.setCausticsTexture(causticsTexture);
 
   scene.add(terrainMesh, water.mesh, particles.mesh, godRays.mesh);
 }
@@ -418,8 +444,9 @@ function destroyWorld() {
   terrainMesh.material.dispose();
   water.mesh.geometry.dispose();
   water.mesh.material.dispose();
-  waterSim.dispose();
-  causticsGenerator.dispose();
+  // Both are null at the low tier — see createWorld.
+  waterSim?.dispose();
+  causticsGenerator?.dispose();
   particles.dispose();
   godRays.dispose();
 }
@@ -624,13 +651,62 @@ const dailyRateOfChange = Int32Array.from(runData, (_, i) =>
   i === 0 ? 0 : dayTargets[i] - dayTargets[i - 1],
 );
 
-// Population target for "partway through day `idx`": linearly interpolates
-// between today's and tomorrow's counts so fish spawn in smoothly across
-// the day instead of jumping in a single step at the day boundary.
+// ---------------------------------------------------------------------
+// Diurnal arrival shape
+//
+// Fish don't pass a dam evenly around the clock: ladder passage is a daytime
+// affair, thin around first light, heaviest through the middle of the day,
+// tapering off again toward dusk. The day's arrivals used to ignore that
+// entirely — desiredPopulation() interpolated linearly, so the whole day's
+// change came in at one flat rate — and since the scene already sweeps the
+// sun across each simulated day (see sweptSunDirection in season.js), a flat
+// arrival rate was visibly at odds with the light.
+//
+// DIURNAL_BASELINE is what keeps this a hump rather than an on/off switch. A
+// bare raised cosine falls to zero at both ends of the day, which would empty
+// the upstream edge for the first and last stretch of every single day. So
+// the rate is a blend: a flat baseline running all day, plus the mid-day hump
+// on top of it. At 0.3 the middle of the day runs ~5.7x the rate of the
+// edges — an unmistakable mid-day peak that still has fish swimming in early
+// and late.
+const DIURNAL_BASELINE = 0.3;
+
+// Relative arrival rate at `progress` through the day, normalized to average
+// exactly 1.0 across the day: this redistributes *when* a day's fish arrive
+// without changing how many do.
+function diurnalRate(progress) {
+  return (
+    DIURNAL_BASELINE +
+    (1 - DIURNAL_BASELINE) * (1 - Math.cos(2 * Math.PI * progress))
+  );
+}
+
+// diurnalRate integrated from 0 to `progress` — the fraction of the day's
+// arrivals that have come in by then, rising 0 -> 1 across the day. This is
+// the easing curve the population ramp below runs on, and it's what turns a
+// day's growth from a straight line into ease-in, rush through midday,
+// ease-out. Closed form rather than numerically integrated: the only term
+// with any shape to it is a cosine.
+function diurnalProgress(progress) {
+  return (
+    DIURNAL_BASELINE * progress +
+    (1 - DIURNAL_BASELINE) *
+      (progress - Math.sin(2 * Math.PI * progress) / (2 * Math.PI))
+  );
+}
+
+// Population target for "partway through day `idx`": interpolates between
+// today's and tomorrow's counts so fish spawn in smoothly across the day
+// instead of jumping in a single step at the day boundary, eased along
+// diurnalProgress so the bulk of a day's change lands around midday.
+//
+// Still exactly today's count at progress 0 and exactly tomorrow's at
+// progress 1, so the curve stays continuous across the day rollover — the
+// easing changes the path between them, never the endpoints.
 function desiredPopulation(idx, progress) {
   const today = dayTargets[idx];
   const tomorrow = dayTargets[(idx + 1) % runData.length];
-  return today + (tomorrow - today) * progress;
+  return today + (tomorrow - today) * diurnalProgress(progress);
 }
 
 // Weighted-random species pick for a spawn on day `idx`, matching that day's
@@ -666,6 +742,46 @@ function applyDaySpeed(idx) {
 
 let spawnAccumulator = 0;
 const POPULATION_CORRECTION_GAIN = 0.15;
+
+// Floor on how much of the outgoing flow gets replaced — see
+// replacementFraction() below for what this is a floor on.
+//
+// 0.4 is a compromise, picked by replaying 2015's real DART series through
+// this pacing loop offline against a range of assumed crossing times (fish
+// don't swim straight downstream at maxSpeed, so the real one can only be
+// bracketed, not derived — 1600-2700 frames was the bracket used). Higher
+// keeps the upstream edge busier but holds the school further above the day
+// it is meant to be showing. Across that bracket, 0.4 took the share of
+// frames sitting in a stretch with nothing arriving — longer than a whole
+// simulated day — from 56-64% down to 18-26%, and the worst such stretch
+// from 26-44s down to ~17s, for a median population error moving from
+// 18-21% to 28-35%.
+const REPLACEMENT_FLOOR = 0.4;
+
+// How much of the flow leaving downstream to replace with fish entering
+// upstream, given where the population currently sits against the day's
+// target.
+//
+// This exists because population and target move on completely different
+// clocks. A fish takes thousands of frames to cross the scene, i.e. the best
+// part of ten simulated days at FRAMES_PER_DAY, while the target it's chasing
+// is a real daily count that can halve overnight. The old pacing spawned on
+// `Math.max(0, error)` alone, so the day after any drop the school was
+// already over target and *nothing at all* entered from upstream — and with a
+// residence time that long it stayed over target for days. In the same
+// offline replay, 120-136 of 2015's 302 counted days went by without a single
+// fish swimming in, in runs of six to ten days at a stretch. That's the empty
+// upstream edge this fixes.
+//
+// So: replace one-for-one when the school is at or under target, and taper
+// off as it runs over — but never below REPLACEMENT_FLOOR, because a school
+// draining back down to a quiet day is exactly when the river would otherwise
+// go silent for a very long time. The taper still drains: below 1.0 fewer
+// fish enter than leave.
+function replacementFraction(target, active) {
+  if (active <= 0) return 1;
+  return Math.max(REPLACEMENT_FLOOR, Math.min(1, target / active));
+}
 
 // New fish enter from the upstream (left) edge, at a random point along the
 // river's width, so the run reads as continuously arriving rather than
@@ -899,8 +1015,25 @@ function loop(t) {
     updateFishCountDisplay(dayIndex, progress);
 
     const target = desiredPopulation(dayIndex, progress);
-    const error = target - flock.activeCount();
-    spawnAccumulator += Math.max(0, error) * POPULATION_CORRECTION_GAIN;
+    const active = flock.activeCount();
+
+    // Growth: close whatever gap is left to the day's target. Not shaped by
+    // diurnalRate — `target` is already the eased ramp, so the midday hump is
+    // baked into this term's own slope and applying it again would square it.
+    let arrivals = Math.max(0, target - active) * POPULATION_CORRECTION_GAIN;
+
+    // Turnover: fish that left downstream this frame make room for fish
+    // entering upstream. This is the term that keeps the run continuous
+    // through the long flat and falling stretches the growth term above sits
+    // out entirely, and it *is* shaped by diurnalRate, so the steady stream
+    // thickens toward midday and thins to a trickle at either end of the day
+    // rather than running at one rate around the clock.
+    arrivals +=
+      flock.exitedLastStep *
+      replacementFraction(target, active) *
+      diurnalRate(progress);
+
+    spawnAccumulator += arrivals;
     while (spawnAccumulator >= 1) {
       spawnAtLeftEdge();
       spawnAccumulator -= 1;

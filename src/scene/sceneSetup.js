@@ -17,9 +17,10 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { FOG_COLOR, fogDensity } from "./fog.js";
+import { FOG_COLOR, FOG_GLSL, fogDensity, fogDepthRate } from "./fog.js";
 import { seasonForDay } from "./season.js";
 import { glslFloat } from "./glsl.js";
+import { QUALITY } from "../quality.js";
 
 // Sun disc/glow tuning for the sky shader below. The tight exponent is the
 // disc itself, the loose one the halo bleeding off it; both are fed by the
@@ -57,8 +58,163 @@ const SKY_FOG_SCALE = 0.62;
 // below away from zero.
 const MIN_UPWARD_COMPONENT = 0.001;
 
+// ---------------------------------------------------------------------
+// Vignette + grain (see VIGNETTE_SHADER below)
+// ---------------------------------------------------------------------
+// Deliberately asymmetric. A symmetric vignette would close down the top of
+// frame, which is where Snell's window sits (see water.js) — the brightest
+// and most legible thing in the shot, and the last thing that should be
+// dimmed. So the effect is nearly absent up there and does its work along
+// the bottom, where the frame has to meet the dark UI panel; without it the
+// render ends on a visible tonal step against the panel's top edge.
+//
+// These are fractions of LINEAR light, applied before the tone-mapping
+// curve and the sRGB encode (see the pass's position in the chain below),
+// and that encode roughly halves them on the way to the screen: 0.16 here
+// is about an 8% difference to the eye, not 16%. Tuning them as if they
+// were display-space percentages is how this ended up invisible the first
+// time.
+const VIGNETTE_TOP = 0.25;
+const VIGNETTE_BOTTOM = 1.1;
+
+// Broad darkening across the whole bottom edge, on top of the radial falloff
+// above — the corners alone don't sell the transition into the panel, since
+// the panel spans the full width of the frame.
+//
+// The fade has to reach well up the frame rather than hugging the very
+// bottom: the panel covers the bottom ~19% of the canvas, so anything
+// tucked below that is spent behind it and never seen.
+const VIGNETTE_BOTTOM_EDGE = 0.35;
+const VIGNETTE_BOTTOM_FADE = 0.5;
+
+// Where the radial falloff starts and where it reaches full strength, as a
+// distance in uv space from the center of frame (the corners are at 0.707).
+// Wide enough that the sides get some of it — with a later start the whole
+// effect collapses into four corners, two of which the panel hides.
+const VIGNETTE_START = 0.2;
+const VIGNETTE_END = 0.78;
+
+// Fine per-pixel grain, applied as a proportional wobble rather than an
+// additive one so it stays even across the frame instead of swamping the
+// darks. It reads as film, but it is also load-bearing: this scene is now
+// mostly very smooth, very dark gradients (the depth ramp in fog.js, the
+// murk behind it), which is exactly what bands visibly once it is quantized
+// to 8 bits on the way out. A little noise before that dithers the banding
+// away.
+const GRAIN_AMOUNT = 0.03;
+
 const FOV = 90;
 const NEAR = 1;
+
+// The vignette/grain used to be its own full-screen ShaderPass sitting
+// between the bloom and OutputPass. It is now folded INTO OutputPass instead
+// (see VignetteOutputPass below), which removes one full-screen read+write
+// from every frame at every tier while changing nothing about the result:
+// the effect still lands in linear space with the tone-mapping curve applied
+// on top of it, because that is exactly where in OutputPass's shader it is
+// spliced. A lens effect belongs before the sensor response, not after it.
+//
+// This is the GLSL that gets spliced in. It reads `texel`, which the line it
+// replaces has just sampled, and leaves the result back in `texel` for the
+// tone-mapping ladder below it to consume.
+const VIGNETTE_GLSL = /* glsl */ `
+  {
+    // vUv.y is 0 at the bottom of the frame, so this ramps the radial
+    // falloff from its full strength along the bottom to almost nothing
+    // at the top.
+    float radial = smoothstep(
+      ${glslFloat(VIGNETTE_START)},
+      ${glslFloat(VIGNETTE_END)},
+      length(vUv - 0.5)
+    );
+    float strength = mix(uBottomStrength, uTopStrength, vUv.y);
+    float bottom = uBottomEdge
+      * (1.0 - smoothstep(0.0, ${glslFloat(VIGNETTE_BOTTOM_FADE)}, vUv.y));
+
+    texel.rgb *= 1.0 - clamp(radial * strength + bottom, 0.0, 1.0);
+
+    // The same one-liner terrain.js hashes silt with. Proportional, and
+    // centered on 1.0 so it darkens as often as it brightens and the overall
+    // exposure doesn't move.
+    float grain = fract(
+      sin(dot(gl_FragCoord.xy + uFrame, vec2(127.1, 311.7))) * 43758.5453123
+    );
+    texel.rgb *= 1.0 + (grain - 0.5) * uGrain;
+  }
+`;
+
+// OutputPass with the vignette/grain spliced in ahead of its tone-mapping
+// ladder.
+//
+// Subclassed rather than reimplemented so that OutputPass keeps owning the
+// fiddly part: it rebuilds the shader's defines from renderer.toneMapping and
+// renderer.outputColorSpace on every render, and getting that ladder wrong
+// silently produces a differently-graded image rather than an error. All this
+// does is replace the one line that samples the input texture with the same
+// sample plus the vignette.
+//
+// The splice is asserted at construction. If a future three.js reformats that
+// line, this throws at boot with a clear message instead of quietly dropping
+// the vignette and leaving someone to notice the corners got brighter.
+class VignetteOutputPass extends OutputPass {
+  constructor() {
+    super();
+
+    const SAMPLE_LINE = /gl_FragColor\s*=\s*texture2D\(\s*tDiffuse,\s*vUv\s*\);/;
+    const source = this.material.fragmentShader;
+    if (!SAMPLE_LINE.test(source)) {
+      throw new Error(
+        "VignetteOutputPass: could not find OutputShader's tDiffuse sample " +
+          "line to splice the vignette into. three.js's OutputShader has " +
+          "changed shape — re-check sceneSetup.js against it.",
+      );
+    }
+
+    // `this.uniforms` is the same object OutputPass handed to its material, so
+    // adding to it here reaches the material too. Done before the first
+    // render, i.e. before the shader is ever compiled.
+    Object.assign(this.uniforms, {
+      uTopStrength: { value: VIGNETTE_TOP },
+      uBottomStrength: { value: VIGNETTE_BOTTOM },
+      uBottomEdge: { value: VIGNETTE_BOTTOM_EDGE },
+      uGrain: { value: GRAIN_AMOUNT },
+      // Bumped every frame (see render below) purely to decorrelate the grain
+      // between frames — a fixed pattern reads as dirt on the lens rather
+      // than as grain, and dithers nothing once the eye averages it out.
+      uFrame: { value: 0 },
+    });
+
+    this.material.fragmentShader = source.replace(
+      SAMPLE_LINE,
+      `vec4 texel = texture2D( tDiffuse, vUv );
+       ${VIGNETTE_GLSL}
+       gl_FragColor = texel;`,
+    );
+
+    // RawShaderMaterial (which OutputPass uses) declares every uniform by
+    // hand, so the new ones need declaring too.
+    this.material.fragmentShader = this.material.fragmentShader.replace(
+      "uniform sampler2D tDiffuse;",
+      `uniform sampler2D tDiffuse;
+       uniform float uTopStrength;
+       uniform float uBottomStrength;
+       uniform float uBottomEdge;
+       uniform float uGrain;
+       uniform float uFrame;`,
+    );
+  }
+
+  render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+    // Wrapped rather than left to climb: this page runs unattended for as
+    // long as it is open, and the hash it feeds is a sin() of a dot product,
+    // which stops returning anything decorrelated once the input gets large
+    // enough to eat the float's mantissa. The grain would quietly freeze
+    // into a fixed pattern after a long enough session. A period this long
+    // is not visible as a repeat.
+    this.uniforms.uFrame.value = (this.uniforms.uFrame.value + 1) % 1024;
+    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+  }
+}
 
 // Sky sphere scale, as a fraction of camera.far — kept comfortably inside
 // the far plane so it never gets clipped as bounds/camera.far change on resize.
@@ -116,8 +272,31 @@ const EYE_FRAC = { x: 0.648, y: -0.2, z: 0.853 };
 const TARGET_FRAC = { x: 0.4, y: -0.075, z: 0.22 };
 
 export function createSceneSetup(canvas, bounds) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // `antialias` is deliberately OFF, and it is not a quality compromise.
+  //
+  // MSAA applies to the default framebuffer only. Everything in this scene is
+  // drawn through EffectComposer, whose internal render targets are created
+  // without a `samples` key (i.e. samples: 0) — so the scene is never
+  // multisampled no matter what this flag says. The only thing that ever
+  // reaches the default framebuffer is the final OutputPass fullscreen quad,
+  // which has no geometry edges to antialias. Leaving it on allocated and
+  // resolved a multisampled backbuffer every frame to smooth the edges of a
+  // rectangle that exactly covers the screen.
+  //
+  // `depth`/`stencil` off for the same reason: the composer's targets carry
+  // their own depth buffer, and nothing depth-tests against the default
+  // framebuffer. `powerPreference` asks a dual-GPU laptop for the discrete
+  // part rather than the integrated one.
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    powerPreference: "high-performance",
+  });
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio),
+  );
 
   // ACES filmic tone mapping — every material in this scene is a hand-
   // written ShaderMaterial (no MeshStandardMaterial/etc.), and
@@ -158,6 +337,7 @@ export function createSceneSetup(canvas, bounds) {
     uHorizonStrength: { value: 0.6 },
     uFogColor: { value: FOG_COLOR },
     uFogDensity: { value: fogDensity(bounds) },
+    uFogDepthRate: { value: fogDepthRate(bounds) },
   };
 
   // Background is a sky sphere rather than a flat scene.background color, so
@@ -175,8 +355,12 @@ export function createSceneSetup(canvas, bounds) {
   // crisp sky pasted behind geometry that has itself already faded to fog,
   // which is what made the far surface/terrain junction read as a hard,
   // wrongly-colored band across the frame.
+  // Segment count scales by tier (see quality.js). The shader is a smooth
+  // gradient evaluated per fragment, so the tessellation only has to be fine
+  // enough that the sphere doesn't read as faceted against the far plane —
+  // 16x8 is still comfortably past that at the low tier's resolution.
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 32, 16),
+    new THREE.SphereGeometry(1, QUALITY.skySegments[0], QUALITY.skySegments[1]),
     new THREE.ShaderMaterial({
       uniforms: skyUniforms,
       vertexShader: `
@@ -187,6 +371,8 @@ export function createSceneSetup(canvas, bounds) {
         }
       `,
       fragmentShader: /* glsl */ `
+        ${FOG_GLSL}
+
         uniform vec3 uSkyColor;
         uniform vec3 uHorizonColor;
         uniform vec3 uWaterColor;
@@ -195,8 +381,6 @@ export function createSceneSetup(canvas, bounds) {
         uniform vec3 uSunDirection;
         uniform float uSunIntensity;
         uniform float uHorizonStrength;
-        uniform vec3 uFogColor;
-        uniform float uFogDensity;
         varying vec3 vPosition;
 
         void main() {
@@ -255,7 +439,22 @@ export function createSceneSetup(canvas, bounds) {
             murk = 1.0 - exp(-d * d);
           }
 
-          gl_FragColor = vec4(mix(color, uFogColor, clamp(murk, 0.0, 1.0)), 1.0);
+          // Which shade of murk, not just how much of it: the fog darkens
+          // with depth (see fog.js), and the background has to carry that
+          // ramp or it undoes it. Everything level-or-downward here is
+          // fully saturated murk, so a flat uFogColor paints the entire
+          // lower half of frame one constant tone — a hard ceiling on how
+          // deep the scene can look, however dark the geometry in front of
+          // it gets.
+          //
+          // A background ray has no surface to take a depth from, so it
+          // takes one from where the murk closes over it: roughly one fog
+          // length (1 / uFogDensity) along its own direction. Rays angled
+          // down sample deep, dark water and level ones sample the camera's
+          // own depth, which is the vertical gradient the eye reads.
+          vec3 murkPoint = cameraPosition + dir / uFogDensity;
+          gl_FragColor =
+            vec4(mix(color, fogColorAt(murkPoint), clamp(murk, 0.0, 1.0)), 1.0);
         }
       `,
       side: THREE.BackSide,
@@ -308,16 +507,47 @@ export function createSceneSetup(canvas, bounds) {
   // step (OutputPass — see its own docs: "should be included at the end of
   // each pass chain"). Bloom's threshold/strength/radius are tuned by eye
   // against this scene's caustics highlights, not physically derived.
-  const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(bounds.width, bounds.height),
-    0.4, // strength
-    0.4, // radius
-    0.94, // threshold — just above the fog/base-color range so those don't bloom, below the caustics/specular highlights so those do
-  );
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(bloomPass);
-  composer.addPass(new OutputPass());
+  // Bloom is the most expensive thing in the chain by a wide margin:
+  // UnrealBloomPass allocates a bright-pass target plus five horizontal and
+  // five vertical blur targets, and runs separable kernels of 6/10/14/18/22
+  // taps across them — roughly thirteen additional full-screen passes. Hence
+  // the three-way tier switch rather than an on/off:
+  //
+  //   full — the resolution the scene was authored against.
+  //   half — every internal target is quarter-area. Bloom is a low-frequency
+  //          effect by construction (its whole job is a wide blur), so the
+  //          result is very close to `full` at a quarter of the fill cost.
+  //   off  — the pass is not constructed at all. The highlights stop glowing
+  //          and read as merely bright, which is a real loss, but it is the
+  //          right thing to give up first on a device that cannot hold frame
+  //          rate.
+  // Built as a function rather than inline because a tier change has to
+  // rebuild it: whether the bloom pass exists at all, and the resolution its
+  // mip chain is allocated at, are both fixed at construction.
+  function buildComposer(b) {
+    const next = new EffectComposer(renderer);
+    next.addPass(new RenderPass(scene, camera));
+
+    if (QUALITY.bloom !== "off") {
+      const scale = QUALITY.bloom === "half" ? 0.5 : 1;
+      next.addPass(
+        new UnrealBloomPass(
+          new THREE.Vector2(b.width * scale, b.height * scale),
+          0.4, // strength
+          0.4, // radius
+          0.94, // threshold — just above the fog/base-color range so those don't bloom, below the caustics/specular highlights so those do
+        ),
+      );
+    }
+
+    // Last, and carrying the vignette with it — so the vignette dims the
+    // bloom's glow along with everything else rather than leaving bright
+    // halos floating in the darkened corners.
+    next.addPass(new VignetteOutputPass());
+    return next;
+  }
+
+  let composer = buildComposer(bounds);
 
   // Resizes the renderer/camera to the new viewport and re-applies the fixed
   // framing at the new bounds. Re-framing here is safe now that the camera
@@ -328,7 +558,9 @@ export function createSceneSetup(canvas, bounds) {
     // Re-read devicePixelRatio here, not just at startup: dragging the window
     // to a monitor with a different DPI fires resize but leaves a pixel ratio
     // set for the old screen, which renders soft (or needlessly large).
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio),
+    );
     renderer.setSize(b.width, b.height);
     camera.aspect = b.width / b.height;
     camera.far = Math.max(b.width, b.height) * 5;
@@ -338,6 +570,16 @@ export function createSceneSetup(canvas, bounds) {
     // The sky's murk path length is in world units, so its density has to
     // track bounds the same way every other surface's fog does (see fog.js).
     skyUniforms.uFogDensity.value = fogDensity(b);
+    // Same for the depth ramp: it is keyed to the depth of the water column,
+    // which is a fraction of bounds.height (see fog.js).
+    skyUniforms.uFogDepthRate.value = fogDepthRate(b);
+    // EffectComposer caches the renderer's pixel ratio in its CONSTRUCTOR and
+    // multiplies setSize() by that cached value — so without this line its
+    // targets stay at whatever DPI the page booted at, and the comment above
+    // about tracking a monitor change would be true of the renderer but not
+    // of the buffers actually being drawn into. It also matters on a tier
+    // change, which is precisely a deliberate pixel-ratio change.
+    composer.setPixelRatio(renderer.getPixelRatio());
     // Resizes the composer's own buffers AND calls setSize() on every pass,
     // which is what re-allocates UnrealBloomPass's mip chain. (Assigning
     // bloomPass.resolution here as well used to look like the line doing
@@ -349,6 +591,8 @@ export function createSceneSetup(canvas, bounds) {
 
   // Replaces a direct renderer.render(scene, camera) call — see composer
   // above for why the bloom/tone-mapping chain needs to run instead.
+  // The grain's per-frame counter lives in VignetteOutputPass.render() now,
+  // so this is just the composer call.
   function render() {
     composer.render();
   }
@@ -392,6 +636,34 @@ export function createSceneSetup(canvas, bounds) {
     skyUniforms.uSunDirection.value.copy(direction);
   }
 
+  // Re-applies everything in this file that is fixed at construction time from
+  // QUALITY, after the governor has stepped the tier down (see quality.js).
+  // main.js pairs this with a full world rebuild — between them, every
+  // tier-dependent resource in the scene is replaced.
+  //
+  // The composer is disposed and rebuilt rather than adjusted because the
+  // things that change — whether UnrealBloomPass is in the chain at all, and
+  // the resolution its eleven internal targets are allocated at — are only
+  // read in constructors.
+  function applyQuality(b) {
+    composer.dispose();
+    composer = buildComposer(b);
+
+    // The sky's tessellation is also constructor-fixed. Cheap to swap, and
+    // leaving it would quietly keep a 32x16 sphere on a device that just told
+    // us it cannot afford one.
+    sky.geometry.dispose();
+    sky.geometry = new THREE.SphereGeometry(
+      1,
+      QUALITY.skySegments[0],
+      QUALITY.skySegments[1],
+    );
+
+    // Picks up the new pixel ratio, re-sizes the fresh composer, and re-scales
+    // the sky to the current far plane.
+    resize(b);
+  }
+
   return {
     renderer,
     scene,
@@ -401,6 +673,7 @@ export function createSceneSetup(canvas, bounds) {
     updateCamera,
     setSeason,
     setSunDirection,
+    applyQuality,
     render,
   };
 }

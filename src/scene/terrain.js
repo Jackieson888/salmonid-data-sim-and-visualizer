@@ -25,9 +25,9 @@
 
 import * as THREE from "three";
 import { EDGE_FADE_GLSL, glslFloat as f } from "./glsl.js";
-import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
+import { FOG_GLSL, FOG_COLOR, fogDensity, fogDepthRate } from "./fog.js";
 import { seasonForDay } from "./season.js";
-import { waterWorldSize, WATER_SIZE_MULTIPLIER } from "./water.js";
+import { waterWorldSize, waterSizeMultiplier } from "./water.js";
 
 // Floor depth below the water surface, as a fraction of bounds.height.
 // Was 0.5, which put the bed far enough under the camera that the heavy
@@ -98,7 +98,11 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
       + ${f(SILT_NOISE_STRENGTH)} * silt);
 
     color = applyFog(color, vWorldPos);
-    color = mix(color, uFogColor, ${f(TERRAIN_HAZE)});
+    // fogColorAt(), not uFogColor: the bed is the deepest surface in the
+    // scene, so the haze it never resolves out of is the dark end of the
+    // depth ramp (see fog.js) rather than the mid-column color the water
+    // surface overhead fades into.
+    color = mix(color, fogColorAt(vWorldPos), ${f(TERRAIN_HAZE)});
 
     // Fully opaque out to coreFrac (exactly where the real river bounds end),
     // then a dissolve across the rest of the oversized plane — the same fade,
@@ -141,15 +145,16 @@ export function buildTerrainMesh(bounds) {
       floorColor: { value: new THREE.Color("#213751") },
       uFogColor: { value: FOG_COLOR },
       uFogDensity: { value: fogDensity(bounds) },
+      uFogDepthRate: { value: fogDepthRate(bounds) },
       center: { value: new THREE.Vector2(centerX, centerZ) },
       planeHalfSize: {
         value: new THREE.Vector2(planeWidth / 2, planeHeight / 2),
       },
       // t-value (see fragment shader) where the real river bounds end —
-      // exactly 1/WATER_SIZE_MULTIPLIER, since the plane is that much bigger.
+      // exactly 1/waterSizeMultiplier(), since the plane is that much bigger.
       // Matches buildWaterMesh's uCoreFrac so both surfaces start fading at
       // the same real-world edge.
-      coreFrac: { value: 1 / WATER_SIZE_MULTIPLIER },
+      coreFrac: { value: 1 / waterSizeMultiplier() },
     },
     vertexShader: TERRAIN_VERTEX_SHADER,
     fragmentShader: TERRAIN_FRAGMENT_SHADER,

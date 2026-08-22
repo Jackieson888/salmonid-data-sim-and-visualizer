@@ -40,9 +40,9 @@ import * as THREE from "three";
 // depthsColor ramp. Bigger = deeper = darker and further from the sky.
 // Ordered the way the eye reads them from a camera in the water column:
 // the riverbed catches the most light, distance fog sits mid-column, and
-// the water body's own base color (what the surface shows when viewed
-// head-on, before fresnel mixes the sky back in — see water.js) is the
-// darkest of the three.
+// the water body's own base color (what the surface shows before the sky is
+// mixed into it through Snell's window — see water.js) is the darkest of
+// the three.
 // ---------------------------------------------------------------------
 // The shallowest stop of the three, which reads as counter-intuitive until
 // you remember the riverbed is the one surface here that is *lit* — it

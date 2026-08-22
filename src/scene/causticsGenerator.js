@@ -51,27 +51,34 @@ import * as THREE from "three";
 import { waterWorldSize, WATER_HEIGHT_SCALE } from "./water.js";
 import { riverDepth } from "./terrain.js";
 import { WATER_NORMAL_GLSL } from "./glsl.js";
+import { QUALITY } from "../quality.js";
 
 // Segment count for the dense grid the caustics pass refracts/marches per
 // vertex. A deliberate step down from the water sim's own resolution
 // (WATER_SIM_SIZE, 600 — see main.js) since this mesh is a real draw call
 // every frame, not just a texture lookup, and its vertex count is O(n^2).
-const CAUSTICS_MESH_SEGMENTS = 256;
+// All four numbers below now come from the device tier (see quality.js) rather
+// than being fixed. This pass is the most expensive thing in the frame by a
+// wide margin — its vertex count is O(segments^2) and each of those vertices
+// runs a loop of up to MAX_ITERATIONS texture fetches — so it is also the one
+// with the most to give back. The low tier does not run it at all: createWorld
+// in main.js skips constructing this generator entirely and every consumer
+// switches to the procedural stand-in in glsl.js.
+const causticsMeshSegments = () => QUALITY.causticsSegments;
+const envMapSize = () => QUALITY.causticsEnvSize;
 
-// Render target resolutions. Renou's original demo uses waterSize*3 for its
-// caustics target; kept flat and smaller here to bound cost, since this
-// project's water sim is already higher-res (600) than his (512).
-const ENV_MAP_SIZE = 512;
-// Exported so terrain.js/water.js/fishMesh.js can size causticGlow()'s blur
-// texel to this texture's actual resolution (they used to size it to the
-// water sim's resolution, back when they sampled the sim texture directly).
-export const CAUSTICS_TARGET_SIZE = 1024;
+// Read by main.js to size water.js's causticGlow() blur texel to this
+// texture's actual resolution (it used to be sized to the water sim's
+// resolution, back when the surface sampled the sim texture directly).
+export const causticsTargetSize = () => QUALITY.causticsTargetSize;
 
 // How many environment-map texels the ray-march advances per step, as a
 // fraction of the env map (see deltaEnvTexture below) — must be a
 // compile-time constant, WebGL forbids while-loops. Renou's demo uses 50 at
-// his 1024 env map size; kept proportionate here.
-const MAX_ITERATIONS = 40;
+// his 1024 env map size; kept proportionate here, and scaled down with the
+// rest at lower tiers since a shorter march against a smaller env map covers
+// the same fraction of the scene.
+const maxIterations = () => QUALITY.causticsIterations;
 
 // Air -> water refractive index ratio (1 / 1.333), same constant Renou's
 // shader uses.
@@ -110,7 +117,12 @@ const ENV_FRAGMENT_SHADER = /* glsl */ `
 // (x, z) directly — not rotated into 3D, since this mesh is only ever
 // rasterized through the light camera's own projection, never drawn as
 // real geometry.
-const CAUSTICS_VERTEX_SHADER = /* glsl */ `
+// A function rather than a module-level string: the march length is now a
+// tier setting (see quality.js) and has to be interpolated in when the
+// material is actually built, not when this module is first imported — the
+// governor can change the tier mid-session, and the world rebuild that
+// follows re-runs this.
+const causticsVertexShader = () => /* glsl */ `
   ${WATER_NORMAL_GLSL}
 
   uniform vec3 light;
@@ -162,7 +174,7 @@ const CAUSTICS_VERTEX_SHADER = /* glsl */ `
     vec2 deltaDirection = projectedRefractionVector.xy * factor;
     float deltaDepth = projectedRefractionVector.z * factor;
 
-    for (int i = 0; i < ${MAX_ITERATIONS}; i++) {
+    for (int i = 0; i < ${maxIterations()}; i++) {
       currentPosition += deltaDirection;
       currentDepth += deltaDepth;
 
@@ -261,12 +273,13 @@ function buildCausticsGeometry(bounds) {
   const { width: planeWidth, height: planeHeight } = waterWorldSize(bounds);
   const centerX = bounds.width / 2;
   const centerZ = bounds.height / 2;
+  const segments = causticsMeshSegments();
 
   const geometry = new THREE.PlaneGeometry(
     planeWidth,
     planeHeight,
-    CAUSTICS_MESH_SEGMENTS,
-    CAUSTICS_MESH_SEGMENTS,
+    segments,
+    segments,
   );
   geometry.translate(centerX, centerZ, 0);
   return geometry;
@@ -285,8 +298,8 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
   const { width: planeWidth, height: planeHeight, marginX, marginZ } =
     waterWorldSize(bounds);
 
-  const envMapTarget = makeTarget(ENV_MAP_SIZE);
-  const causticsTarget = makeTarget(CAUSTICS_TARGET_SIZE);
+  const envMapTarget = makeTarget(envMapSize());
+  const causticsTarget = makeTarget(causticsTargetSize());
 
   // Shares terrainMesh's geometry (already baked to world-space positions —
   // see terrain.js) rather than cloning it, so this pass automatically tracks
@@ -304,11 +317,11 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
       light: { value: new THREE.Vector3(0, -1, 0) },
       water: { value: null },
       env: { value: envMapTarget.texture },
-      deltaEnvTexture: { value: 1 / ENV_MAP_SIZE },
+      deltaEnvTexture: { value: 1 / envMapSize() },
       worldSize: { value: new THREE.Vector2(planeWidth, planeHeight) },
       margin: { value: new THREE.Vector2(marginX, marginZ) },
     },
-    vertexShader: CAUSTICS_VERTEX_SHADER,
+    vertexShader: causticsVertexShader(),
     fragmentShader: CAUSTICS_FRAGMENT_SHADER,
     transparent: true,
     side: THREE.DoubleSide,

@@ -19,16 +19,20 @@
 // lean the way the season's sun leans, and lean further the deeper you look.
 
 import * as THREE from "three";
-import { CAUSTIC_GLOW_POINT_GLSL, glslFloat as f } from "./glsl.js";
+import { causticGlowChunk, glslFloat as f } from "./glsl.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity } from "./fog.js";
 import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
+import { QUALITY } from "../quality.js";
 
-// Number of shaft planes. Each one is large and additively blended, so this is
+// The shaft count comes from QUALITY.shaftCount (see quality.js), read at
+// build time below. Each plane is large and additively blended, so this is
 // bounded by overdraw, not by vertex count — every extra plane is close to a
-// full-screen pass of blending in the worst case. A dozen is enough to read as
-// a volume because they are semi-transparent and overlap.
-const SHAFT_COUNT = 18;
+// full-screen pass of blending in the worst case, which makes it one of the
+// most expensive things in the frame on a phone and one of the first to cut.
+// A dozen is enough to read as a volume because they are semi-transparent and
+// overlap; eight still does at the medium tier. At the low tier it is zero and
+// buildGodRays returns an inert stub.
 
 // Where the shafts stand, as fractions of the world's largest dimension. The
 // near bound keeps a plane from sitting on top of the lens; the far one stops
@@ -106,12 +110,16 @@ const VERTEX_SHADER = /* glsl */ `
 `;
 
 const FRAGMENT_SHADER = /* glsl */ `
-  ${CAUSTIC_GLOW_POINT_GLSL}
+  ${causticGlowChunk()}
   ${FOG_GLSL}
 
   uniform sampler2D uCaustics;
   uniform vec2 uWorldSize;
   uniform vec2 uMargin;
+  // Also declared in the vertex shader above; three shares one uniform block
+  // across both stages, so this is the same value, not a second one. Needed
+  // here for the procedural caustics path (see quality.js).
+  uniform float uTime;
   uniform float uCausticsStrength;
   uniform vec3 uSunDir;
   uniform vec3 uColor;
@@ -137,7 +145,7 @@ const FRAGMENT_SHADER = /* glsl */ `
     // scattering it evenly down the column just fogs the whole frame. The
     // power curve keeps the bright knots and crushes everything else, so what
     // comes down are discrete shafts with dark water between them.
-    float lit = causticGlowPoint(uCaustics, uv) * uCausticsStrength;
+    float lit = causticGlowAt(uCaustics, uv, vec2(0.0), entry, uTime) * uCausticsStrength;
     lit = lit / (1.0 + lit);
     float glow = pow(lit, ${f(BEAM_CONTRAST)});
 
@@ -164,10 +172,9 @@ const FRAGMENT_SHADER = /* glsl */ `
     // Distance fog applies to shafts too, but additively: a shaft far enough
     // away is scattering light that itself has to travel back through the
     // murk, so it arrives dimmer rather than fog-colored. Blending toward
-    // uFogColor here would brighten the fog instead of fading the shaft.
-    float dist = length(cameraPosition - vWorldPos);
-    float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
-    strength *= 1.0 - clamp(fogFactor, 0.0, 1.0);
+    // uFogColor here would brighten the fog instead of fading the shaft, so
+    // this takes fogAmount()'s factor (see fog.js) and not applyFog itself.
+    strength *= 1.0 - fogAmount(vWorldPos);
 
     if (strength < 0.002) discard;
     gl_FragColor = vec4(uColor * strength, 1.0);
@@ -175,6 +182,22 @@ const FRAGMENT_SHADER = /* glsl */ `
 `;
 
 export function buildGodRays(bounds, cameraPosition, cameraTarget) {
+  const SHAFT_COUNT = QUALITY.shaftCount;
+
+  // See the note on the stub in particles.js — same reasoning, same shape,
+  // plus setSunDirection, which the render loop calls unconditionally.
+  if (SHAFT_COUNT === 0) {
+    return {
+      mesh: new THREE.Group(),
+      update() {},
+      setCausticsTexture() {},
+      setWorldSize() {},
+      setSeason() {},
+      setSunDirection() {},
+      dispose() {},
+    };
+  }
+
   const span = Math.max(bounds.width, bounds.height);
   const depth = riverDepth(bounds);
 
