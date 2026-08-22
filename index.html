@@ -16,68 +16,130 @@
          (see data.js), and reading them in the register they are actually
          published in is truer to the data than friendly rounded chips were.
          Hence the uppercase Helvetica labels, hairline rules, tabular
-         numerals, and hard corners throughout — see style.css. -->
+         numerals, and hard corners throughout — see style.css.
+
+         It is one bar rather than a masthead plus a panel. Everything is on
+         the same dark ink instead of half of it floating over open water,
+         which is what the small identity type needed to be readable, and
+         laying the fields out in columns rather than stacked leaves the
+         frame — the actual subject — almost entirely clear. -->
     <div id="hud">
-      <header id="masthead">
-        <p class="station">Project LWG &middot; Lower Granite Lock &amp; Dam</p>
-        <h1>Adult Fish Passage</h1>
-        <p class="reach">Snake River &middot; Counting Season 2015</p>
-        <div class="rule"></div>
-        <p class="readout">
-          <span id="date-label">Loading run data…</span>
-          <span id="day-ordinal"></span>
-        </p>
-      </header>
-
       <section id="report">
-        <div class="report-head">
-          <h2>Daily Adult Passage</h2>
-          <p class="total"><span class="label">Total</span> <b id="fish-count">0</b></p>
-        </div>
+        <div class="report-body">
+          <!-- 1. Identity and the current reading. -->
+          <header class="field" id="masthead">
+            <p class="station">Project LWG &middot; Lower Granite Lock &amp; Dam</p>
+            <h1>Adult Fish Passage</h1>
+            <p class="reach">Snake River &middot; Counting Season 2015</p>
+            <p class="readout">
+              <span id="date-label">Loading run data…</span>
+              <span id="day-ordinal"></span>
+            </p>
+          </header>
 
-        <!-- Real per-day DART counts, not the simulated boid count (which is
-             capped well below them — see MAX_POPULATION in main.js). Key
-             colors match each species' InstancedMesh tint in
-             scene/fishMesh.js's SPECIES_COLORS. -->
-        <table id="species-breakdown">
-          <tbody>
-            <tr data-species="chinook">
-              <td class="key"><i></i>Chinook</td>
-              <td class="count" id="count-chinook">0</td>
-              <td class="key"><i></i>Steelhead</td>
-              <td class="count" id="count-steelhead">0</td>
-            </tr>
-            <tr data-species="jackChinook">
-              <td class="key"><i></i>Jack Chinook</td>
-              <td class="count" id="count-jackChinook">0</td>
-              <td class="key"><i></i>Shad</td>
-              <td class="count" id="count-shad">0</td>
-            </tr>
-          </tbody>
-        </table>
+          <!-- 2. The day's counts. Real per-day DART numbers, not the
+               simulated boid count (which is capped well below them — see
+               MAX_POPULATION in main.js). Key colors match each species'
+               InstancedMesh tint in scene/fishMesh.js's SPECIES_COLORS. -->
+          <div class="field" id="passage">
+            <p class="field-head">
+              <span class="label">Daily adult passage</span>
+              <b id="fish-count">0</b>
+            </p>
+            <table id="species-breakdown">
+              <tbody>
+                <tr data-species="chinook">
+                  <td class="key"><i></i>Chinook</td>
+                  <td class="count" id="count-chinook">0</td>
+                  <td class="key"><i></i>Steelhead</td>
+                  <td class="count" id="count-steelhead">0</td>
+                </tr>
+                <tr data-species="jackChinook">
+                  <td class="key"><i></i>Jack Chinook</td>
+                  <td class="count" id="count-jackChinook">0</td>
+                  <td class="key"><i></i>Shad</td>
+                  <td class="count" id="count-shad">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <div id="controls">
-          <button id="play-pause" aria-label="Play or pause">Pause</button>
-          <div id="timeline-block">
-            <input
-              type="range"
-              id="timeline"
-              min="0"
-              max="100"
-              value="0"
-              aria-label="Date in the counting season"
-            />
-            <!-- Month ticks, positioned from runData at boot (see
-                 buildTimelineAxis in main.js) rather than spaced evenly: the
-                 record only covers the dam's counting season, so the months
-                 are not equal fractions of the track. -->
-            <div id="timeline-axis" aria-hidden="true"></div>
+          <!-- 3. Conditions at the project, straight off the same feed. -->
+          <div class="field" id="conditions">
+            <p class="field-head"><span class="label">Conditions</span></p>
+            <p><span class="label">Water</span><b id="water-temp">—</b></p>
+            <p><span class="label">Chinook run</span><b id="chinook-run">—</b></p>
+            <p><span class="label">Season to date</span><b id="season-total">0</b></p>
+          </div>
+
+          <!-- 4. The season, and the controls that move through it. -->
+          <!-- The button sits OUTSIDE the stack below it, not between the
+               chart and the slider, so the chart and the slider are the same
+               width and start at the same x. That is the whole point of the
+               arrangement: the red cursor has to read against the curve above
+               it, and indenting one but not the other by the button's width
+               quietly breaks it. -->
+          <div class="field" id="controls">
+            <button id="play-pause" aria-label="Play or pause">Pause</button>
+            <div id="timeline-block">
+              <!-- The whole season at a glance: daily passage as an area,
+                   water temperature as a line. Drawn at boot from runData
+                   (see buildSeasonChart in main.js). -->
+              <figure id="season-chart">
+                <figcaption>
+                  <span class="key-passage">Daily passage</span>
+                  <span class="key-temp">Water &deg;C</span>
+                  <span id="chart-scale"></span>
+                </figcaption>
+                <svg
+                  viewBox="0 0 1000 100"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path id="chart-passage" d="" />
+                  <path id="chart-temp" d="" vector-effect="non-scaling-stroke" />
+                </svg>
+              </figure>
+              <input
+                type="range"
+                id="timeline"
+                min="0"
+                max="100"
+                value="0"
+                aria-label="Date in the counting season"
+              />
+              <!-- Month ticks, positioned from runData at boot (see
+                   buildTimelineAxis in main.js) rather than spaced evenly: the
+                   record only covers the dam's counting season, so the months
+                   are not equal fractions of the track. -->
+              <div id="timeline-axis" aria-hidden="true"></div>
+            </div>
           </div>
         </div>
 
-        <p class="source">
-          Source &middot; Columbia Basin Research DART, adult daily counts
-        </p>
+        <!-- Footnote register: counted but not modelled, and provenance. -->
+        <div class="report-foot">
+          <!-- Each figure is hidden by its own row when the day's value is
+               zero, so a winter day doesn't show a wall of zeroes. -->
+          <p id="secondary-counts">
+            <span class="label">Also counted</span
+            ><span data-field="wildSteelhead"
+              ><span class="label">Steelhead, wild</span><b>0</b></span
+            ><span data-field="sockeye"
+              ><span class="label">Sockeye</span><b>0</b></span
+            ><span data-field="coho"
+              ><span class="label">Coho</span><b>0</b></span
+            ><span data-field="jackCoho"
+              ><span class="label">Jack Coho</span><b>0</b></span
+            ><span data-field="lamprey"
+              ><span class="label">Lamprey</span><b>0</b></span
+            >
+          </p>
+          <p class="source">
+            Columbia Basin Research DART &middot; adult passage daily counts
+            &middot; data courtesy of the U.S. Army Corps of Engineers
+          </p>
+        </div>
       </section>
     </div>
 

@@ -18,7 +18,12 @@ slides the whole light net, and the shafts, the surface glints and the glow on
 the fish sweep with it off a single uniform.
 
 The HUD is styled as a fish-passage report rather than a consumer overlay,
-since the numbers in it are real published daily counts.
+since the numbers in it are real published daily counts. It is a single bar
+across the bottom of the frame — identity, the day's counts, conditions at the
+project, and the season chart, divided into fields by vertical hairlines —
+which leaves the frame itself almost entirely clear. The chart shows daily
+passage as an area and water temperature as a line, drawn on the timeline
+scrubber's own x-axis so the cursor reads directly against both curves.
 
 ## Structure
 
@@ -28,9 +33,15 @@ Simulation (dimension-agnostic, no rendering):
   (`x`, `y`); the renderer reinterprets those as `worldX`/`worldZ` at the
   render boundary. Both neighbor searches (flocking forces, overlap
   resolution) run through a spatial grid, not an all-pairs scan.
-- `src/data.js` — real Lower Granite daily adult passage counts (Chinook, Jack
-  Chinook, Steelhead, Shad) fetched live from DART at module load, with a
-  bell-curve placeholder run as an offline fallback.
+- `src/data.js` — real Lower Granite daily adult passage counts fetched live
+  from DART at module load, with a bell-curve placeholder run as an offline
+  fallback. Four species drive the simulation (Chinook, Jack Chinook,
+  Steelhead, Shad); the rest of the feed is parsed and reported in the HUD
+  without being simulated — wild steelhead (a *subset* of the steelhead count,
+  not an addition to it), sockeye, coho, jack coho, Pacific lamprey, water
+  temperature, and the scheduled Chinook run for the date. Columns are read by
+  header name and the non-essential ones tolerate being absent, since DART's
+  column set has changed between years.
 - `src/main.js` — orchestration: scene wiring, the timeline/population logic,
   the rAF loop.
 

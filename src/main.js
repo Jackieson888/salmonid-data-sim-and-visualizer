@@ -38,6 +38,21 @@ const speciesCountEls = {
 };
 const fishLoadingEl = document.getElementById("fish-loading");
 
+// Reported but not simulated (see data.js). Keyed by the same field names the
+// parser writes, so the loop below is a straight lookup.
+const secondaryCountEls = new Map(
+  [...document.querySelectorAll("#secondary-counts [data-field]")].map((el) => [
+    el.dataset.field,
+    el,
+  ]),
+);
+const waterTempLabel = document.getElementById("water-temp");
+const chinookRunLabel = document.getElementById("chinook-run");
+const seasonTotalLabel = document.getElementById("season-total");
+const chartPassagePath = document.getElementById("chart-passage");
+const chartTempPath = document.getElementById("chart-temp");
+const chartScaleLabel = document.getElementById("chart-scale");
+
 // Writes a number into the HUD, guarded on the rendered string rather than
 // the value: while playing these are re-derived every frame, but the
 // interpolation below only crosses an integer every few frames, and an
@@ -86,6 +101,39 @@ function updateFishCountDisplay(idx, progress = 0) {
   // Bare number: the HUD labels it (see index.html), the way a report column
   // is headed once rather than repeating its unit on every row.
   setReadout(fishCountLabel, today.chinook === undefined ? at("count") : total);
+
+  // Species counted at the dam but not in the water (see data.js). Each row
+  // hides itself on a day with none, rather than showing a zero: over a full
+  // season most of these are zero most of the time, and five permanent zeroes
+  // would read as broken instrumentation instead of as an absent species.
+  for (const [field, el] of secondaryCountEls) {
+    const value = at(field);
+    el.hidden = value === 0;
+    if (value !== 0) setReadout(el.querySelector("b"), value);
+  }
+
+  // Conditions. Temperature interpolates like the counts do — it is a real
+  // continuous quantity, so a day-to-day ramp is honest — but only when both
+  // ends of the interpolation actually exist. A null means DART published no
+  // reading, and inventing one would be worse than showing nothing.
+  const tempToday = today.tempC;
+  const tempTomorrow = tomorrow.tempC;
+  if (tempToday === null || tempToday === undefined) {
+    waterTempLabel.textContent = "—";
+  } else {
+    const blended =
+      tempTomorrow === null || tempTomorrow === undefined
+        ? tempToday
+        : tempToday + (tempTomorrow - tempToday) * progress;
+    waterTempLabel.textContent = `${blended.toFixed(1)} °C`;
+  }
+
+  // Null outside the runs' scheduled windows, which is most of the winter.
+  // Snaps at the day boundary rather than interpolating — it is a label, not
+  // a measurement.
+  chinookRunLabel.textContent = today.chinookRun ?? "—";
+
+  setReadout(seasonTotalLabel, seasonToDate[idx]);
 }
 
 // The masthead's date line. Both halves move together, and three call sites
@@ -108,6 +156,87 @@ const MONTH_ABBREVIATIONS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+// Running total of the four simulated species from the first counted day
+// through day i — the figure a passage report actually leads with, since a
+// single day's count says nothing about whether the run is large or small.
+// Precomputed once: runData never changes after the fetch resolves.
+const seasonToDate = (() => {
+  const totals = new Float64Array(runData.length);
+  let running = 0;
+  for (let i = 0; i < runData.length; i++) {
+    running += runData[i].count ?? 0;
+    totals[i] = running;
+  }
+  return totals;
+})();
+
+// The whole season as one chart, drawn once at boot into the SVG in the HUD:
+// daily passage as a filled area, water temperature as a line over it, both
+// on the timeline's own x-axis so the scrubber's cursor reads against them.
+//
+// The two share an x-axis but not a y-axis — they are different quantities in
+// different units, and forcing them onto one scale would be a lie. So each is
+// normalized to its own range and the ranges are printed in the caption
+// instead of drawn as axes, which at this size would cost more room than they
+// return.
+//
+// Passage uses a square-root scale. Linear is the honest default and it was
+// tried first, but the run is far too spiky for it: one 7,500-fish September
+// day flattens the other three hundred into a line along the floor, so the
+// chart shows a single spike and hides the shape of the season. The root
+// keeps the peak where it belongs while leaving the shoulders legible, and
+// the caption says so rather than passing it off as linear.
+function buildSeasonChart() {
+  const last = runData.length - 1;
+  if (last <= 0) return;
+
+  const x = (i) => ((i / last) * 1000).toFixed(2);
+
+  const peak = Math.max(...runData.map((d) => d.count ?? 0), 1);
+  const passageY = (value) => (100 - Math.sqrt(value / peak) * 100).toFixed(2);
+
+  // Closed at both bottom corners so it fills as an area rather than reading
+  // as a second line.
+  const area = [`M 0 100`];
+  for (let i = 0; i <= last; i++) {
+    area.push(`L ${x(i)} ${passageY(runData[i].count ?? 0)}`);
+  }
+  area.push("L 1000 100 Z");
+  chartPassagePath.setAttribute("d", area.join(" "));
+
+  const temps = runData.map((d) => d.tempC).filter((t) => typeof t === "number");
+  if (temps.length < 2) {
+    chartScaleLabel.textContent = `Peak ${peak.toLocaleString()} / day · √ scale`;
+    return;
+  }
+  const minTemp = Math.min(...temps);
+  const maxTemp = Math.max(...temps);
+  const span = maxTemp - minTemp || 1;
+  // Inset from the top and bottom edges so the line never sits exactly on the
+  // frame, where it would be indistinguishable from a border.
+  const tempY = (value) => (92 - ((value - minTemp) / span) * 84).toFixed(2);
+
+  // Days with no reading break the line rather than being bridged: a straight
+  // segment across a gauge outage would invent a trend that was never
+  // measured. `M` after a gap starts a new subpath.
+  let penDown = false;
+  const line = [];
+  for (let i = 0; i <= last; i++) {
+    const t = runData[i].tempC;
+    if (typeof t !== "number") {
+      penDown = false;
+      continue;
+    }
+    line.push(`${penDown ? "L" : "M"} ${x(i)} ${tempY(t)}`);
+    penDown = true;
+  }
+  chartTempPath.setAttribute("d", line.join(" "));
+
+  chartScaleLabel.textContent =
+    `Peak ${peak.toLocaleString()} / day · √ scale · ` +
+    `${minTemp.toFixed(1)}–${maxTemp.toFixed(1)} °C`;
+}
 
 function buildTimelineAxis() {
   const last = runData.length - 1;
@@ -436,6 +565,7 @@ const FRAMES_PER_DAY = 240;
 
 timelineInput.max = String(runData.length - 1);
 buildTimelineAxis();
+buildSeasonChart();
 
 // ---------------------------------------------------------------------
 // Per-day population/species tables, precomputed once at load.

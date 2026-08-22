@@ -9,14 +9,18 @@
         every label; tabular monospace for every number, so digits hold their
         column as the counts change each day.
      4. One accent color, used only to mark the current reading — the timeline
-        cursor and the playing state. Everything else is neutral ink. */
+        cursor and the playing state. Everything else is neutral ink.
+
+   The whole thing is one bar across the bottom of the frame, divided into
+   fields by vertical hairlines. It was a floating masthead plus a tall panel,
+   which cost roughly a third of the frame's height and left the identity type
+   sitting over open water where its small sizes were barely readable. */
 
 :root {
   /* Panel ink. Neutral slate rather than a tint of the scene: the water is
      green (see RIVER_TINT in season.js) and a green-cast panel reads as part
      of the render instead of as chrome laid over it. */
-  --ink: rgba(10, 15, 18, 0.86);
-  --ink-solid: #0a0f12;
+  --ink: rgba(10, 15, 18, 0.88);
   --line: #2c3841;
   --line-soft: #1b242a;
 
@@ -35,8 +39,16 @@
   --steelhead: #b9c9c2;
   --shad: #c98bf0;
 
+  /* The passage area in the season chart. Not a palette accent — it is the
+     water's own green, so the chart reads as belonging to the scene above it
+     rather than as a fifth species color. */
+  --series: #4c6b63;
+
   --sans: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+
+  /* Gutter between fields, and the padding either side of each hairline. */
+  --field-gap: 22px;
 }
 
 * {
@@ -71,60 +83,115 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-start;
+  justify-content: flex-end;
   pointer-events: none;
-  padding: 28px;
+  padding: 18px;
 }
 
 /* Shared label treatment. Every piece of non-numeric text in the HUD is one
    of these, which is most of what makes the whole thing read as one document
    rather than a set of widgets. */
+.label,
 .station,
 .reach,
 .source,
-.report-head h2,
-.total .label,
 #species-breakdown .key,
 #play-pause,
 #fish-loading p,
-#timeline-axis b {
+#timeline-axis b,
+#season-chart figcaption {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 500;
 }
 
+/* Every number in the interface. Tabular so digits hold their column as the
+   counts tick between days (see updateFishCountDisplay in main.js). */
+#fish-loading p,
+.readout,
+#species-breakdown .count,
+#conditions b,
+#secondary-counts b,
+.field-head b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------------
-   Masthead
+   The bar
+   --------------------------------------------------------------------- */
+
+#report {
+  pointer-events: auto;
+  width: 100%;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  /* Reads as the top edge of a form field, and is one of only two places the
+     accent appears. */
+  border-top: 2px solid var(--accent);
+  color: var(--text);
+}
+
+.report-body {
+  display: flex;
+  align-items: stretch;
+  gap: var(--field-gap);
+  padding: 11px 16px 10px;
+}
+
+/* Fields are divided by hairlines rather than boxes — a rule between two
+   columns of a form, not four separate panels. The first has nothing to its
+   left to divide it from. */
+.field + .field {
+  padding-left: var(--field-gap);
+  border-left: 1px solid var(--line-soft);
+}
+
+/* Each field is headed once, the way a report column is, so the rows beneath
+   don't have to repeat their unit. */
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.field-head .label {
+  font-size: 0.55rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.field-head b {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------
+   Field 1 — identity and the current reading
    --------------------------------------------------------------------- */
 
 #masthead {
-  color: var(--text);
-  /* No panel behind it: a second box up here would fight the report panel
-     below for the frame, and the masthead reads better burned straight into
-     the image. The shadow is doing real work rather than decorating — this
-     block sits over the brightest part of the scene (the upper water column,
-     where the sky refracts through), so the small dim labels need it to stay
-     legible as fish pass behind them. Two stacked shadows: a tight one for
-     edge definition and a wide soft one as a local scrim. */
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.85),
-    0 0 14px rgba(0, 0, 0, 0.55);
-  max-width: 48ch;
+  flex: 0 0 auto;
+  max-width: 30ch;
 }
 
 #masthead .station {
   /* The accent bar is the only mark in the interface standing in for an
      agency device — a rule, not a seal. */
   border-left: 3px solid var(--accent);
-  padding-left: 9px;
-  font-size: 0.6rem;
+  padding-left: 8px;
+  font-size: 0.55rem;
   color: var(--text-dim);
 }
 
 #masthead h1 {
-  margin-top: 7px;
-  font-size: 1.5rem;
+  margin-top: 5px;
+  font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: 0.015em;
   text-transform: uppercase;
@@ -132,110 +199,67 @@ body {
 }
 
 #masthead .reach {
-  margin-top: 5px;
-  font-size: 0.6rem;
+  margin-top: 4px;
+  font-size: 0.52rem;
   color: var(--text-dim);
-}
-
-#masthead .rule {
-  margin: 11px 0 8px;
-  width: 168px;
-  height: 1px;
-  background: linear-gradient(to right, var(--line), transparent);
 }
 
 #masthead .readout {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: baseline;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.78rem;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.72rem;
   letter-spacing: 0.02em;
 }
 
-/* Kept at --text-dim rather than --text-faint, unlike its equivalents inside
-   the panel: --text-faint is tuned to read against the panel's near-black
-   ink, and over open water it drops below legible. */
+/* Kept at --text-dim rather than --text-faint: it sits beside the date at a
+   smaller size and needs to stay a readable second figure, not a whisper. */
 #masthead #day-ordinal {
-  font-size: 0.66rem;
+  font-size: 0.6rem;
   color: var(--text-dim);
 }
 
 /* ---------------------------------------------------------------------
-   Report panel
+   Field 2 — the day's counts
    --------------------------------------------------------------------- */
 
-#report {
-  pointer-events: auto;
-  width: clamp(340px, 46vw, 600px);
-  background: var(--ink);
-  border: 1px solid var(--line);
-  /* Reads as the top edge of a form field. Also the second of the two places
-     the accent appears. */
-  border-top: 2px solid var(--accent);
-  padding: 13px 16px 11px;
-  color: var(--text);
+#passage {
+  flex: 0 0 auto;
 }
 
-.report-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.report-head h2 {
-  font-size: 0.63rem;
-  color: var(--text-dim);
-}
-
-.report-head .total {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-}
-
-.report-head .total .label {
-  font-size: 0.58rem;
-  color: var(--text-faint);
-}
-
-.report-head .total b {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-/* Two species per row, each as a key/value pair. A table rather than a flex
-   row of chips so the counts sit in fixed columns and stop shifting sideways
-   as they gain and lose digits over the season. */
+/* Two species per row as key/value pairs. A table rather than a flex row of
+   chips so the counts sit in fixed columns and stop shifting sideways as they
+   gain and lose digits over the season — which matters more now that they
+   tick continuously between days rather than changing once. */
 #species-breakdown {
-  width: 100%;
-  margin: 8px 0 10px;
   border-collapse: collapse;
-  /* Fixed, so the four columns are set by these percentages and not by
+  /* Fixed, so the four columns are set by the cell widths below and not by
      whichever species happens to have the longest name or the most digits
-     today — the whole reason for using a table here is that the numbers hold
-     still as the season plays. */
+     today.
+
+     Width stays `auto` deliberately. Under table-layout: fixed the used width
+     is the sum of the column widths, which is exactly what's wanted — whereas
+     `width: 100%` inside a shrink-to-fit flex item is circular, and Chromium
+     resolves it to a literal million pixels, which silently shoves every
+     field to the right of this one off the side of the screen. */
+  width: auto;
   table-layout: fixed;
 }
 
 #species-breakdown td {
-  padding: 2.5px 0;
+  padding: 2px 0;
   vertical-align: baseline;
 }
 
 #species-breakdown .key {
-  width: 32%;
-  font-size: 0.58rem;
+  width: 11.5ch;
+  font-size: 0.55rem;
   color: var(--text-dim);
   white-space: nowrap;
-  padding-right: 8px;
+  padding-right: 6px;
 }
 
 /* Square, not a dot — see rule 1 at the top of this file. */
@@ -243,20 +267,18 @@ body {
   display: inline-block;
   width: 6px;
   height: 6px;
-  margin-right: 7px;
+  margin-right: 6px;
   background: currentColor;
   vertical-align: 1px;
 }
 
 #species-breakdown .count {
-  width: 18%;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.75rem;
+  width: 6.5ch;
+  font-size: 0.72rem;
   text-align: right;
-  /* Separates this count from the next species' key. The rightmost column
-     has nothing after it, so it ends flush with the panel instead. */
-  padding-right: 20px;
+  /* Separates this count from the next species' key. The rightmost column has
+     nothing after it, so it ends flush with the field. */
+  padding-right: 16px;
 }
 
 #species-breakdown .count:last-child {
@@ -280,15 +302,121 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Controls
+   Field 3 — conditions
    --------------------------------------------------------------------- */
 
-#controls {
+#conditions {
+  flex: 0 0 auto;
+}
+
+#conditions p:not(.field-head) {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-soft);
+  padding: 2px 0;
+}
+
+#conditions p:not(.field-head) .label {
+  font-size: 0.55rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+#conditions b {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+   Field 4 — the season chart and the controls
+   --------------------------------------------------------------------- */
+
+/* The only field that grows: it holds the chart, so every pixel the bar has
+   spare is worth more here than as trailing space.
+
+   Laid out as [button | stack], with the button bottom-aligned so it sits
+   level with the month axis rather than floating beside the chart. */
+#controls {
+  flex: 1 1 auto;
+  min-width: 240px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+#timeline-block {
+  flex: 1;
+  min-width: 0;
+}
+
+#season-chart figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-bottom: 4px;
+  font-size: 0.47rem;
+  color: var(--text-faint);
+}
+
+/* Keys drawn as the marks themselves rather than as swatches: the area series
+   gets a filled block, the line series a rule. With only two series that is
+   quicker to read than a legend, and it needs no color the palette would
+   otherwise have to invent. */
+#season-chart figcaption span::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+#season-chart .key-passage::before {
+  height: 6px;
+  background: var(--series);
+}
+
+#season-chart .key-temp::before {
+  height: 0;
+  border-top: 1px solid var(--text-dim);
+}
+
+#season-chart #chart-scale {
+  margin-left: auto;
+}
+
+#season-chart #chart-scale::before {
+  display: none;
+}
+
+#season-chart svg {
+  display: block;
+  width: 100%;
+  /* Explicit, because a viewBox gives an SVG an intrinsic aspect ratio — 10:1
+     here — and left to itself the chart sets its own height from whatever
+     width the field happens to have, which then drives the height of the
+     whole bar. On a wide window that was 74px of chart and a bar half again
+     as tall as it needed to be. */
+  height: 38px;
+  /* The viewBox is stretched to the field's width (preserveAspectRatio="none"),
+     which is what keeps the chart's x-axis identical to the slider's below it.
+     Stroke widths would be stretched with it, hence non-scaling-stroke on the
+     temperature path. */
+  border-bottom: 1px solid var(--line-soft);
+}
+
+#chart-passage {
+  fill: var(--series);
+  stroke: none;
+}
+
+#chart-temp {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1;
+  stroke-linejoin: round;
 }
 
 #play-pause {
@@ -297,10 +425,10 @@ body {
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 6px 11px;
-  min-width: 66px;
+  padding: 5px 10px;
+  min-width: 62px;
   font-family: var(--sans);
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   cursor: pointer;
 }
 
@@ -318,12 +446,6 @@ body {
   outline-offset: 2px;
 }
 
-#timeline-block {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-
 /* Fully custom, because the default control is the single most consumer-
    looking element on the page: a pill track with a round thumb. What replaces
    it is a gauge — a hairline track with a red cursor bar standing on it. */
@@ -332,7 +454,7 @@ body {
   appearance: none;
   display: block;
   width: 100%;
-  height: 15px;
+  height: 14px;
   background: transparent;
   cursor: pointer;
 }
@@ -351,9 +473,9 @@ body {
   -webkit-appearance: none;
   appearance: none;
   width: 3px;
-  height: 15px;
+  height: 14px;
   /* Centers the bar on the 1px track. */
-  margin-top: -7px;
+  margin-top: -6.5px;
   background: var(--accent);
   border: none;
   border-radius: 0;
@@ -361,7 +483,7 @@ body {
 
 #timeline::-moz-range-thumb {
   width: 3px;
-  height: 15px;
+  height: 14px;
   background: var(--accent);
   border: none;
   border-radius: 0;
@@ -376,12 +498,11 @@ body {
 }
 
 /* Month ticks. Positioned absolutely from percentages written by
-   buildTimelineAxis() in main.js, and inset by half the cursor's width at
-   each end so a tick lines up with the cursor rather than with the track. */
+   buildTimelineAxis() in main.js. The inset that lines a tick up with the
+   cursor is shared with the chart — see the rule further down. */
 #timeline-axis {
   position: relative;
-  height: 15px;
-  margin: 1px 1.5px 0;
+  height: 13px;
 }
 
 #timeline-axis i {
@@ -395,17 +516,17 @@ body {
 
 #timeline-axis b {
   position: absolute;
-  top: 5px;
+  top: 4px;
   left: 0;
   transform: translateX(-50%);
-  font-size: 0.48rem;
+  font-size: 0.46rem;
   font-weight: 500;
   color: var(--text-faint);
   white-space: nowrap;
 }
 
 /* The end labels sit on ticks at 0% and 100%, so centering them would hang
-   half of each off the panel. Anchor those two to the inside instead. */
+   half of each off the field. Anchor those two to the inside instead. */
 #timeline-axis i:first-child b {
   transform: none;
 }
@@ -414,12 +535,70 @@ body {
   transform: translateX(-100%);
 }
 
-.source {
-  margin-top: 10px;
-  padding-top: 8px;
+/* The chart and the month axis are both inset by half the slider cursor's
+   width. The cursor's travel is inset by that much from the input's own box,
+   so this is what puts a given date at the same x in all three. */
+#season-chart,
+#timeline-axis {
+  margin: 0 1.5px;
+}
+
+#season-chart {
+  margin-bottom: 4px;
+}
+
+/* ---------------------------------------------------------------------
+   Footnote strip — counted but not modelled, and provenance
+   --------------------------------------------------------------------- */
+
+.report-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 24px;
+  padding: 5px 16px 6px;
   border-top: 1px solid var(--line-soft);
-  font-size: 0.5rem;
+  font-size: 0.47rem;
   color: var(--text-faint);
+}
+
+/* Species counted at the dam but not simulated (see data.js). Set apart from
+   the table above — smaller, unkeyed, run together on one line — because they
+   are a different kind of figure: reported for completeness, not the subject
+   of the picture behind them. Rows hide themselves on a zero day, so this
+   line grows and shrinks through the season. */
+#secondary-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+}
+
+#secondary-counts [data-field] {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+/* Explicit, because the rule above beats the user-agent's own
+   `[hidden] { display: none }` on specificity — setting el.hidden in JS looks
+   like it works and silently does nothing without this. */
+#secondary-counts [data-field][hidden] {
+  display: none;
+}
+
+#secondary-counts > .label {
+  color: #47525a;
+}
+
+#secondary-counts b {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.source {
+  margin-left: auto;
 }
 
 /* ---------------------------------------------------------------------
@@ -489,8 +668,8 @@ body {
 
 #debug-panel {
   position: absolute;
-  top: 28px;
-  right: 28px;
+  top: 18px;
+  right: 18px;
   margin: 0;
   color: var(--text-dim);
   background: var(--ink);
@@ -506,27 +685,46 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Narrow viewports
+   Narrower viewports
    --------------------------------------------------------------------- */
+
+/* One row of five fields needs real width. Below this the bar wraps to two
+   rows rather than crushing the chart, which is the field that degrades worst
+   when squeezed. */
+@media (max-width: 1100px) {
+  .report-body {
+    flex-wrap: wrap;
+  }
+
+  /* The three text fields stay side by side and keep the rules between them;
+     only the chart drops to its own row, so it is the only field whose
+     divider has to move from its left edge to its top. */
+  #masthead,
+  #passage,
+  #conditions {
+    flex: 1 1 auto;
+  }
+
+  #controls {
+    flex: 1 0 100%;
+    border-left: none;
+    padding-left: 0;
+    padding-top: 9px;
+    border-top: 1px solid var(--line-soft);
+  }
+}
 
 @media (max-width: 640px) {
   #hud {
-    padding: 16px;
+    padding: 10px;
   }
 
   #masthead h1 {
-    font-size: 1.15rem;
+    font-size: 0.92rem;
   }
 
-  #report {
-    width: 100%;
-  }
-
-  /* The table keeps its four fixed columns — collapsing it to blocks breaks
-     the alignment that is the whole reason it is a table. It just gets
-     tighter. */
   #species-breakdown .count {
-    padding-right: 10px;
+    padding-right: 8px;
   }
 
   /* Ten month labels do not fit under a track this narrow, and letting them
