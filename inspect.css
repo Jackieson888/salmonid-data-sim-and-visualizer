@@ -15,7 +15,9 @@
   position: absolute;
   top: 18px;
   right: 18px;
-  width: 220px;
+  width: 240px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
   padding: 10px 14px 12px;
   background: var(--ink);
   border: 1px solid var(--line);
@@ -57,12 +59,6 @@
   padding: 2px 4px;
 }
 
-#inspect-panel input[type="range"] {
-  flex: 1;
-  margin-left: 10px;
-  accent-color: var(--accent);
-}
-
 #inspect-panel .toggles {
   flex-direction: column;
   align-items: flex-start;
@@ -83,4 +79,117 @@
 
 #inspect-panel input[type="checkbox"] {
   accent-color: var(--accent);
+}
+
+#reset-view {
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 5px 10px;
+  font-family: var(--sans);
+  font-size: var(--t-2);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+#reset-view:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------------
+   Field guide card — species facts, rebuilt on every species change (see
+   updateFieldGuide in src/inspect.js).
+   --------------------------------------------------------------------- */
+
+#field-guide {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+
+#field-guide .field-head {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+}
+
+.fg-common {
+  font-size: var(--t-4);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.fg-scientific {
+  margin-top: 1px;
+  margin-bottom: 6px;
+  font-size: var(--t-2);
+  color: var(--text-faint);
+}
+
+.fg-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: var(--t-2);
+}
+
+.fg-row .label {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.fg-row b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+
+.fg-note {
+  margin-top: 8px;
+  font-size: var(--t-2);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------------
+   Anatomy overlay — leader lines projected from the fish's actual animated
+   vertices each frame (see scene/fishAnatomy.js and renderAnatomyOverlay in
+   src/inspect.js). Positioned in pixel space via its viewBox, not CSS
+   layout, so it can sit exactly on top of the WebGL canvas.
+   --------------------------------------------------------------------- */
+
+#anatomy-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.anatomy-leader {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+}
+
+.anatomy-tick {
+  fill: var(--accent);
+}
+
+.anatomy-label {
+  fill: var(--text);
+  font-family: var(--sans);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  dominant-baseline: middle;
 }

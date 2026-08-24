@@ -15,10 +15,22 @@
   <main id="app">
     <canvas id="fish-canvas"></canvas>
 
+    <!-- Leader-line labels (see src/scene/fishAnatomy.js) and the scale bar,
+         drawn as an SVG overlay rather than into the WebGL scene: text and
+         hairlines are what the rest of this app's chrome is built from, and
+         an overlay tracks the 3D anchors without needing its own lighting or
+         depth-testing pass. Sized to the canvas in src/inspect.js. -->
+    <svg id="anatomy-overlay" aria-hidden="true"></svg>
+
     <a id="back-link" href="/">&larr; Back to river</a>
 
     <!-- Styled to match the river view's HUD (see style.css) rather than as a
-         separate look: hairline rules, uppercase labels, one accent color. -->
+         separate look: hairline rules, uppercase labels, one accent color.
+         Pared down from a shader-tuning rig (the nine material sliders,
+         speed and amplitude, all removed — the shipped tuning lives in
+         MATERIAL_OVERRIDES in fishMesh.js and is recoverable from git
+         history) to what a visitor actually wants: which species, whether it
+         swims and turns, and now the anatomy plate. -->
     <div id="inspect-panel">
       <p class="field-head"><span class="label">Fish viewer</span></p>
 
@@ -32,73 +44,15 @@
         </select>
       </label>
 
-      <label class="row">
-        <span class="label">Swim speed</span>
-        <input type="range" id="speed-range" min="0" max="250" value="100" />
-      </label>
-
-      <label class="row">
-        <span class="label">Stroke amplitude</span>
-        <input type="range" id="amplitude-range" min="0" max="150" value="100" />
-      </label>
-
-      <!-- Every slider below is set from the selected species' own material on
-           load and on each species change (see syncSlidersFromMaterial in
-           inspect.js), so the `value` attributes here are only what shows
-           during the moment before the GLBs finish loading. The three models
-           each ship their own tuning — see MATERIAL_OVERRIDES in fishMesh.js. -->
-      <p class="field-head"><span class="label">Material</span></p>
-
-      <label class="row">
-        <span class="label">Shininess</span>
-        <input type="range" id="shininess-range" min="1" max="64" value="24" />
-      </label>
-
-      <label class="row">
-        <span class="label">Specular strength</span>
-        <input type="range" id="specular-strength-range" min="0" max="150" value="50" />
-      </label>
-
-      <label class="row">
-        <span class="label">Specular fresnel</span>
-        <input type="range" id="specular-fresnel-range" min="0" max="400" value="200" />
-      </label>
-
-      <label class="row">
-        <span class="label">Specular tint</span>
-        <input type="range" id="specular-tint-range" min="0" max="100" value="55" />
-      </label>
-
-      <label class="row">
-        <span class="label">Diffuse floor</span>
-        <input type="range" id="diffuse-floor-range" min="0" max="150" value="70" />
-      </label>
-
-      <label class="row">
-        <span class="label">Diffuse ceiling</span>
-        <input type="range" id="diffuse-ceil-range" min="0" max="150" value="110" />
-      </label>
-
-      <label class="row">
-        <span class="label">Scale bump</span>
-        <input type="range" id="bump-strength-range" min="0" max="100" value="22" />
-      </label>
-
-      <label class="row">
-        <span class="label">Scale frequency</span>
-        <input type="range" id="scale-frequency-range" min="1" max="40" value="12" />
-      </label>
-
-      <label class="row">
-        <span class="label">Iridescence</span>
-        <input type="range" id="iridescence-strength-range" min="0" max="100" value="6" />
-      </label>
-
       <div class="row toggles">
         <label><input type="checkbox" id="playing-toggle" checked /> Swimming</label>
         <label><input type="checkbox" id="rotate-toggle" checked /> Turntable</label>
-        <label><input type="checkbox" id="wireframe-toggle" /> Wireframe</label>
+        <label><input type="checkbox" id="labels-toggle" checked /> Anatomy labels</label>
       </div>
+
+      <button id="reset-view" type="button">Reset view</button>
+
+      <div id="field-guide"></div>
     </div>
 
     <div id="fish-loading">

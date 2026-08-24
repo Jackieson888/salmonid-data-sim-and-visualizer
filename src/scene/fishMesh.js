@@ -71,7 +71,11 @@ const STEELHEAD_FINAL_URL = "/steelhead-final.glb";
 const CHINOOK_FINAL_URL = "/chinook-final.glb";
 const SHAD_FINAL_URL = "/shad-final.glb";
 
-const SPECIES_MODEL_URL = {
+// Exported so the fish viewer's anatomy plate (src/scene/fishAnatomy.js) can
+// look up the raw geometry/VAT for a species straight out of the same
+// assetsByUrl Map loadFishAssets() already resolves to, rather than this
+// module having to expose a second accessor for the same data.
+export const SPECIES_MODEL_URL = {
   steelhead: STEELHEAD_FINAL_URL,
   chinook: CHINOOK_FINAL_URL,
   jackChinook: CHINOOK_FINAL_URL,
@@ -352,7 +356,11 @@ const PAUSED_SWIM_RATE = 0.05;
 // multiplier, see boids.js). The latter matters more — a school where every
 // fish beats at exactly the same frequency reads as cloned however well the
 // phases are spread, since the relative pattern never changes.
-const PHASE_TO_CYCLE = 1 / (2 * Math.PI);
+// Exported so fishAnatomy.js's CPU-side VAT sample can reproduce the exact
+// cycle position VERTEX_SHADER's `cycles` line computes below — the anatomy
+// labels have to track the same bend the shader is drawing, not an
+// approximation of it.
+export const PHASE_TO_CYCLE = 1 / (2 * Math.PI);
 
 // How much a fish dims the deeper below the water surface (world Y = 0) it
 // swims, simulating sunlight attenuating with depth. ln(4) means a fish at
@@ -2019,6 +2027,14 @@ export function createFishInstancedMesh(assetsByUrl, capacity) {
     return rendererBySpecies.get(species)?.mesh.material ?? null;
   }
 
+  // The actual InstancedMesh drawing a given species, as opposed to `mesh`
+  // above (the THREE.Group holding all of them) — inspect.js's anatomy
+  // overlay needs this to read back the one instance's real transform via
+  // getMatrixAt(), which a Group has no equivalent of.
+  function meshForSpecies(species) {
+    return rendererBySpecies.get(species)?.mesh ?? null;
+  }
+
   function dispose() {
     for (const r of renderers) {
       group.remove(r.mesh);
@@ -2037,6 +2053,7 @@ export function createFishInstancedMesh(assetsByUrl, capacity) {
     setSunDirection,
     renderedCount,
     materialForSpecies,
+    meshForSpecies,
     dispose,
   };
 }

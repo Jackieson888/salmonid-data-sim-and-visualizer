@@ -42,7 +42,9 @@ const SPEED_SMOOTHING = 0.03;
 // directly as sim units: the sim's pre-existing flat default (30 + rand*5)
 // already sat almost exactly inside the Steelhead range below, so 1 sim unit
 // == 1 inch rather than needing its own separate scale factor.
-const SPECIES_LENGTH_INCHES = {
+// Exported for the fish viewer's field-guide card (src/inspect.js), which
+// wants the real range rather than one jittered instance's fish.length.
+export const SPECIES_LENGTH_INCHES = {
   shad: [12, 20],
   jackChinook: [12, 20],
   chinook: [30, 44],
