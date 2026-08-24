@@ -48,6 +48,7 @@ const speciesCountEls = {
   jackChinook: document.getElementById("count-jackChinook"),
   steelhead: document.getElementById("count-steelhead"),
   shad: document.getElementById("count-shad"),
+  lamprey: document.getElementById("count-lamprey"),
 };
 const fishLoadingEl = document.getElementById("fish-loading");
 const noticeEl = document.getElementById("notice");
@@ -111,10 +112,10 @@ function setReadout(el, value) {
 // At progress 1 it is already showing tomorrow's figure, so when the day
 // actually advances there is nothing left to jump.
 //
-// The total is summed from the four displayed species rather than
+// The total is summed from the five displayed species rather than
 // interpolated on its own, so the column always adds up: `count` is exactly
 // that sum in the source data (see parseDartCsv in data.js), but rounding
-// four interpolated values independently and a fifth separately would let
+// five interpolated values independently and a sixth separately would let
 // them disagree by a digit or two mid-day. The `?? 0` guards are what keep
 // this honest against a row missing a column — DART's column set has changed
 // between years (see parseDartCsv), so a future year could legitimately arrive
@@ -188,7 +189,7 @@ const MONTH_ABBREVIATIONS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-// Running total of the four simulated species from the first counted day
+// Running total of the five simulated species from the first counted day
 // through day i — the figure a passage report actually leads with, since a
 // single day's count says nothing about whether the run is large or small.
 // Precomputed once: runData never changes after the fetch resolves.
@@ -579,7 +580,7 @@ function applyTier() {
 // the governor deciding otherwise.
 const governor = createPerfGovernor(qualityForced() ? null : applyTier);
 
-const SPECIES_KEYS = ["chinook", "jackChinook", "steelhead", "shad"];
+const SPECIES_KEYS = ["chinook", "jackChinook", "steelhead", "shad", "lamprey"];
 
 // Caps how many fish are simulated/rendered at once, across all species.
 //
@@ -974,10 +975,10 @@ function desiredPopulation(idx, progress) {
 }
 
 // Weighted-random species pick for a spawn on day `idx`, matching that day's
-// real Chinook/Jack Chinook/Steelhead/Shad percentages — drawn from the same
-// table dayTargets was summed from, so the mix new spawns come from always
-// agrees with the population they're filling. Falls back to all-steelhead
-// when a day has no species breakdown at all.
+// real Chinook/Jack Chinook/Steelhead/Shad/Lamprey percentages — drawn from
+// the same table dayTargets was summed from, so the mix new spawns come from
+// always agrees with the population they're filling. Falls back to
+// all-steelhead when a day has no species breakdown at all.
 function pickSpeciesForDay(idx) {
   const base = idx * SPECIES_KEYS.length;
   const total = dayWeights[base + SPECIES_KEYS.length - 1];

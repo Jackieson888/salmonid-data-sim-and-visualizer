@@ -33,21 +33,48 @@ Simulation (dimension-agnostic, no rendering):
   (`x`, `y`); the renderer reinterprets those as `worldX`/`worldZ` at the
   render boundary. Both neighbor searches (flocking forces, overlap
   resolution) run through a spatial grid, not an all-pairs scan.
+- `src/dart/parseAdultDaily.js` — the DART adult-daily CSV parser, pure and
+  dependency-free (no fetch, no browser globals) so both the browser boot
+  path (`src/data.js`) and the Node build script (`scripts/fetch-dart.mjs`)
+  share one implementation instead of drifting apart. Reads columns by header
+  name, not fixed index, since DART's column set has changed between years —
+  the lamprey day/night split is the documented case.
 - `src/data.js` — real Lower Granite daily adult passage counts, read at load
   from a snapshot vendored into the repo (`public/lwg-adult-daily-2015.csv`,
   retrieved 2026-08-24). The year is fixed, so there is nothing to be fresh
   about; a live DART query is kept behind `?live` for when the year becomes a
   control. There is no synthetic fallback — the HUD presents these as a
   federal measurement record, so failing visibly beats substituting invented
-  numbers under that masthead. Four species drive the simulation (Chinook,
-  Jack Chinook, Steelhead, Shad); the rest of the feed is parsed and reported
-  in the HUD without being simulated — wild steelhead (a *subset* of the count,
-  not an addition to it), sockeye, coho, jack coho, Pacific lamprey, water
-  temperature, and the scheduled Chinook run for the date. Columns are read by
-  header name and the non-essential ones tolerate being absent, since DART's
-  column set has changed between years.
+  numbers under that masthead. Five species drive the simulation (Chinook,
+  Jack Chinook, Steelhead, Shad, Pacific Lamprey); the rest of the feed is
+  parsed and reported in the HUD without being simulated — wild steelhead (a
+  *subset* of the count, not an addition to it), sockeye, coho, jack coho,
+  water temperature, and the scheduled Chinook run for the date. Columns are
+  read by header name and the non-essential ones tolerate being absent, since
+  DART's column set has changed between years.
+
+  Also exports `loadRiverConditions()`/`loadRunHistory()` — lazy, memoized
+  fetches of the river-environment and ten-year history files the plates
+  drawer reads (see below). Unlike `runData` these are off the boot-critical
+  path: nothing about the flock, the spawn mix or the timeline depends on
+  either one, so a failure in either degrades one plate rather than the
+  river.
+- `src/seasonScale.js` — the one date → x-position mapping in the app.
+  Everything that draws against the season's x-axis (the bar's own chart and
+  month axis in `main.js`, every season-x figure in `plates.js`) computes
+  through this so a given record index always lands at the same x fraction —
+  otherwise the timeline's cursor would read against one curve and lie about
+  the rest.
 - `src/main.js` — orchestration: scene wiring, the timeline/population logic,
   the rAF loop.
+- `src/plates.js` — the slide-in drawer of data plates (open with the corner
+  button or **P**): season passage against a ten-year daily mean, species
+  composition (all eight DART counts, not just the five simulated), the
+  wild/hatchery steelhead split, river conditions (outflow/spill plus a
+  water-temp-vs-Chinook scatter), the ten-year run history (season totals by
+  year and a day-of-year min/max envelope with 2015 traced through it), and
+  lamprey day-vs-night passage. Built lazily on first open rather than at
+  boot.
 
 Rendering (`src/scene/`):
 
@@ -87,29 +114,52 @@ Rendering (`src/scene/`):
   Vertex Animation Texture at load time, and draws the flock as one
   `InstancedMesh` per distinct model. Tailbeat rate is derived from each fish's
   actual speed via a stride length, not a per-species frequency table.
+- `fishAnatomy.js` — hand-authored anatomy anchors for the fish viewer's
+  labeled plate (see "Fish viewer" below). The GLBs carry no anatomical
+  structure to key off — one mesh, one material, a bare 16-bone spine — so
+  each part is a target point in the model's own local space (nose-tail
+  fraction, lateral fraction, vertical fraction), snapped to the nearest real
+  vertex. Salmonids, shad and lamprey each get a genuinely different part
+  list: shad is a clupeid (no adipose fin, has ventral scutes instead) and
+  lamprey is a jawless fish (no jaws, no paired fins, no gill cover — an oral
+  disc, a single nostril, gill pores, two dorsal fins).
 
 Assets:
 
-- `public/steelhead-final.glb`, `chinook-final.glb`, `shad-final.glb` — three
-  authored models, one per species, each a single skinned mesh plus a
-  loop-closed `"Swimming"` clip built by `scripts/swim_rig.py` against a
-  shared 16-bone spine. Jack Chinook has no model of its own and borrows the
-  chinook (it is the same species at a smaller, earlier-maturing size, not a
-  different body shape), told apart by a flat per-instance tint — see
-  `SPECIES_MODEL_URL`. Give it its own URL and it gets its own `InstancedMesh`
-  with no other change. A new model needs a `MODEL_ROTATION_FIX` entry: see
-  the note there on why the right correction depends on where the source file
-  put its compensating rotation.
+- `public/steelhead-final.glb`, `chinook-final.glb`, `shad-final.glb`,
+  `lamprey-final.glb` — four authored models, one per species, each a single
+  skinned mesh plus a loop-closed `"Swimming"` clip against a shared 16-bone
+  spine (the first three built by `scripts/swim_rig.py`). Jack Chinook has no
+  model of its own and borrows the chinook (it is the same species at a
+  smaller, earlier-maturing size, not a different body shape), told apart by
+  a flat per-instance tint — see `SPECIES_MODEL_URL`. Give it its own URL and
+  it gets its own `InstancedMesh` with no other change. A new model needs a
+  `MODEL_ROTATION_FIX` entry: see the note there on why the right correction
+  depends on where the source file put its compensating rotation — the
+  lamprey model needed the opposite quarter-turn from the other three despite
+  sharing their rig convention, because its root bone sits at the nose end of
+  the body instead of the tail end.
 
   Each model also carries its own material tuning (`MATERIAL_OVERRIDES` in
-  `fishMesh.js`). The three skins are painted to very different keys — the
+  `fishMesh.js`). The four skins are painted to very different keys — the
   chinook is near-white silver, the shad already has its iridescence painted
-  in — and every shader term here is a modifier on finished art rather than a
-  light rig on a blank body. `inspect.html` is where to tune them: it loads
-  one fish up close and its sliders read the selected species' shipped values.
+  in, the lamprey is scaleless and wants almost none of the procedural
+  scale-bump the others do — and every shader term here is a modifier on
+  finished art rather than a light rig on a blank body. `inspect.html` used
+  to expose this tuning as live sliders; it's a labeled species viewer now
+  (see "Fish viewer" below), so re-tuning a material means editing
+  `MATERIAL_OVERRIDES` directly rather than dragging a slider — the old rig
+  is still in git history if it's ever needed again.
 - `public/lwg-adult-daily-2015.csv` — the passage-count snapshot (see
   `src/data.js`), byte-for-byte as DART served it, footnotes and citation
   included.
+- `public/lwg-river-2015.csv`, `public/lwg-history-2006-2015.json` — the
+  plates drawer's other two data sources: 2015 river conditions (outflow,
+  spill, pivoted to wide from DART's long-format export) and ten years of
+  season totals plus a day-of-year envelope, both derived by
+  `scripts/fetch-dart.mjs`. The raw per-year CSVs it derives them from
+  archive under `data/dart/` (not `public/` — they don't ship, they just keep
+  the derivation auditable without a network trip).
 - `public/og-image.png` — the social card, a real capture of the running
   scene. Regenerate with `scripts/screenshot.mjs` rather than hand-making one,
   so the preview cannot drift from what the page looks like.
@@ -156,6 +206,26 @@ a fish popping at the cull band, a tailbeat desyncing from travel.
   not advancing until you start it.
 - **D** toggles a camera debug readout — the way to read off a new
   `EYE_FRAC`/`TARGET_FRAC` by eye if the framing ever needs re-tuning.
+- **P**, or the corner button, opens/closes the plates drawer (`src/plates.js`).
+
+## Fish viewer
+
+`inspect.html` loads one fish up close on an orbiting camera — species
+select, swim/turntable toggles, an anatomy-labels toggle, and a reset-view
+button. A field-guide card (common/scientific name, adult length, this
+season's total and peak date at LWG, a species note) reads straight off the
+same `runData` the river and the plates drawer use.
+
+The anatomy labels track a swimming, turning fish rather than a frozen
+specimen: the overlay replicates the vertex shader's swim-bend sampling on
+the CPU each frame (same baked Vertex Animation Texture, same frame
+interpolation) and reads back the instance's real transform via
+`meshForSpecies()` on the object `createFishInstancedMesh` returns, rather
+than approximating either. A part's leader line only runs the near/far-side
+facing test if it's a genuinely paired lateral feature (eye, pectoral fin,
+...) — a midline fin is a thin sheet whose face normal points sideways even
+though its position doesn't, so testing it the same way blinked whole fins
+out for half of every rotation.
 
 ## Next steps
 

@@ -37,19 +37,21 @@
 // tap) rather than the 4-tap causticGlow those two use; see glsl.js for
 // why the blur isn't worth its cost per vertex.
 //
-// Species models: SPECIES_MODEL_URL (below) maps each of the four DART
-// species (see data.js — Chinook/Jack Chinook/Steelhead/Shad) to a GLB.
-// Species that share a URL are drawn from one shared InstancedMesh and told
-// apart only by a flat per-instance color multiply (aTint); a species with
-// its own distinct URL gets its own InstancedMesh built from its own
-// geometry/VAT/texture (see createFishInstancedMesh).
+// Species models: SPECIES_MODEL_URL (below) maps each of the five DART
+// species the flock draws (see data.js — Chinook/Jack Chinook/Steelhead/
+// Shad/Pacific Lamprey) to a GLB. Species that share a URL are drawn from one
+// shared InstancedMesh and told apart only by a flat per-instance color
+// multiply (aTint); a species with its own distinct URL gets its own
+// InstancedMesh built from its own geometry/VAT/texture (see
+// createFishInstancedMesh).
 //
-// Three of the four have their own mesh now: steelhead-final.glb,
-// chinook-final.glb and shad-final.glb, each authored against the same
-// vertex budget and the same procedural swim rig (scripts/swim_rig.py —
-// 16 spine bones, one loop-closed "Swimming" cycle; see
-// MODEL_ROTATION_FIX below for why that shared rig means they also share a
-// rotation fix). jackChinook still has no model of its own and borrows
+// Four of the five have their own mesh now: steelhead-final.glb,
+// chinook-final.glb, shad-final.glb and lamprey-final.glb, each authored
+// against the same vertex budget and the same 16-bone spine, one loop-closed
+// "Swimming" clip convention (see MODEL_ROTATION_FIX below for why sharing
+// that rig convention still doesn't guarantee sharing a rotation fix — the
+// lamprey model's root bone sits at the opposite end of its body from the
+// other three's). jackChinook still has no model of its own and borrows
 // chinook-final.glb — a jack chinook is the same species at a smaller,
 // earlier-maturing size, not a different body shape, so that's the correct
 // species to borrow rather than an eventual placeholder.
@@ -70,6 +72,7 @@ const _fishSun = new THREE.Vector3();
 const STEELHEAD_FINAL_URL = "/steelhead-final.glb";
 const CHINOOK_FINAL_URL = "/chinook-final.glb";
 const SHAD_FINAL_URL = "/shad-final.glb";
+const LAMPREY_FINAL_URL = "/lamprey-final.glb";
 
 // Exported so the fish viewer's anatomy plate (src/scene/fishAnatomy.js) can
 // look up the raw geometry/VAT for a species straight out of the same
@@ -80,6 +83,7 @@ export const SPECIES_MODEL_URL = {
   chinook: CHINOOK_FINAL_URL,
   jackChinook: CHINOOK_FINAL_URL,
   shad: SHAD_FINAL_URL,
+  lamprey: LAMPREY_FINAL_URL,
 };
 
 // Per-model fixup rotation, folded into worldMatrix in loadSpeciesModel
@@ -122,14 +126,26 @@ export const SPECIES_MODEL_URL = {
 // Armature-node one (verified directly against each GLB's node/animation
 // JSON), with the same body-along-X/dorsal-along-Y/lateral-along-Z raw local
 // axes. Same rig shape in, same fixup out.
+//
+// lamprey-final.glb is the same root-bone case too — same 16-joint chain,
+// same ~90°-about-Z root-bone compensation — but NOT the same fixup: its
+// per-bone swing (measured off the "Swimming" clip's rotation tracks) rises
+// the OTHER way, from 0.3° at the root bone up to ~16° at the chain's far
+// end, and the root bone's own rest position sits at local X ≈ +2.06, right
+// against the mesh's own +X extent (+2.08) — so for this model the
+// low-swing/rigid end (the head) is at +X, not -X like the other three. A
+// +90° turn would map that nose onto -Z instead of +Z, so this one gets the
+// opposite quarter turn.
 const MODEL_ROTATION_FIX = {
   [STEELHEAD_FINAL_URL]: new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
   [CHINOOK_FINAL_URL]: new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
   [SHAD_FINAL_URL]: new THREE.Matrix4().makeRotationY(Math.PI * 0.5),
+  [LAMPREY_FINAL_URL]: new THREE.Matrix4().makeRotationY(Math.PI * -0.5),
 };
 
-// Flat per-instance tint for each of the four DART species (see data.js),
-// multiplied into the sampled body texture in the fragment shader below.
+// Flat per-instance tint for each of the five DART species the flock draws
+// (see data.js), multiplied into the sampled body texture in the fragment
+// shader below.
 //
 // jackChinook is the only one that still needs this: it borrows
 // chinook-final.glb wholesale (see SPECIES_MODEL_URL) rather than having its
@@ -143,12 +159,12 @@ const MODEL_ROTATION_FIX = {
 // over "subtle" for a cast to survive at all. It still tracks jack chinook's
 // real cast (greener, smaller) rather than an arbitrary color code.
 //
-// Steelhead, chinook and shad are all untinted: each now has its own
-// authored skin (steelhead-final.glb, chinook-final.glb, shad-final.glb —
-// see SPECIES_MODEL_URL), so its flank is already the right color and any
-// multiply here can only push it away from what was painted. Give one of
-// them a speciesTint() again only if it ever goes back to borrowing another
-// species' model.
+// Steelhead, chinook, shad and lamprey are all untinted: each now has its own
+// authored skin (steelhead-final.glb, chinook-final.glb, shad-final.glb,
+// lamprey-final.glb — see SPECIES_MODEL_URL), so its flank is already the
+// right color and any multiply here can only push it away from what was
+// painted. Give one of them a speciesTint() again only if it ever goes back
+// to borrowing another species' model.
 //
 // How far from neutral the casts below are pushed. The hand-picked values are
 // the *direction* of each species' color; this is the only magnitude knob.
@@ -193,6 +209,7 @@ const SPECIES_COLORS = {
   chinook: NO_TINT,
   jackChinook: speciesTint(0.95, 1.1, 1.0),
   shad: NO_TINT,
+  lamprey: NO_TINT,
 };
 const DEFAULT_COLOR = SPECIES_COLORS.steelhead;
 
@@ -203,8 +220,8 @@ const DEFAULT_COLOR = SPECIES_COLORS.steelhead;
 // what differs between them is aTint, which is per instance.
 //
 // This table exists because the shared defaults were all tuned against
-// steelhead and then inherited by two skins painted to a completely different
-// key. The three authored textures are not variations on a theme:
+// steelhead and then inherited by skins painted to a completely different
+// key. The authored textures are not variations on a theme:
 //
 //   steelhead  512px, mid-tone — olive speckled back, silver-pink lateral
 //              band, white belly. The one species that genuinely has visible
@@ -219,6 +236,13 @@ const DEFAULT_COLOR = SPECIES_COLORS.steelhead;
 //              them. Adding much of our own on top is drawing the same effect
 //              twice. Big, coarse, high-contrast diamond scales, so the
 //              procedural bump wants to be sparser or it fights the painting.
+//   lamprey    A jawless fish, not a salmonid or a clupeid — naked, mucus-
+//              covered skin with no scales at all, painted as a soft
+//              gold-to-olive gradient with no scale pattern to speak of. The
+//              procedural scale-bump (uBumpStrength/uScaleFrequency) exists to
+//              catch light off scale edges that this skin doesn't have, so it
+//              wants to be nearly off rather than just sparser, or every other
+//              fish in the shot reads as naked and this one reads as scaled.
 //
 // Anything not named here keeps the shared default.
 const MATERIAL_OVERRIDES = {
@@ -248,6 +272,17 @@ const MATERIAL_OVERRIDES = {
     // cannot shift as the fish turns, which is the one thing a real
     // iridescent flank does. A little of ours on top puts the motion back.
     uIridescenceStrength: 0.03,
+  },
+  [LAMPREY_FINAL_URL]: {
+    // No scales to catch a bump-lit edge — see the note above. Not zeroed:
+    // real lamprey skin still has a soft, uneven texture from mucus and skin
+    // folds, just nothing with the frequency of a scale row, so this is
+    // coarse and faint rather than absent.
+    uBumpStrength: 0.05,
+    uScaleFrequency: 5,
+    // The oily sheen on lamprey skin is duller and less angle-shifting than a
+    // salmonid's guanine iridescence.
+    uIridescenceStrength: 0.02,
   },
 };
 

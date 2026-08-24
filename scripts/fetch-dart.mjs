@@ -201,9 +201,10 @@ function buildRunHistory(rowsByYear) {
   });
 
   // For every day-of-year that appears in ANY year, the min/mean/max of that
-  // day's four-species count across whichever years actually have a record
-  // for it — the counting season's start/end drifts a little year to year,
-  // so not every day has all ten years behind it.
+  // day's `count` (see parseAdultDailyCsv — currently the five simulated
+  // species) across whichever years actually have a record for it — the
+  // counting season's start/end drifts a little year to year, so not every
+  // day has all ten years behind it.
   const byDoy = new Map();
   for (const [, rows] of rowsByYear) {
     for (const row of rows) {

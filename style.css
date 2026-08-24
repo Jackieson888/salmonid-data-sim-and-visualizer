@@ -40,7 +40,11 @@
   --accent: #c1272d;
 
   /* Per-species keys, matching SPECIES_COLORS in scene/fishMesh.js so the
-     table key and the fish in the water are the same color. */
+     table key and the fish in the water are the same color. lamprey's own
+     key color lives down in the "counted at the dam" block below rather than
+     here, purely for history — it was picked back when lamprey was only
+     reported, not swum, and its muted brown still reads as the right color
+     for a jawless, unscaled fish now that it is. */
   --chinook: #ff6b6b;
   --jack-chinook: #ffb066;
   --steelhead: #b9c9c2;
@@ -48,14 +52,19 @@
 
   /* The passage area in the season chart. Not a palette accent — it is the
      water's own green, so the chart reads as belonging to the scene above it
-     rather than as a fifth species color. */
+     rather than as a sixth species color. */
   --series: #4c6b63;
 
-  /* Counted at the dam but never drawn in the water — sockeye, coho, jack
-     coho, Pacific lamprey (see data.js). Same muted, desaturated register as
-     the four swimming species above, but visually distinct from them and
-     from each other, so the composition plate (Phase 2) can give them real
-     weight without implying they're rendered. */
+  /* Counted at the dam but never drawn in the water — sockeye, coho and jack
+     coho (see data.js). Same muted, desaturated register as the swimming
+     species above, but visually distinct from them and from each other, so
+     the composition plate (Phase 2) can give them real weight without
+     implying they're rendered.
+
+     --lamprey lives here too, despite lamprey now being a swum species (see
+     --chinook's note above) — this is still the var its key color and the
+     composition/history plates read from, just no longer literally
+     "never drawn." */
   --sockeye: #d98f95;
   --coho: #7fa383;
   --jack-coho: #b0cdb2;
@@ -350,6 +359,13 @@ body {
 
 #species-breakdown [data-species="jackChinook"] .key:nth-child(3) {
   color: var(--shad);
+}
+
+/* Lamprey gets a row to itself — five species doesn't split evenly into the
+   two-per-row pairing above, and the empty second key/count pair keeps the
+   row's width matching the others instead of ending short. */
+#species-breakdown [data-species="lamprey"] .key:first-child {
+  color: var(--lamprey);
 }
 
 /* ---------------------------------------------------------------------

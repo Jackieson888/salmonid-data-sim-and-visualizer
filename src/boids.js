@@ -49,6 +49,10 @@ export const SPECIES_LENGTH_INCHES = {
   jackChinook: [12, 20],
   chinook: [30, 44],
   steelhead: [24, 32],
+  // Adult Pacific lamprey (Entosphenus tridentatus) returning to spawn —
+  // shorter than a steelhead on average, but a wide range since some of the
+  // run is still growing toward its full anadromous size.
+  lamprey: [18, 27],
 };
 const DEFAULT_LENGTH_INCHES = [30, 35];
 
@@ -157,9 +161,10 @@ export class Fish {
   constructor(x, y, species = "steelhead") {
     this.x = x;
     this.y = y;
-    // Which of the four DART species (see data.js) this fish represents —
-    // the renderer (fishMesh.js) reads this to tint the shared steelhead
-    // mesh per species until species-specific models exist.
+    // Which of the five DART species (see data.js) this fish represents —
+    // the renderer (fishMesh.js) reads this to pick the species' own model
+    // (or, for jackChinook, the adult chinook model plus a tint — see
+    // SPECIES_MODEL_URL/SPECIES_COLORS there).
     this.species = species;
     // Mostly rightward (downstream) with some spread, so a freshly spawned
     // fish already reads as part of the flow instead of facing any which way.

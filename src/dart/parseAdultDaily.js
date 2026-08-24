@@ -46,9 +46,14 @@ export function parseAdultDailyCsv(csvText, project = "Lower Granite") {
   const lines = csvText.split("\n");
   const header = lines[0].split(",").map((name) => name.trim());
 
-  // The four the simulation is actually built on. A missing one here is a
-  // real breakage — the population, spawn mix and swim speed all derive from
-  // them — so this throws rather than quietly reporting a season of zeros.
+  // The four that always appear as their own DART columns. A missing one here
+  // is a real breakage — the population, spawn mix and swim speed all derive
+  // from these plus lamprey (see `count` below) — so this throws rather than
+  // quietly reporting a season of zeros. Lamprey isn't in this group: its own
+  // column is looked up as `optionalCol` below (its name has changed between
+  // years — see the note on lampreyCombinedCol/lampreyDayCol/lampreyNightCol),
+  // but it still feeds `count` unconditionally, via the always-defined
+  // `lamprey` local a few lines down.
   const col = (name) => {
     const i = header.indexOf(name);
     if (i === -1) throw new Error(`DART CSV missing expected column "${name}"`);
@@ -102,16 +107,28 @@ export function parseAdultDailyCsv(csvText, project = "Lower Granite") {
     data.push({
       date: fields[dateCol],
 
-      // DELIBERATELY still only those four. `count` drives the simulated
+      // DELIBERATELY still only these five. `count` drives the simulated
       // population, the spawn ramp and the swim speed (see main.js), and the
-      // renderer has exactly four species to draw with — folding sockeye,
-      // coho and lamprey in here would rebalance the whole run to show fish
-      // that aren't modelled. They are reported in the HUD instead.
-      count: chinook + jackChinook + steelhead + shad,
+      // renderer has exactly five species to draw with (see SPECIES_MODEL_URL
+      // in fishMesh.js) — folding sockeye, coho and jack coho in here would
+      // rebalance the whole run to show fish that aren't modelled. They are
+      // reported in the HUD instead. `lamprey` is defined just above
+      // (unconditionally 0 on a CSV that published neither the combined nor
+      // the day/night columns), so this sum is always safe to take.
+      count: chinook + jackChinook + steelhead + shad + lamprey,
       chinook,
       jackChinook,
       steelhead,
       shad,
+      lamprey,
+      // Kept alongside the combined figure above rather than instead of it:
+      // the split itself is the interesting fact (lamprey pass mostly at
+      // night, salmonids don't — see FIG. 6 in the plates drawer) and the
+      // combined total is what the rest of the app wants. Both are 0 on a
+      // year that never published the split, same as every other optional
+      // column.
+      lampreyDay,
+      lampreyNight,
 
       // A SUBSET of `steelhead`, not an addition to it — DART's Stlhd column
       // already includes both hatchery and wild fish, and the CSV's own notes
@@ -119,21 +136,13 @@ export function parseAdultDailyCsv(csvText, project = "Lower Granite") {
       wildSteelhead: parseCount(fields[wildSteelheadCol]),
 
       // Counted at the dam but not modelled in the water. Small numbers next
-      // to the four above (a few hundred each across a whole season) and
+      // to the five above (a few hundred each across a whole season) and
       // worth reporting for exactly that reason: a passage report that showed
       // only the abundant species would hide the ones anyone is actually
       // worried about.
       sockeye: parseCount(fields[sockeyeCol]),
       coho: parseCount(fields[cohoCol]),
       jackCoho: parseCount(fields[jackCohoCol]),
-      lamprey,
-      // Kept alongside the combined figure rather than instead of it: the
-      // split itself is the interesting fact (lamprey pass mostly at night,
-      // salmonids don't) and the combined total is what most of the app still
-      // wants. Both are 0 on a year that never published the split, same as
-      // every other optional column.
-      lampreyDay,
-      lampreyNight,
 
       // Not modelled anywhere at LWG (always 0 there) but real elsewhere in
       // the DART schema — parsed so a different project doesn't silently

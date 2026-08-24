@@ -58,11 +58,29 @@ const SHAD_PARTS = [
   { id: "caudalFin", label: "Caudal Fin", t: 0.98, x: 0, y: 0.5, note: "Deeply forked — more so than any salmonid's — typical of an open-water schooling fish." },
 ];
 
+// Pacific lamprey: not a bony fish at all — a jawless fish (Agnatha), the
+// most anatomically distinct thing in the run by far. No jaws (an oral sucker
+// disc instead), no paired fins (no pectorals, no pelvics — the dorsal fin(s)
+// and tail finfold are all it has), no scales, no gill cover, no adipose fin.
+// Reusing either list above would put labels on parts a lamprey doesn't have
+// at all, so it gets its own.
+const LAMPREY_PARTS = [
+  { id: "oralDisc", label: "Oral Disc", t: 0.01, x: 0, y: -0.05, note: "A jawless, cartilage-ringed sucker mouth lined with keratinized teeth — used to latch onto a host fish and rasp through skin to feed on blood and tissue, not to bite." },
+  { id: "nostril", label: "Nostril", t: 0.05, x: 0, y: 0.35, note: "A single nasohypophyseal opening on top of the head. Bony fish have paired nostrils; a lamprey has only this one, shared with the pineal (light-sensing) organ beneath it." },
+  { id: "eye", label: "Eye", t: 0.09, x: 0.75, y: 0.2, note: "Small and lidless — degenerate in the juvenile filter-feeding stage and only fully developed once it transforms into the eyed, parasitic adult." },
+  { id: "gillPores", label: "Gill Pores", t: 0.17, x: 0.9, y: -0.1, note: "Seven round external openings in a row behind the eye, each its own pouch — not a single hinged gill cover (operculum) like a jawed fish has." },
+  { id: "dorsalFin", label: "Dorsal Fin", t: 0.55, x: 0, y: 1, note: "Adult Pacific lamprey carry two dorsal fins rather than a bony fish's one. Neither is paired with anything else — no pectoral or pelvic fins exist anywhere on this body." },
+  { id: "secondDorsalFin", label: "Second Dorsal Fin", t: 0.78, x: 0, y: 1, note: "The second of the pair, set back toward the tail and, in a mature adult, sometimes close enough to the first to look nearly continuous." },
+  { id: "lateralLine", label: "Lateral Line", t: 0.45, x: 0.95, y: 0, note: "A row of sensory pores along the flank sensing vibration and pressure change — the same job a bony fish's lateral line does, in an animal not otherwise built like one." },
+  { id: "caudalFin", label: "Caudal Fin", t: 0.98, x: 0, y: 0, note: "A continuous fin fold wrapping the tail rather than a forked or paired-lobe fin — there is no narrow caudal peduncle either; the body simply tapers straight into it." },
+];
+
 const PARTS_BY_SPECIES = {
   chinook: SALMONID_PARTS,
   jackChinook: SALMONID_PARTS,
   steelhead: SALMONID_PARTS,
   shad: SHAD_PARTS,
+  lamprey: LAMPREY_PARTS,
 };
 
 function computeHalfExtents(positions) {

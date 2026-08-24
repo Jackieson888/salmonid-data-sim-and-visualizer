@@ -193,18 +193,21 @@ const SCIENTIFIC_NAMES = {
   jackChinook: "Oncorhynchus tshawytscha",
   steelhead: "Oncorhynchus mykiss",
   shad: "Alosa sapidissima",
+  lamprey: "Entosphenus tridentatus",
 };
 const COMMON_NAMES = {
   chinook: "Chinook Salmon",
   jackChinook: "Jack Chinook Salmon",
   steelhead: "Steelhead",
   shad: "American Shad",
+  lamprey: "Pacific Lamprey",
 };
 const SPECIES_NOTES = {
   chinook: "The largest Pacific salmon, and the species this counting season is named for.",
   jackChinook: "A “jack” is a precocious male Chinook that returns to spawn a year early, at a much smaller size than a typical adult.",
   steelhead: "A sea-run form of rainbow trout. Unlike Pacific salmon, some steelhead survive spawning and return to the ocean to spawn again.",
   shad: "Not native to the Columbia Basin — introduced from the Atlantic coast in the 1870s.",
+  lamprey: "A jawless fish, not a true fish in the bony-fish sense at all — closer kin to hagfish than to salmon. Parasitic on other fish at sea, then dies after its one spawning run, like Pacific salmon.",
 };
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",

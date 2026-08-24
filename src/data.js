@@ -4,16 +4,16 @@ import { parseAdultDailyCsv } from "./dart/parseAdultDaily.js";
 // Real Lower Granite Dam (LWG) daily adult passage counts, read at module load
 // from a snapshot vendored into this repo (public/lwg-adult-daily-2015.csv).
 //
-// Four species drive the simulation — Chinook, Jack Chinook, Steelhead and
-// Shad — and `count` (the number behind the whole population, spawn rate and
-// swim speed; see main.js) is their sum per day. Those are the four the
-// renderer has meshes and tints for.
+// Five species drive the simulation — Chinook, Jack Chinook, Steelhead, Shad
+// and Pacific Lamprey — and `count` (the number behind the whole population,
+// spawn rate and swim speed; see main.js) is their sum per day. Those are the
+// five the renderer has meshes and tints for.
 //
 // The rest of what DART publishes per day is parsed too, and reported in the
 // HUD without being simulated: wild steelhead (a subset of the steelhead
-// count), sockeye, coho, jack coho, Pacific lamprey, the water temperature at
-// the project, and which Chinook run the date falls in. None of it reaches
-// the flock — see the note on `count` in parseAdultDailyCsv (src/dart/).
+// count), sockeye, coho, jack coho, the water temperature at the project, and
+// which Chinook run the date falls in. None of it reaches the flock — see the
+// note on `count` in parseAdultDailyCsv (src/dart/).
 //
 // The parser itself lives in src/dart/parseAdultDaily.js rather than here: it
 // has no fetch and no browser globals, so scripts/fetch-dart.mjs imports the
@@ -21,7 +21,7 @@ import { parseAdultDailyCsv } from "./dart/parseAdultDaily.js";
 // than re-implementing the column-mapping logic a second time.
 //
 // DART_YEAR = 2015: picked over more recent years (2023 in particular) after
-// spot-checking a few — 2015 has substantial counts across all four species
+// spot-checking a few — 2015 has substantial counts across all five species
 // all year, where some other years have long stretches of near-zero Chinook.
 // The dam's counting season runs roughly March-December, not the full
 // calendar year, so runData is shorter than 365 entries; nothing here

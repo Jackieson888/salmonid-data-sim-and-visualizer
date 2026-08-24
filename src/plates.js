@@ -18,8 +18,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_W = 1000;
 const LAST = runData.length - 1;
 
-// The eight DART counts at LWG that have a color: the four the flock draws,
-// and the four it doesn't (see --sockeye etc. in style.css). Shared order
+// The eight DART counts at LWG that have a color: the five the flock draws,
+// and the three it doesn't (see --sockeye etc. in style.css). Shared order
 // everywhere a plate stacks or lists them, so the composition plate, its
 // legend and its "today" bar always agree on which band is which.
 const ALL_SPECIES = [
@@ -27,10 +27,10 @@ const ALL_SPECIES = [
   { key: "jackChinook", label: "Jack Chinook", swum: true },
   { key: "steelhead", label: "Steelhead", swum: true },
   { key: "shad", label: "Shad", swum: true },
+  { key: "lamprey", label: "Lamprey", swum: true },
   { key: "sockeye", label: "Sockeye", swum: false },
   { key: "coho", label: "Coho", swum: false },
   { key: "jackCoho", label: "Jack Coho", swum: false },
-  { key: "lamprey", label: "Lamprey", swum: false },
 ];
 
 function svgEl(tag, attrs = {}) {
@@ -283,7 +283,7 @@ function buildCompositionPlate(cursorSetters, todayUpdaters) {
   });
 
   figure.appendChild(
-    note("Four species swim in the water above; sockeye, coho, jack coho and lamprey are counted at the dam but not rendered."),
+    note("Five species swim in the water above; sockeye, coho and jack coho are counted at the dam but not rendered."),
   );
   return figure;
 }
