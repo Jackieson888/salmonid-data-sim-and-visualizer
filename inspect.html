@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fish Viewer — Salmon Run</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="inspect.css" />
+</head>
+<body>
+  <main id="app">
+    <canvas id="fish-canvas"></canvas>
+
+    <a id="back-link" href="/">&larr; Back to river</a>
+
+    <!-- Styled to match the river view's HUD (see style.css) rather than as a
+         separate look: hairline rules, uppercase labels, one accent color. -->
+    <div id="inspect-panel">
+      <p class="field-head"><span class="label">Fish viewer</span></p>
+
+      <label class="row">
+        <span class="label">Species</span>
+        <select id="species-select">
+          <option value="chinook">Chinook</option>
+          <option value="jackChinook">Jack Chinook</option>
+          <option value="steelhead" selected>Steelhead</option>
+          <option value="shad">Shad</option>
+        </select>
+      </label>
+
+      <label class="row">
+        <span class="label">Swim speed</span>
+        <input type="range" id="speed-range" min="0" max="250" value="100" />
+      </label>
+
+      <label class="row">
+        <span class="label">Stroke amplitude</span>
+        <input type="range" id="amplitude-range" min="0" max="150" value="100" />
+      </label>
+
+      <p class="field-head"><span class="label">Material</span></p>
+
+      <label class="row">
+        <span class="label">Shininess</span>
+        <input type="range" id="shininess-range" min="1" max="64" value="24" />
+      </label>
+
+      <label class="row">
+        <span class="label">Specular strength</span>
+        <input type="range" id="specular-strength-range" min="0" max="150" value="55" />
+      </label>
+
+      <label class="row">
+        <span class="label">Specular fresnel</span>
+        <input type="range" id="specular-fresnel-range" min="0" max="400" value="200" />
+      </label>
+
+      <label class="row">
+        <span class="label">Scale bump</span>
+        <input type="range" id="bump-strength-range" min="0" max="100" value="35" />
+      </label>
+
+      <label class="row">
+        <span class="label">Scale frequency</span>
+        <input type="range" id="scale-frequency-range" min="1" max="40" value="12" />
+      </label>
+
+      <label class="row">
+        <span class="label">Iridescence</span>
+        <input type="range" id="iridescence-strength-range" min="0" max="100" value="25" />
+      </label>
+
+      <div class="row toggles">
+        <label><input type="checkbox" id="playing-toggle" checked /> Swimming</label>
+        <label><input type="checkbox" id="rotate-toggle" checked /> Turntable</label>
+        <label><input type="checkbox" id="wireframe-toggle" /> Wireframe</label>
+      </div>
+    </div>
+
+    <div id="fish-loading">
+      <div class="bar"></div>
+      <p>Loading fish assets</p>
+    </div>
+  </main>
+
+  <script type="module" src="/src/inspect.js"></script>
+</body>
+</html>

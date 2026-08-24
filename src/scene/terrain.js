@@ -108,6 +108,21 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
     // then a dissolve across the rest of the oversized plane — the same fade,
     // at the same edge, that the water surface uses overhead (see
     // planeEdgeFade in glsl.js).
+    //
+    // This stays an ALPHA fade, and the bed stays in the transparent queue.
+    // Making it opaque was tried, to put one depth-writing surface ahead of
+    // the transparent stack and give the god rays and silt behind it some
+    // early-Z to reject against — this scene otherwise has no opaque pass at
+    // all. It was reverted on both halves of the trade:
+    //
+    //   - The win is small here. Almost all of the shaft and silt geometry
+    //     stands in the water column ABOVE the bed, not behind it, so there is
+    //     very little for the bed to reject.
+    //   - The cost is visible. An opaque bed hides the sky sphere completely
+    //     below the horizon, and the color it has to dissolve into instead —
+    //     fogColorAt() at the bed's own depth — is darker than the sky it used
+    //     to blend against, which puts a tonal step across the far edge of the
+    //     plane exactly where the fade exists to avoid one.
     float edgeFade =
       planeEdgeFade(vWorldPos.xz, center, planeHalfSize, coreFrac);
 

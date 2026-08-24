@@ -132,8 +132,12 @@ const VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
-  ${causticGlowChunk({ taps: 5 })}
+// A function, not a constant: the caustics and surface-normal chunks it
+// splices in are chosen from the current tier (see glsl.js), and the governor
+// can change that mid-session. Evaluated once at import, this shader would
+// keep sampling a caustics target that no longer exists.
+const fragmentShader = () => /* glsl */ `
+  ${causticGlowChunk({ taps: QUALITY.causticTaps })}
   ${waterInfoChunk()}
   ${CAUSTIC_SATURATE_GLSL}
   ${EDGE_FADE_GLSL}
@@ -293,7 +297,7 @@ export function buildWaterMesh(bounds, causticsTextureSize) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: VERTEX_SHADER,
-    fragmentShader: FRAGMENT_SHADER,
+    fragmentShader: fragmentShader(),
     transparent: true,
     depthWrite: false,
     // The fixed camera (see sceneSetup.js) only ever views this plane from

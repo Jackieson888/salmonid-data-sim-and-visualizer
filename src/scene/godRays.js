@@ -109,7 +109,8 @@ const VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
+// A function for the same reason water.js's fragment shader is — see there.
+const fragmentShader = () => /* glsl */ `
   ${causticGlowChunk()}
   ${FOG_GLSL}
 
@@ -252,7 +253,7 @@ export function buildGodRays(bounds, cameraPosition, cameraTarget) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: VERTEX_SHADER,
-    fragmentShader: FRAGMENT_SHADER,
+    fragmentShader: fragmentShader(),
     transparent: true,
     // Additive: shafts are light being added to the scene, not a surface
     // covering it. Overlapping planes therefore accumulate into a brighter

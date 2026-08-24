@@ -663,6 +663,30 @@ body {
 }
 
 /* ---------------------------------------------------------------------
+   Fish viewer link (see src/inspect.js)
+   --------------------------------------------------------------------- */
+
+#fish-viewer-link {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  padding: 6px 10px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+#fish-viewer-link:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------------
    Debug panel (D key — see main.js)
    --------------------------------------------------------------------- */
 

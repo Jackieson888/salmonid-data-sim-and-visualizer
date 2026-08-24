@@ -126,9 +126,15 @@ node scripts/screenshot.mjs out.png --day 250
 1. **Per-species models** — all four species currently share
    `steelhead-final.glb`. Each new mesh needs to be authored against the same
    vertex budget and swim rig, then pointed at in `SPECIES_MODEL_URL`.
-2. **A fish LOD** — `MAX_POPULATION` (1200) is bounded by vertex cost, not by
-   the flocking sim. Most fish on screen are fogged past legibility; a cheaper
-   vertex path for those is what would raise the ceiling.
+2. **Revisit the population cap** — this used to read "a fish LOD", on the
+   basis that the cap was bounded by vertex cost at ~1300 vertices per fish.
+   That figure was wrong: `steelhead-final.glb` holds **435** vertices (654
+   triangles), so the flock costs roughly a quarter of what was assumed, and it
+   is not the frame's most expensive item — the caustics pass and the water
+   simulation each cost considerably more (see `src/quality.js`). The cap is
+   really a fill-rate and CPU-simulation limit, and it now scales by device
+   tier. Worth re-measuring what the high tier can actually carry before
+   building an LOD for a cost that is not the bottleneck.
 3. **Tune the "feel"** — the `Flock` options in `src/main.js`
    (`perceptionRadius`, `separationRadius`, `maxSpeed`) and the framing
    constants in `src/scene/sceneSetup.js`.

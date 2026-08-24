@@ -85,7 +85,6 @@ const SETTINGS = {
     // the edge at this tier anyway.
     waterSizeMultiplier: 1.7,
 
-    skySegments: [16, 8],
 
     // Blinn-Phong specular and the rim term are two pow() calls per fragment
     // across the whole flock. Legible on a 27" display, invisible on a phone.
@@ -111,7 +110,6 @@ const SETTINGS = {
     shaftCount: 8,
     bloom: "half",
     waterSizeMultiplier: 2.1,
-    skySegments: [24, 12],
     fishHighlights: true,
     vatFrames: 30,
   },
@@ -133,7 +131,6 @@ const SETTINGS = {
     shaftCount: 18,
     bloom: "full",
     waterSizeMultiplier: 2.4,
-    skySegments: [32, 16],
     fishHighlights: true,
     vatFrames: 30,
   },
@@ -306,6 +303,9 @@ function median(values, count) {
 // boundary would upgrade, miss the threshold, downgrade, and repeat. Each
 // round trip is two full world rebuilds. Sitting one tier lower than
 // strictly necessary is a much better failure than oscillating between them.
+// `onChange` is null when the tier was forced via ?quality=. The governor
+// still measures in that case — the debug panel's frame time is the whole
+// point of forcing a tier to A/B it — it just never acts on what it measures.
 export function createPerfGovernor(onChange) {
   const samples = new Float32Array(WINDOW_FRAMES);
   let count = 0;
@@ -328,6 +328,8 @@ export function createPerfGovernor(onChange) {
 
       lastMedian = median(samples, count);
       count = 0;
+
+      if (onChange === null) return;
 
       const index = TIERS.indexOf(currentTier);
       if (lastMedian > DOWNGRADE_MS && index > 0) {

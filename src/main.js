@@ -12,7 +12,7 @@ import { buildGodRays } from "./scene/godRays.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
 import {
   createCausticsGenerator,
-  CAUSTICS_TARGET_SIZE,
+  causticsTargetSize,
 } from "./scene/causticsGenerator.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
 import {
@@ -21,6 +21,13 @@ import {
   sweptSunDirection,
 } from "./scene/season.js";
 import { setFogSeason } from "./scene/fog.js";
+import {
+  QUALITY,
+  qualityTier,
+  qualityReason,
+  qualityForced,
+  createPerfGovernor,
+} from "./quality.js";
 
 const canvas = document.getElementById("river-canvas");
 
@@ -67,7 +74,7 @@ function setReadout(el, value) {
 //
 // These are the real per-day DART numbers (see data.js), not
 // flock.activeCount(): the simulated population is capped well below them for
-// performance (see MAX_POPULATION), so it is not what a viewer wants to read
+// performance (see maxPopulation()), so it is not what a viewer wants to read
 // as "how many fish passed today."
 //
 // The figures tick between one day and the next across the day rather than
@@ -459,6 +466,39 @@ function rebuildWorld() {
   createWorld();
 }
 
+// Re-applies the whole scene at a new device tier, after the governor has
+// decided the current one isn't holding frame rate (see quality.js).
+//
+// Everything scaled by the tier is fixed when a resource is constructed —
+// render-target sizes, geometry segment counts, instance capacity, which
+// caustics path is compiled into each material, whether the bloom pass exists
+// at all — so the only way to change it is to build it again. That is a real
+// stall of a few frames, which is why the governor is deliberately slow to
+// trigger and never reverses itself.
+//
+// The order matters: the renderer's pixel ratio and the composer come first
+// (sceneSetup owns those), then the bounds-shaped world, then the fish, which
+// read the freshly-built caustics texture.
+function applyTier() {
+  sceneSetup.applyQuality(bounds);
+  rebuildWorld();
+  buildFishRenderer();
+
+  // Bring the live population down to the new cap immediately rather than
+  // waiting for fish to drain out through the exit line. The pacing loop only
+  // ever adds fish (see the render loop), so without this a downgrade would
+  // leave the flock above its new ceiling for as long as it took the run to
+  // turn over — which is exactly the interval the downgrade was meant to fix.
+  const excess = flock.activeCount() - maxPopulation();
+  if (excess > 0) flock.removeActive(excess);
+}
+
+// Always created, so the debug panel has a frame time to show. When a tier is
+// forced via ?quality= it is handed a null callback: it keeps measuring but
+// never acts, so A/B testing a tier on desktop isn't immediately overridden by
+// the governor deciding otherwise.
+const governor = createPerfGovernor(qualityForced() ? null : applyTier);
+
 const SPECIES_KEYS = ["chinook", "jackChinook", "steelhead", "shad"];
 
 // Caps how many fish are simulated/rendered at once, across all species.
@@ -472,20 +512,28 @@ const SPECIES_KEYS = ["chinook", "jackChinook", "steelhead", "shad"];
 // scale the whole day proportionally instead, so the percentages survive and
 // only the absolute number is capped.
 //
-// The ceiling is set by vertex cost, not fish logic: the real mesh (see
-// fishMesh.js) is ~1300 vertices, each doing 2 VAT samples plus a caustics
-// read, on top of per-instance fog/specular/depth work. 1200 fish keeps that
-// near 2M vertex shader invocations per frame, which holds 60fps on
-// mid-range hardware. Raise it only alongside a cheaper vertex path (an LOD
-// for the ~80% of fish that are fogged past legibility is the obvious one).
-const MAX_POPULATION = 1200;
-
-// Extra instance slots each species renderer gets on top of MAX_POPULATION.
+// The ceiling was documented here as vertex-bound, on the basis that the mesh
+// is ~1300 vertices and 1200 fish therefore cost ~2M vertex shader invocations
+// a frame. That figure was wrong. steelhead-final.glb's POSITION accessor holds
+// **435** vertices (654 triangles), so the flock is ~522K invocations — a
+// quarter of what the old note claimed, and comfortably not the most expensive
+// thing in the frame. The caustics pass and the water simulation each cost far
+// more (see quality.js), which is why they are what the tiers cut first and
+// why the fish LOD the README lists as a next step is not the win it looks
+// like.
 //
-// MAX_POPULATION bounds the *active* fish, but flock.fish also holds fish
+// What this number actually bounds is fill rate and CPU: every fish is a
+// transparent, blended, sorted draw, and the flocking simulation walks the
+// whole array four times a step. Both scale with the tier, hence the table in
+// quality.js rather than a constant here.
+const maxPopulation = () => QUALITY.population;
+
+// Extra instance slots each species renderer gets on top of maxPopulation().
+//
+// maxPopulation() bounds the *active* fish, but flock.fish also holds fish
 // that have crossed the exit line and are still fading out over
 // REMOVE_FADE_FRAMES (see boids.js). Sizing renderer capacity to
-// MAX_POPULATION alone meant those pushed the array past capacity and the
+// maxPopulation() alone meant those pushed the array past capacity and the
 // overflow was silently dropped from the draw — and since fading fish are the
 // oldest and sit at the front of the array, the fish actually dropped were
 // the newest spawns, which then popped in a beat late.
@@ -503,6 +551,38 @@ const FISH_RENDER_HEADROOM = 8 * REMOVE_FADE_FRAMES;
 // shape — so fishRenderer stays null until it resolves; every reader below
 // (createWorld, applySeason, the render loop) guards for that.
 let fishRenderer = null;
+
+// The baked per-URL GLB assets (geometry + VAT + texture), held from the one
+// load so the renderers can be rebuilt without re-fetching or re-baking.
+let fishAssets = null;
+
+// Builds (or rebuilds) the instanced fish renderers against the current tier.
+//
+// This has to be a rebuild rather than an in-place adjustment because the
+// caustics path — real texture sample or procedural stand-in — is compiled
+// into the material (see causticGlowChunk in glsl.js), and instance capacity
+// is fixed when the InstancedMesh is allocated. Both change with the tier.
+//
+// Safe to call before the assets resolve; it simply does nothing until then.
+function buildFishRenderer() {
+  if (!fishAssets) return;
+
+  if (fishRenderer) {
+    scene.remove(fishRenderer.mesh);
+    fishRenderer.dispose();
+  }
+
+  fishRenderer = createFishInstancedMesh(
+    fishAssets,
+    maxPopulation() + FISH_RENDER_HEADROOM,
+  );
+  scene.add(fishRenderer.mesh);
+  // createWorld()/applySeason() have both already run by the first call — the
+  // mesh didn't exist yet to receive either, so hand it the current state.
+  fishRenderer.setBounds(bounds, waterSize, depthRange, camera.position);
+  fishRenderer.setCausticsTexture(causticsGenerator?.texture ?? null);
+  fishRenderer.setSeason(currentDayOfYear);
+}
 
 // Drives the sky/sun (sceneSetup.js), the distance fog every surface fades
 // into (fog.js), the water surface's body/reflection colors (water.js), the
@@ -611,7 +691,7 @@ buildSeasonChart();
 //                  rebuild of the whole table.
 //
 // The scaling is what preserves the day's real percentages (see
-// MAX_POPULATION above): a day over the cap has every species multiplied by
+// maxPopulation() above): a day over the cap has every species multiplied by
 // one shared factor, so each keeps its exact share and only the absolute
 // number shrinks. A day already under the cap passes through untouched.
 // Counts stay fractional after scaling — deliberately, since they're only
@@ -625,7 +705,7 @@ for (let i = 0; i < runData.length; i++) {
   let total = 0;
   for (const key of SPECIES_KEYS) total += day[key] ?? 0;
 
-  const scale = total > MAX_POPULATION ? MAX_POPULATION / total : 1;
+  const scale = total > maxPopulation() ? maxPopulation() / total : 1;
   const base = i * SPECIES_KEYS.length;
   let cumulative = 0;
   for (let s = 0; s < SPECIES_KEYS.length; s++) {
@@ -641,7 +721,7 @@ for (let i = 0; i < runData.length; i++) {
   dayTargets[i] =
     total > 0
       ? Math.round(cumulative)
-      : Math.min(MAX_POPULATION, Math.round(day.count ?? 0));
+      : Math.min(maxPopulation(), Math.round(day.count ?? 0));
 }
 
 // Precomputed day-over-day change in target population, one entry per day,
@@ -870,8 +950,13 @@ timelineInput.addEventListener("input", (e) => {
 const AMBIENT_DROP_INTERVAL_FRAMES = 30;
 let rippleFrame = 0;
 
-// Parity counter for the half-rate caustics pass — see the render loop.
+// Parity counter for the reduced-rate caustics pass — see the render loop.
 let causticsFrame = 0;
+
+// How often the HUD's figures are rewritten, in frames. See the call site in
+// the render loop for why this is throttled at all.
+const HUD_UPDATE_INTERVAL_FRAMES = 8;
+let hudFrame = 0;
 
 // Reused across drops to hold the ripple's position in the water sim's
 // normalized [-1, 1] uv space. Shifted by the sim's margin below, since the
@@ -879,9 +964,14 @@ let causticsFrame = 0;
 // see waterWorldSize().
 const rippleCenter = { x: 0, z: 0 };
 
-function emitRipples() {
-  rippleFrame++;
-  if (rippleFrame % AMBIENT_DROP_INTERVAL_FRAMES !== 0) return;
+// `dt` is in 60fps frames (see the render loop), so the counter advances in
+// the same units AMBIENT_DROP_INTERVAL_FRAMES is expressed in and the drop
+// cadence stays tied to wall-clock time rather than to the display's rate.
+// Wrapped rather than left to climb, so the modulo below keeps working after
+// a long session.
+function emitRipples(dt) {
+  rippleFrame = (rippleFrame + dt) % AMBIENT_DROP_INTERVAL_FRAMES;
+  if (rippleFrame >= dt) return;
 
   // One broad, soft ripple every AMBIENT_DROP_INTERVAL_FRAMES frames. The
   // 0.05-0.08 sim-space radius was tuned back when the sim's [-1, 1] space
@@ -903,32 +993,71 @@ function emitRipples() {
 // ---------------------------------------------------------------------
 // Animation loop
 // ---------------------------------------------------------------------
+// One frame at 60fps, in milliseconds. `dt` is expressed in these units
+// throughout — the simulation's constants were all tuned against a 60fps
+// frame, so dt = 1 is the reference and nothing needed retuning to decouple
+// from it.
+const REFERENCE_FRAME_MS = 1000 / 60;
+
+// Upper bound on a single step, in reference frames. A backgrounded tab stops
+// receiving rAF entirely, so the first frame back can be minutes long; a tier
+// change rebuilds every GPU resource in the scene and stalls for a beat. Both
+// would otherwise teleport the whole flock downstream in one step. Three
+// frames is enough headroom to stay smooth through an ordinary hitch and low
+// enough that a big one just drops motion instead of exploding the sim.
+const MAX_STEP_FRAMES = 3;
+
 function loop(t) {
   // Advance the simulation clock (see its declaration above). Everything
   // below that moves reads `simTime`, never `t`, so pausing stops the whole
   // scene rather than just the date.
-  if (lastFrameTime !== null && isPlaying) simTime += t - lastFrameTime;
+  const rawDelta = lastFrameTime === null ? REFERENCE_FRAME_MS : t - lastFrameTime;
+  if (lastFrameTime !== null && isPlaying) simTime += rawDelta;
   lastFrameTime = t;
   const seconds = simTime * 0.001;
 
-  // 1. Advance the flocking simulation one tick. The HUD's fish counts are
+  // Frame time is what the governor watches, and it wants the real elapsed
+  // time whether or not the scene is playing — a paused frame still renders.
+  governor?.sample(rawDelta);
+
+  // How much simulated time this frame represents, in 60fps frames.
+  //
+  // This used to be the constant 1, which coupled the whole scene to the
+  // display: a phone holding 30fps ran the river at half speed, and a 120Hz
+  // display ran it at double. Both are now the same river at the same speed,
+  // dropping motion rather than slowing down — which matters most on exactly
+  // the low-end devices this scene is being scaled for, since a slideshow that
+  // is also in slow motion reads as broken rather than as merely coarse.
+  const dt = Math.min(MAX_STEP_FRAMES, rawDelta / REFERENCE_FRAME_MS);
+
+  // 1. Advance the flocking simulation. The HUD's fish counts are
   // driven by the real per-day DART data instead (see
   // updateFishCountDisplay), not this simulated count, so nothing here
   // needs to run every frame — only when dayIndex actually changes (see
   // jumpToDay and the day-rollover below).
-  if (isPlaying) flock.step(1);
+  if (isPlaying) flock.step(dt);
 
   sceneSetup.updateCamera();
 
   if (!debugPanel.hidden) {
     const dist = camera.position.distanceTo(cameraTarget);
+    const info = renderer.info.render;
+    const median = governor?.medianMs ?? 0;
     debugPanel.textContent =
+      `tier: ${qualityTier()}${qualityForced() ? " (forced)" : ""}\n` +
+      `  why: ${qualityReason()}\n` +
+      `frame: ${median ? `${median.toFixed(1)}ms · ${(1000 / median).toFixed(0)}fps` : "measuring…"}\n` +
+      `pixelRatio: ${renderer.getPixelRatio().toFixed(2)}\n` +
+      `caustics: ${QUALITY.realCaustics ? `${QUALITY.causticsSegments}seg / ${QUALITY.causticsTargetSize}px / ${QUALITY.causticsIterations}it` : "procedural"}\n` +
+      `waterSim: ${QUALITY.waterSimSize || "off"}\n` +
+      `bloom: ${QUALITY.bloom} · silt: ${QUALITY.particleCount} · shafts: ${QUALITY.shaftCount}\n` +
+      `draws: ${info.calls} · tris: ${info.triangles.toLocaleString()}\n` +
       `distance to target: ${dist.toFixed(1)}\n` +
       `camera: (${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)})\n` +
       `target: (${cameraTarget.x.toFixed(0)}, ${cameraTarget.y.toFixed(0)}, ${cameraTarget.z.toFixed(0)})\n` +
       `bounds: ${bounds.width.toFixed(0)} x ${bounds.height.toFixed(0)}\n` +
       `camera.far: ${camera.far.toFixed(0)}\n` +
-      `fish: ${flock.activeCount()} active / ${flock.fish.length} total\n` +
+      `fish: ${flock.activeCount()} active / ${flock.fish.length} total (cap ${maxPopulation()})\n` +
       `drawn: ${fishRenderer?.renderedCount() ?? 0} instances`;
   }
 
@@ -943,16 +1072,26 @@ function loop(t) {
   // are. setWaterTexture stays outside: the sim only swaps ping-pong targets
   // when it steps, so re-handing the same one costs nothing, and it keeps the
   // surface correct if the world is rebuilt (a resize) while paused.
-  if (isPlaying) {
-    emitRipples();
-    waterSim.step();
+  //
+  // All of it is skipped at the low tier, where waterSim is null and the
+  // surface generates its own height field and glint procedurally in-shader
+  // (see createWorld, and glsl.js). water.setTime is what drives that, and is
+  // pushed unconditionally so the two paths share one call site.
+  if (waterSim) {
+    if (isPlaying) {
+      emitRipples(dt);
+      waterSim.step();
+    }
+    water.setWaterTexture(waterSim.texture);
   }
-  water.setWaterTexture(waterSim.texture);
+  water.setTime(seconds);
 
   // Walk the sun along the day's arc and hand the same direction to everything
   // that needs to agree on where the light is: the disc in the sky, the
-  // refraction the caustics pass traces, and the shafts tracing back up to
-  // their surface entry points. Pushed before the caustics render below so the
+  // refraction the caustics pass traces, the shafts tracing back up to their
+  // surface entry points, and the fish — which refract it themselves, since
+  // they are the only one of the four that is lit from below the surface
+  // (see refractedSunDirection in season.js). Pushed before the caustics render below so the
   // net this frame accumulates is the one belonging to this frame's sun.
   //
   // This is what makes the shafts sweep instead of standing still — see
@@ -960,15 +1099,20 @@ function loop(t) {
   // shafts) is the thing that does it.
   const sun = sweptSunDirection(seconds);
   sceneSetup.setSunDirection(sun);
-  causticsGenerator.setSunDirection(sun);
+  causticsGenerator?.setSunDirection(sun);
   godRays.setSunDirection(sun);
+  fishRenderer?.setSunDirection(sun);
 
-  // The caustics accumulation pass is the most expensive thing in the frame
-  // after the fish — a 256x256 grid whose vertex shader ray-marches the
-  // environment map up to 40 steps per vertex. It runs at half rate because
-  // the thing it is tracking barely moves: the water sim damps at 0.9975 and
-  // gets a drop every 30 frames (see AMBIENT_DROP_INTERVAL_FRAMES), so the
-  // light net is a slow swell, not something with per-frame detail to lose.
+  // The caustics accumulation pass is the most expensive thing in the frame —
+  // by a wide margin, and well ahead of the fish, despite what the note here
+  // used to say. It is a grid of up to 257x257 vertices, each running a loop
+  // of up to 40 texture fetches in the VERTEX shader, splatted additively into
+  // a 1024^2 half-float target. It runs at a fraction of the frame rate
+  // because the thing it is tracking barely moves: the water sim damps at
+  // 0.9975 and gets a drop every 30 frames (see AMBIENT_DROP_INTERVAL_FRAMES),
+  // so the light net is a slow swell, not something with per-frame detail to
+  // lose. The divisor comes from the tier (see quality.js); at the low tier
+  // this whole block is skipped, because causticsGenerator is null.
   //
   // Deliberately NOT applied to waterSim.step() as well. That is a discrete
   // wave equation stepped once per frame, so halving its rate would halve the
@@ -979,7 +1123,11 @@ function loop(t) {
   // would produce is identical to the one already in the target. createWorld()
   // renders it once directly, so a resize while paused still gets a valid net
   // rather than an empty one.
-  if (isPlaying && causticsFrame++ % 2 === 0) {
+  if (
+    causticsGenerator &&
+    isPlaying &&
+    causticsFrame++ % QUALITY.causticsInterval === 0
+  ) {
     causticsGenerator.render(waterSim.texture);
   }
 
@@ -1012,7 +1160,17 @@ function loop(t) {
     // `progress` the spawn ramp below runs on — so the readout climbs at the
     // rate the school is actually filling in rather than announcing the whole
     // day's change in one step at midnight.
-    updateFishCountDisplay(dayIndex, progress);
+    //
+    // Throttled rather than run every frame. A day takes FRAMES_PER_DAY frames
+    // to cross, so these figures move by well under one displayed digit per
+    // frame — but the call is not cheap: ten toLocaleString() allocations, a
+    // querySelector per secondary row, and a handful of textContent writes
+    // that dirty layout. At this interval it is still smooth to the eye (the
+    // numbers were never changing faster than this anyway) and costs an eighth
+    // as much.
+    if (hudFrame++ % HUD_UPDATE_INTERVAL_FRAMES === 0) {
+      updateFishCountDisplay(dayIndex, progress);
+    }
 
     const target = desiredPopulation(dayIndex, progress);
     const active = flock.activeCount();
@@ -1033,13 +1191,16 @@ function loop(t) {
       replacementFraction(target, active) *
       diurnalRate(progress);
 
-    spawnAccumulator += arrivals;
+    // Scaled by dt for the same reason flock.step() is: `arrivals` is a
+    // per-60fps-frame rate, so leaving it unscaled would make the run fill in
+    // at a speed that depended on the display.
+    spawnAccumulator += arrivals * dt;
     while (spawnAccumulator >= 1) {
       spawnAtLeftEdge();
       spawnAccumulator -= 1;
     }
 
-    frameCounter++;
+    frameCounter += dt;
     if (frameCounter >= FRAMES_PER_DAY) {
       frameCounter = 0;
       dayIndex = (dayIndex + 1) % runData.length;
@@ -1065,16 +1226,10 @@ requestAnimationFrame(loop);
 
 loadFishAssets()
   .then((assetsByUrl) => {
-    fishRenderer = createFishInstancedMesh(
-      assetsByUrl,
-      MAX_POPULATION + FISH_RENDER_HEADROOM,
-    );
-    scene.add(fishRenderer.mesh);
-    // createWorld()/applySeason() have both already run by now — the mesh
-    // didn't exist yet to receive either, so hand it the current state.
-    fishRenderer.setBounds(bounds, waterSize, depthRange, camera.position);
-    fishRenderer.setCausticsTexture(causticsGenerator.texture);
-    fishRenderer.setSeason(currentDayOfYear);
+    // Stashed so a tier change can rebuild the renderers off the same baked
+    // assets without re-fetching or re-baking them — see buildFishRenderer.
+    fishAssets = assetsByUrl;
+    buildFishRenderer();
 
     // Fade the loading overlay out, then drop it from the DOM once the
     // transition finishes (see style.css) rather than leaving a hidden-but-

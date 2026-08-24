@@ -71,7 +71,8 @@ const DRIFT_X = 7;
 const BOB_AMPLITUDE = 5.5;
 const BOB_SPEED = 0.22;
 
-const VERTEX_SHADER = /* glsl */ `
+// A function for the same reason water.js's fragment shader is — see there.
+const vertexShader = () => /* glsl */ `
   ${causticGlowChunk()}
 
   attribute vec3 aOrigin;
@@ -236,7 +237,7 @@ export function buildParticles(bounds, cameraPosition, cameraTarget) {
 
   const material = new THREE.ShaderMaterial({
     uniforms,
-    vertexShader: VERTEX_SHADER,
+    vertexShader: vertexShader(),
     fragmentShader: FRAGMENT_SHADER,
     transparent: true,
     // Motes are unlit specks in suspension, not solid objects — they should

@@ -57,7 +57,7 @@ export const CAUSTIC_GLOW_GLSL = /* glsl */ `
 //
 // The cost side is what makes this worth splitting out. The fish vertex
 // shader also does 2 VAT samples, so the 5-tap blur put it at 7 vertex
-// texture fetches per vertex; at ~1300 verts per fish and up to
+// texture fetches per vertex; at 435 verts per fish and up to
 // MAX_POPULATION instances (see main.js) that is the single largest term in
 // the frame's vertex cost. Dropping to 1 tap takes it to 3.
 //
@@ -102,18 +102,31 @@ export const CAUSTIC_GLOW_POINT_GLSL = /* glsl */ `
 // presence of moving caustics everywhere the scene currently reads them —
 // which is what the water, the shafts, the silt and the fish are all lit by.
 //
-// PROC_CAUSTIC_SCALE is in world units (a fish is 72-84 units nose to tail,
-// see boids.js), so the cell size is set to read as roughly the same spacing
-// the real pass produces at this scene's depth.
-const PROC_CAUSTIC_SCALE = 0.055;
+// Wavenumber, in radians per world unit, so the web's cell spacing is
+// 2*PI / PROC_CAUSTIC_SCALE ≈ 70 world units — about one fish length (72-84,
+// see boids.js), which is roughly the spacing the real pass produces at this
+// scene's depth. Coarser than this and the net stops reading as caustics and
+// starts reading as large blobs drifting over everything.
+const PROC_CAUSTIC_SCALE = 0.09;
 
 export const CAUSTIC_GLOW_PROC_GLSL = /* glsl */ `
   float causticGlowProc(vec2 worldXZ, float time) {
     vec2 p = worldXZ * ${glslFloat(PROC_CAUSTIC_SCALE)};
 
+    // Domain warp, and the reason this reads as caustics rather than as
+    // wallpaper. Crossed sine pairs alone interfere into a *regular* lattice
+    // — visibly a grid of identical cells, which is the one thing real
+    // caustics never look like. Displacing the sample point by a slower,
+    // differently-scaled wave before evaluating the pattern stretches and
+    // pinches those cells unevenly and animates that distortion, which is
+    // what the real thing does as the swell moves under it.
+    p += vec2(
+      sin(p.y * 0.5 + time * 0.30),
+      cos(p.x * 0.45 - time * 0.25)
+    ) * 0.85;
+
     // Two crossed wave pairs, at deliberately non-harmonic frequencies and
-    // drift rates so the interference pattern never visibly repeats or
-    // pulses in step with itself.
+    // drift rates so the pattern never repeats or pulses in step with itself.
     float a = sin(p.x + time * 0.9) + sin(p.y * 1.17 - time * 0.7);
     float b = sin((p.x + p.y) * 0.73 + time * 1.1)
             + sin((p.x - p.y) * 0.91 - time * 0.5);
@@ -122,8 +135,14 @@ export const CAUSTIC_GLOW_PROC_GLSL = /* glsl */ `
     // so this is a distance-to-the-web term. Inverted and sharpened into
     // thin filaments; the exponent is what separates "bright web on dark
     // water" from "generally mottled".
-    float web = 1.0 - clamp((abs(a) + abs(b)) * 0.38, 0.0, 1.0);
-    return pow(web, 3.0) * 1.6;
+    //
+    // The output scale is set against what the real pass actually
+    // produces — causticsGenerator.js's CAUSTICS_FACTOR * area ratio, blurred,
+    // lands mostly in the low tenths — because every consumer multiplies this
+    // by its own strength constant (8 on the surface, 18 on the fish, 30 on
+    // the shafts) that was tuned against that range.
+    float web = 1.0 - clamp((abs(a) + abs(b)) * 0.42, 0.0, 1.0);
+    return pow(web, 2.6) * 0.42;
   }
 `;
 
@@ -138,30 +157,55 @@ export const CAUSTIC_GLOW_PROC_GLSL = /* glsl */ `
 // both cheaper and exact.
 //
 // `velocity` is returned as 0: nothing downstream reads .g.
-const PROC_WAVE_SCALE = 0.02;
+// Wavenumber, in radians per world unit: the base term's wavelength is
+// 2*PI / PROC_WAVE_SCALE ≈ 300 world units, against a fish that renders 72-84
+// nose to tail (see boids.js). That is the broad, slow swell the real
+// simulation is tuned for (see the propagation/damping notes in waterSim.js),
+// not pond chop.
+const PROC_WAVE_SCALE = 0.021;
+
+// World-Y amplitude of the height sum, matching WATER_HEIGHT_SCALE's role for
+// the real sim.
 const PROC_WAVE_HEIGHT = 0.35;
+
+// How far the ripples are allowed to tilt the surface normal, as a slope.
+//
+// This is the single most sensitive number in the procedural path and it is
+// worth saying why. water.js lights the surface through Snell's window, whose
+// entire behaviour is a smoothstep across |dot(normal, viewDir)| between 0.6
+// and 0.73 — a band about 8 degrees wide. A normal that swings further than
+// that sweeps the whole window from fully open to fully mirrored and back,
+// which does not read as ripples at all: it reads as huge organic lobes
+// crawling across the ceiling. Real ripples perturb the normal by a couple of
+// degrees, so the tilt has to stay well inside the window's own band.
+const PROC_NORMAL_SLOPE = 0.09;
 
 export const WATER_INFO_PROC_GLSL = /* glsl */ `
   vec4 proceduralWaterInfo(vec2 worldXZ, float time) {
-    vec2 p = worldXZ * ${glslFloat(PROC_WAVE_SCALE)};
+    const float s = ${glslFloat(PROC_WAVE_SCALE)};
+    vec2 p = worldXZ * s;
 
+    // Three travelling waves at non-harmonic frequencies, so the surface
+    // never visibly repeats or beats against itself.
     float h = sin(p.x + time * 0.6) * 0.55
             + sin(p.y * 1.31 - time * 0.8) * 0.32
             + sin((p.x + p.y) * 0.67 + time * 1.2) * 0.22;
 
-    // d/dworldXZ of the sum above — the inner scale factor comes back out
-    // through the chain rule, and each term carries its own frequency.
-    float s = ${glslFloat(PROC_WAVE_SCALE)};
-    float dhdx = cos(p.x + time * 0.6) * 0.55 * s
-               + cos((p.x + p.y) * 0.67 + time * 1.2) * 0.22 * 0.67 * s;
-    float dhdz = cos(p.y * 1.31 - time * 0.8) * 0.32 * 1.31 * s
-               + cos((p.x + p.y) * 0.67 + time * 1.2) * 0.22 * 0.67 * s;
+    // d/dworldXZ of that sum. The chain rule brings the inner scale factor
+    // back out, and each term carries its own frequency — but the common
+    // factor of s is divided straight back out below, so it is left off here
+    // and the result is a *normalized* slope in [-1, 1] rather than a true
+    // derivative. That is what makes PROC_NORMAL_SLOPE a plain slope in world
+    // units instead of a number that would silently change meaning every time
+    // the wavelength was retuned.
+    float dhdx = cos(p.x + time * 0.6) * 0.55
+               + cos((p.x + p.y) * 0.67 + time * 1.2) * 0.22 * 0.67;
+    float dhdz = cos(p.y * 1.31 - time * 0.8) * 0.32 * 1.31
+               + cos((p.x + p.y) * 0.67 + time * 1.2) * 0.22 * 0.67;
 
-    // The surface is a height field over XZ, so its normal is
-    // (-dh/dx, 1, -dh/dz) normalized. Scaled up before normalizing so the
-    // ripples actually tilt the normal enough to move Snell's window, which
-    // is the whole visual point of it.
-    vec3 n = normalize(vec3(-dhdx * 60.0, 1.0, -dhdz * 60.0));
+    // A height field's normal is (-dh/dx, 1, -dh/dz), normalized.
+    const float k = ${glslFloat(PROC_NORMAL_SLOPE)};
+    vec3 n = normalize(vec3(-dhdx * k, 1.0, -dhdz * k));
     return vec4(h * ${glslFloat(PROC_WAVE_HEIGHT)}, 0.0, n.x, n.z);
   }
 `;

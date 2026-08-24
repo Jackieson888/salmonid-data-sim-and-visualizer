@@ -355,12 +355,16 @@ export function createSceneSetup(canvas, bounds) {
   // crisp sky pasted behind geometry that has itself already faded to fog,
   // which is what made the far surface/terrain junction read as a hard,
   // wrongly-colored band across the frame.
-  // Segment count scales by tier (see quality.js). The shader is a smooth
-  // gradient evaluated per fragment, so the tessellation only has to be fine
-  // enough that the sphere doesn't read as faceted against the far plane —
-  // 16x8 is still comfortably past that at the low tier's resolution.
+  // Deliberately NOT scaled by tier, having been tried that way and reverted.
+  // This is one draw of ~500 triangles with no per-vertex work, i.e. nothing
+  // measurable on any device — but the sphere is drawn from the inside and
+  // fills the entire frame, so coarsening it does not read as a slightly
+  // coarser background: the fragment shader's gradient is evaluated from the
+  // interpolated position, and at 16x8 the interpolation error across those
+  // very large triangles turns the whole backdrop into visible angular gores.
+  // A knob that costs the frame nothing and the image everything.
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(1, QUALITY.skySegments[0], QUALITY.skySegments[1]),
+    new THREE.SphereGeometry(1, 32, 16),
     new THREE.ShaderMaterial({
       uniforms: skyUniforms,
       vertexShader: `
@@ -591,9 +595,17 @@ export function createSceneSetup(canvas, bounds) {
 
   // Replaces a direct renderer.render(scene, camera) call — see composer
   // above for why the bloom/tone-mapping chain needs to run instead.
+  // renderer.info normally resets itself on every renderer.render() call, and
+  // a composer chain makes several of those per frame — so by the time anything
+  // could read it, it holds only the final fullscreen quad (1 draw, 1 triangle)
+  // rather than the frame. Taking manual control and resetting once here makes
+  // it accumulate across every pass, which is what the debug panel wants.
+  renderer.info.autoReset = false;
+
   // The grain's per-frame counter lives in VignetteOutputPass.render() now,
   // so this is just the composer call.
   function render() {
+    renderer.info.reset();
     composer.render();
   }
 
@@ -648,16 +660,6 @@ export function createSceneSetup(canvas, bounds) {
   function applyQuality(b) {
     composer.dispose();
     composer = buildComposer(b);
-
-    // The sky's tessellation is also constructor-fixed. Cheap to swap, and
-    // leaving it would quietly keep a 32x16 sphere on a device that just told
-    // us it cannot afford one.
-    sky.geometry.dispose();
-    sky.geometry = new THREE.SphereGeometry(
-      1,
-      QUALITY.skySegments[0],
-      QUALITY.skySegments[1],
-    );
 
     // Picks up the new pixel ratio, re-sizes the fresh composer, and re-scales
     // the sky to the current far plane.

@@ -340,6 +340,55 @@ export function sweptSunDirection(seconds) {
   );
 }
 
+// The sun direction as seen from UNDER the surface.
+//
+// Refraction at the air/water boundary bends every incoming ray toward the
+// vertical, and Snell's law caps how far off vertical it can land: with water
+// at n = 1.333, a ray arriving along the horizon still refracts to 48.6
+// degrees from straight down. That cone is Snell's window, and it is why a sun
+// low enough to graze the hills is still nearly overhead once you look at it
+// from a fish's depth.
+//
+// Anything lit underwater wants this rather than the raw sweptSunDirection().
+// Across the year it maps a 17-75 degree above-water arc onto 44-79 degrees
+// below it: the low end compresses hard, the high end barely moves.
+//
+// What that buys is the top-lit read the whole scene depends on. At the bottom
+// of the winter arc the raw sun sits at 17 degrees, and handed straight to the
+// fish shader it flattens exactly the contrast that says "the light is up
+// there" — the dorsal surface falls to 0.88 of the diffuse ramp while the
+// belly climbs to 0.71, and the rim gate loosens from 1.00 to 0.70 along the
+// back. Refracted, the back returns to full and the belly drops to 0.55.
+//
+// The specular does not care either way: it is a half-vector term and stays at
+// zero on downward normals for any sun above the horizon, refracted or not.
+const WATER_IOR = 1.333;
+
+export function refractedSunDirection(sun, target = new THREE.Vector3()) {
+  const out = target.copy(sun).normalize();
+
+  // Angle from straight up, as its cosine (for a unit vector that IS y) and
+  // its sine (the horizontal magnitude). Clamped at 0 because a sun at or
+  // below the horizon transmits nothing to refract; MIN_SUN_ELEVATION keeps
+  // the sweep well clear of that, this is just so the math can't produce a
+  // direction pointing into the riverbed.
+  const cosAir = Math.min(1, Math.max(0, out.y));
+  const sinAir = Math.sqrt(Math.max(0, 1 - cosAir * cosAir));
+  const sinWater = Math.min(1, sinAir / WATER_IOR);
+  const cosWater = Math.sqrt(Math.max(0, 1 - sinWater * sinWater));
+
+  // Same azimuth, steeper descent: rescale the horizontal part to the new
+  // sine, set the vertical part to the new cosine. Stays unit length.
+  const horizontal = Math.hypot(out.x, out.z);
+  if (horizontal > 1e-6) {
+    const scale = sinWater / horizontal;
+    out.x *= scale;
+    out.z *= scale;
+  }
+  out.y = cosWater;
+  return out;
+}
+
 // `dateStr` is "YYYY-MM-DD" (see data.js) — parsed as UTC midnight so the
 // result doesn't shift with the browser's local timezone.
 //
