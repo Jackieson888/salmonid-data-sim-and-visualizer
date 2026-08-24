@@ -158,7 +158,7 @@ body {
 #species-breakdown .key,
 #play-pause,
 #fish-loading p,
-#timeline-axis b,
+#timeline-axis button,
 #season-chart figcaption {
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -171,7 +171,7 @@ body {
 .readout,
 #species-breakdown .count,
 #conditions b,
-#secondary-counts b,
+#run-status b,
 .field-head b {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -237,7 +237,10 @@ body {
 
 #masthead {
   flex: 0 0 auto;
-  max-width: 30ch;
+  /* Was 30ch, which fit the reach line exactly until the season became a
+     control at the end of it — at 30ch "2015" wrapped alone onto a second
+     line as an orphan under "Counting Season". */
+  max-width: 34ch;
 }
 
 #masthead .station {
@@ -258,10 +261,61 @@ body {
   line-height: 1.05;
 }
 
+/* Deliberately NOT a flex row. The reach text wraps to two lines in this
+   30ch field, and as a flex container the select is a sibling item of the
+   whole wrapped block — so it sat baseline-aligned to the FIRST line while
+   the text's second line ran on underneath it ("Snake River · Counting
+   [2015]" / "Season"). Left as normal inline flow, the select is just another
+   word in the sentence and wraps with it. */
 #masthead .reach {
   margin-top: 4px;
   font-size: var(--t-2);
   color: var(--text-dim);
+}
+
+/* The season select. Deliberately quiet — it sits in the identity block, where
+   a full-weight control would read as the loudest thing in the masthead
+   despite being the least-used. So: no background, no chevron of its own
+   beyond the platform's, and a hairline that only resolves on hover/focus.
+   It reads as printed type until you go for it. */
+#year-select {
+  appearance: none;
+  -webkit-appearance: none;
+  /* Inline, so it flows as a word in the reach line rather than as a block
+     the text has to get around. */
+  display: inline-block;
+  vertical-align: baseline;
+  margin-left: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom-color: var(--line);
+  border-radius: 0;
+  padding: 0 2px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-2);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  /* The dropdown itself is drawn by the platform; this is what stops it
+     rendering as a white list over a dark page. */
+  color-scheme: dark;
+}
+
+#year-select:hover {
+  border-bottom-color: var(--text-dim);
+}
+
+#year-select:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Held during a season load — the fetch is same-origin and quick, but the
+   control should not look interactive while it is ignoring input. */
+#year-select:disabled {
+  color: var(--text-faint);
+  cursor: default;
 }
 
 #masthead .readout {
@@ -345,78 +399,193 @@ body {
   padding-right: 0;
 }
 
-#species-breakdown [data-species="chinook"] .key:first-child {
-  color: var(--chinook);
+/* Key colours, one rule per species, keyed off the cell's own data-species
+   rather than its position in the row. They used to be positional
+   (`[data-species=chinook] .key:nth-child(3)` meaning "steelhead"), which
+   worked only as long as nothing was ever added to or reordered in the table —
+   and adding the three reported species broke every one of them. The name is
+   on the cell that carries the colour now, so the two cannot disagree. */
+#species-breakdown .key[data-species="chinook"] { color: var(--chinook); }
+#species-breakdown .key[data-species="jackChinook"] { color: var(--jack-chinook); }
+#species-breakdown .key[data-species="steelhead"] { color: var(--steelhead); }
+#species-breakdown .key[data-species="shad"] { color: var(--shad); }
+#species-breakdown .key[data-species="lamprey"] { color: var(--lamprey); }
+#species-breakdown .key[data-species="sockeye"] { color: var(--sockeye); }
+#species-breakdown .key[data-species="coho"] { color: var(--coho); }
+#species-breakdown .key[data-species="jackCoho"] { color: var(--jack-coho); }
+
+/* Counted at the dam but never drawn in the water. The square key still
+   carries the species colour — these have real colours in FIG. 2 and the
+   table should agree with it — but the row as a whole is stepped back: the
+   count is dimmed, and the dagger points at the footnote that says why. The
+   distinction has to be visible without reading the footnote, or the table
+   quietly implies eight species are swimming past. */
+#species-breakdown .key.reported {
+  /* Applies to the label text only; the `i` key square below re-asserts the
+     species colour. */
+  color: var(--text-faint);
 }
 
-#species-breakdown [data-species="chinook"] .key:nth-child(3) {
-  color: var(--steelhead);
+#species-breakdown .key.reported i {
+  /* currentColor would take the faint text colour above, which would lose the
+     species key entirely — so these re-state their own. */
+  background: var(--species-key, var(--text-faint));
 }
 
-#species-breakdown [data-species="jackChinook"] .key:first-child {
-  color: var(--jack-chinook);
-}
+#species-breakdown .key.reported[data-species="sockeye"] i { background: var(--sockeye); }
+#species-breakdown .key.reported[data-species="coho"] i { background: var(--coho); }
+#species-breakdown .key.reported[data-species="jackCoho"] i { background: var(--jack-coho); }
 
-#species-breakdown [data-species="jackChinook"] .key:nth-child(3) {
-  color: var(--shad);
-}
-
-/* Lamprey gets a row to itself — five species doesn't split evenly into the
-   two-per-row pairing above, and the empty second key/count pair keeps the
-   row's width matching the others instead of ending short. */
-#species-breakdown [data-species="lamprey"] .key:first-child {
-  color: var(--lamprey);
+#species-breakdown .key.reported + .count {
+  color: var(--text-dim);
 }
 
 /* ---------------------------------------------------------------------
-   Field 3 — conditions
+   Fields 3 and 4 — conditions, and where the run stands
+
+   Two fields, one treatment: both are label/value pairs off the same feed,
+   and making them look like two different instruments would say they were
+   different kinds of reading. They are not — one is measured at the project,
+   the other is counted at it.
    --------------------------------------------------------------------- */
 
-#conditions {
+#conditions,
+#run-status {
   flex: 0 0 auto;
 }
 
-#conditions p:not(.field-head) {
+#conditions p:not(.field-head),
+#run-status p:not(.field-head) {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  padding: 2px 0;
+  /* Tighter than the old 2px: conditions went from three rows to five when
+     outflow, spill and dissolved gas came in from FIG. 4, and the field has to
+     stay level with the four-row species table beside it. */
+  padding: 1px 0;
 }
 
-#conditions p:not(.field-head) .label {
+#conditions p:not(.field-head) .label,
+#run-status p:not(.field-head) .label {
   font-size: var(--t-2);
   color: var(--text-faint);
   white-space: nowrap;
 }
 
-#conditions b {
+#conditions b,
+#run-status b {
   font-size: var(--t-4);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
 }
 
+/* The one reading in the bar that is a judgement rather than a measurement,
+   and the only place besides the timeline cursor and the speed selector where
+   the accent appears. Running BEHIND the ten-year average is the neutral case
+   — dimmed, not alarmed — because a below-average run is the ordinary state of
+   affairs, not an error. */
+#season-delta.above {
+  color: var(--accent);
+}
+
+#season-delta.below {
+  color: var(--text-dim);
+}
+
 /* ---------------------------------------------------------------------
-   Field 4 — the season chart and the controls
+   Field 5 — the season chart and the controls
    --------------------------------------------------------------------- */
 
 /* The only field that grows: it holds the chart, so every pixel the bar has
    spare is worth more here than as trailing space.
 
-   Laid out as [button | stack], with the button bottom-aligned so it sits
-   level with the month axis rather than floating beside the chart. */
+   A COLUMN — transport row, then the chart/slider/axis stack — not the old
+   [button | stack] row. The stack's three parts have to be the same width and
+   start at the same x, because the red cursor reads against the curve above
+   it; a control column beside them indents one and not the others, which
+   quietly breaks that. A row above them cannot. */
 #controls {
   flex: 1 1 auto;
   min-width: 240px;
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  flex-direction: column;
+  gap: 7px;
 }
 
 #timeline-block {
   flex: 1;
   min-width: 0;
+}
+
+#transport {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+/* Speed pushed to the far end of the row, so the two groups read as what they
+   are — state on the left, pace on the right — rather than as one undivided
+   strip of five buttons. */
+#speed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+#speed .label {
+  margin-right: 2px;
+  font-size: var(--t-1);
+  color: var(--text-faint);
+}
+
+/* Narrower than #play-pause and without its min-width: these are secondary,
+   and a row of controls all the same size has no hierarchy in it. */
+.transport-btn,
+.speed-btn {
+  flex: none;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 4px 8px;
+  font-family: var(--sans);
+  font-size: var(--t-1);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.speed-btn {
+  /* Tabular, so ½× and 8× occupy the same width and the group does not
+     reflow as the selection moves. */
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  padding: 4px 6px;
+  min-width: 4ch;
+  text-align: center;
+}
+
+.transport-btn:hover,
+.speed-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.transport-btn:focus-visible,
+.speed-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The current pace is a current reading, which is the one thing the accent is
+   for — same justification as the timeline cursor. */
+.speed-btn[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 #season-chart figcaption {
@@ -458,6 +627,9 @@ body {
   display: none;
 }
 
+/* Trimmed from 38px when the transport row was added above it — the bar had to
+   absorb that row's height somewhere, and six pixels off the chart costs less
+   than six pixels of the frame. */
 #season-chart svg {
   display: block;
   width: 100%;
@@ -466,7 +638,7 @@ body {
      width the field happens to have, which then drives the height of the
      whole bar. On a wide window that was 74px of chart and a bar half again
      as tall as it needed to be. */
-  height: 38px;
+  height: 32px;
   /* The viewBox is stretched to the field's width (preserveAspectRatio="none"),
      which is what keeps the chart's x-axis identical to the slider's below it.
      Stroke widths would be stretched with it, hence non-scaling-stroke on the
@@ -581,24 +753,48 @@ body {
   background: var(--line);
 }
 
-#timeline-axis b {
+/* The month label is a button now — clicking it jumps to the first counted day
+   of that month (see the delegated handler in main.js). Styled as the label it
+   already was rather than as a control: no border, no background, and the only
+   affordance is that it lights to full ink on hover. The tick it hangs from is
+   1px wide and no kind of click target, which is why the label carries this
+   and not the <i>. */
+#timeline-axis button {
   position: absolute;
   top: 4px;
   left: 0;
   transform: translateX(-50%);
+  padding: 1px 3px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-family: var(--sans);
   font-size: var(--t-1);
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
   color: var(--text-faint);
   white-space: nowrap;
+  cursor: pointer;
+}
+
+#timeline-axis button:hover {
+  color: var(--text);
+}
+
+#timeline-axis button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  color: var(--text);
 }
 
 /* The end labels sit on ticks at 0% and 100%, so centering them would hang
    half of each off the field. Anchor those two to the inside instead. */
-#timeline-axis i:first-child b {
+#timeline-axis i:first-child button {
   transform: none;
 }
 
-#timeline-axis i:last-child b {
+#timeline-axis i:last-child button {
   transform: translateX(-100%);
 }
 
@@ -635,6 +831,14 @@ body {
 
 .source {
   margin-left: auto;
+}
+
+/* What the dagger in the species table means, and what the ten-year average is
+   measured against. Both belong here rather than beside the figures they
+   qualify: a footnote is how a report carries a caveat without spending a
+   readable line on it. */
+.footnote {
+  color: var(--text-dimmer);
 }
 
 /* ---------------------------------------------------------------------
@@ -810,6 +1014,12 @@ body {
   position: absolute;
   top: 18px;
   right: 18px;
+  /* Above the drawer, which is the whole point: this button is also the
+     drawer's CLOSE control (it becomes "Plates ✕" — see setOpen in
+     plates.js), and #plates comes after it in the DOM, so without a stacking
+     order of its own the open drawer painted straight over the only way to
+     shut it. */
+  z-index: 2;
   padding: 6px 10px;
   background: var(--ink);
   border: 1px solid var(--line);
@@ -835,6 +1045,7 @@ body {
 #plates {
   position: absolute;
   inset: 0 0 0 auto;
+  z-index: 1;
   width: min(400px, 100vw);
   background: var(--ink);
   border-left: 1px solid var(--line);
@@ -858,7 +1069,10 @@ body {
 #plates-scroll {
   height: 100%;
   overflow-y: auto;
-  padding: var(--s4);
+  /* The extra top padding clears #plates-toggle, which now floats above this
+     panel as its close control — without it the first figure's caption scrolls
+     under the button. */
+  padding: 52px var(--s4) var(--s4);
 }
 
 .plate {
@@ -1175,20 +1389,22 @@ body {
    Narrower viewports
    --------------------------------------------------------------------- */
 
-/* One row of five fields needs real width. Below this the bar wraps to two
-   rows rather than crushing the chart, which is the field that degrades worst
-   when squeezed. */
-@media (max-width: 1100px) {
+/* One row of five fields needs real width — and it is genuinely five now that
+   the run-to-date comparison has its own, so this moved up from 1100px. Below
+   it the bar wraps to two rows rather than crushing the chart, which is the
+   field that degrades worst when squeezed. */
+@media (max-width: 1280px) {
   .report-body {
     flex-wrap: wrap;
   }
 
-  /* The three text fields stay side by side and keep the rules between them;
+  /* The four text fields stay side by side and keep the rules between them;
      only the chart drops to its own row, so it is the only field whose
      divider has to move from its left edge to its top. */
   #masthead,
   #passage,
-  #conditions {
+  #conditions,
+  #run-status {
     flex: 1 1 auto;
   }
 
@@ -1198,6 +1414,17 @@ body {
     padding-left: 0;
     padding-top: 9px;
     border-top: 1px solid var(--line-soft);
+  }
+}
+
+@media (max-width: 900px) {
+  /* Four text fields in one row is too many at this width — the species table
+     alone is ~36ch. Conditions and the run comparison drop to their own row
+     together, which keeps the two label/value fields paired rather than
+     stranding one of them. */
+  #conditions,
+  #run-status {
+    flex: 1 1 40%;
   }
 }
 
@@ -1217,7 +1444,17 @@ body {
   /* Ten month labels do not fit under a track this narrow, and letting them
      collide is worse than thinning them. The ticks all stay, so the axis
      still reads as a full season. */
-  #timeline-axis i:nth-child(even) b {
+  #timeline-axis i:nth-child(even) button {
     display: none;
+  }
+
+  /* The speed group wraps under the transport rather than squeezing it. */
+  #transport {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  #speed {
+    margin-left: 0;
   }
 }

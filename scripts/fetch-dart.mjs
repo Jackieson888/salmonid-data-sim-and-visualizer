@@ -8,15 +8,18 @@
 //
 // What it writes:
 //   data/dart/lwg-adult-daily-{2006..2015}.csv   raw, byte-for-byte per year
-//   data/dart/lwg-river-2015.csv                 raw river-environment export
-//   public/lwg-river-2015.csv                    the above, pivoted to wide
+//   public/lwg-adult-daily-{2006..2015}.csv      the same, shipped
+//   data/dart/lwg-river-{2006..2015}.csv         raw river-environment exports
+//   public/lwg-river-{2006..2015}.csv            the above, pivoted to wide
 //   public/lwg-history-2006-2015.json            derived: season totals +
 //                                                 day-of-year envelope
 //
-// The raw copies live under data/dart/ (not public/) and stay out of the
-// bundle — they exist so the derivation in this file is auditable and
-// re-runnable without a network trip, not because the app reads them
-// directly. Everything under public/ is what actually ships.
+// The adult-daily CSVs are written to BOTH trees, and the two copies are
+// byte-identical on purpose: the app now serves any of the ten seasons at
+// runtime (see AVAILABLE_YEARS in src/data.js), so every year has to be under
+// public/ to be fetchable, while data/dart/ stays the auditable archive the
+// derivation below reads. The river exports are raw under data/dart/ and
+// pivoted under public/, so those two genuinely differ.
 //
 // 2015 is the one year this script does NOT re-fetch: it copies
 // public/lwg-adult-daily-2015.csv instead, which src/data.js's own comment
@@ -103,22 +106,25 @@ function sleep(ms) {
 // --- 1. Per-year adult passage CSVs -----------------------------------------
 
 async function fetchAdultDailyYear(year) {
-  const destPath = path.join(DART_DIR, `lwg-adult-daily-${year}.csv`);
+  const archivePath = path.join(DART_DIR, `lwg-adult-daily-${year}.csv`);
+  const shippedPath = path.join(PUBLIC_DIR, `lwg-adult-daily-${year}.csv`);
 
   if (year === FROZEN_YEAR) {
-    const frozen = await readFile(
-      path.join(PUBLIC_DIR, "lwg-adult-daily-2015.csv"),
-      "utf8",
-    );
-    await writeFile(destPath, frozen, "utf8");
+    // Already under public/ and frozen there on purpose — read it back rather
+    // than re-fetching, so the archive can never drift from what the app
+    // actually serves. Nothing is written to public/ in this branch for the
+    // same reason.
+    const frozen = await readFile(shippedPath, "utf8");
+    await writeFile(archivePath, frozen, "utf8");
     console.log(`  ${year}: copied from the vendored public/ snapshot`);
     return frozen;
   }
 
   const text = await fetchText(adultDailyUrl(year), `Adult daily ${year}`);
-  await writeFile(destPath, text, "utf8");
+  await writeFile(archivePath, text, "utf8");
+  await writeFile(shippedPath, text, "utf8");
   const rows = text.split("\n").filter((l) => l.startsWith(`Lower Granite,`)).length;
-  console.log(`  ${year}: fetched, ${rows} data rows`);
+  console.log(`  ${year}: fetched, ${rows} data rows -> data/dart/ + public/`);
   return text;
 }
 
@@ -245,16 +251,28 @@ async function main() {
     if (year !== FROZEN_YEAR) await sleep(REQUEST_GAP_MS);
   }
 
-  console.log(`River environment, ${FROZEN_YEAR}:`);
-  const riverRaw = await fetchText(
-    riverEnvironmentUrl(FROZEN_YEAR),
-    `River environment ${FROZEN_YEAR}`,
-  );
-  await writeFile(path.join(DART_DIR, `lwg-river-${FROZEN_YEAR}.csv`), riverRaw, "utf8");
-  const riverRows = parseRiverEnvironmentLong(riverRaw);
-  const riverWide = pivotRiverEnvironmentToWide(riverRows, FROZEN_YEAR);
-  await writeFile(path.join(PUBLIC_DIR, `lwg-river-${FROZEN_YEAR}.csv`), riverWide, "utf8");
-  console.log(`  ${riverRows.length} long-format rows -> public/lwg-river-${FROZEN_YEAR}.csv`);
+  // One per year, not just the frozen one: the conditions field in the report
+  // bar and FIG. 4 in the plates drawer both follow the year control now, and
+  // a season with no river file degrades to "unavailable" (see
+  // loadRiverConditions in src/data.js). A single year failing here is not
+  // fatal to the run — the other nine are still worth writing.
+  console.log(`River environment, ${HISTORY_YEARS[0]}-${HISTORY_YEARS.at(-1)}:`);
+  for (const year of HISTORY_YEARS) {
+    try {
+      const riverRaw = await fetchText(
+        riverEnvironmentUrl(year),
+        `River environment ${year}`,
+      );
+      await writeFile(path.join(DART_DIR, `lwg-river-${year}.csv`), riverRaw, "utf8");
+      const riverRows = parseRiverEnvironmentLong(riverRaw);
+      const riverWide = pivotRiverEnvironmentToWide(riverRows, year);
+      await writeFile(path.join(PUBLIC_DIR, `lwg-river-${year}.csv`), riverWide, "utf8");
+      console.log(`  ${year}: ${riverRows.length} long-format rows -> public/lwg-river-${year}.csv`);
+    } catch (err) {
+      console.warn(`  ${year}: river environment unavailable — ${err.message}`);
+    }
+    await sleep(REQUEST_GAP_MS);
+  }
 
   console.log("Deriving run history...");
   const history = buildRunHistory(rowsByYear);

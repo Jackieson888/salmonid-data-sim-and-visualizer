@@ -70,11 +70,29 @@
     <div id="hud">
       <section id="report">
         <div class="report-body">
-          <!-- 1. Identity and the current reading. -->
+          <!-- 1. Identity and the current reading.
+
+               The season is a control rather than a printed line: all ten
+               counting seasons DART publishes for this project are vendored
+               (see AVAILABLE_YEARS in data.js), and picking one swaps the
+               whole record in place — bar, chart, month axis and every plate
+               in the drawer. -->
           <header class="field" id="masthead">
             <p class="station">Project LWG &middot; Lower Granite Lock &amp; Dam</p>
             <h1>Adult Fish Passage</h1>
-            <p class="reach">Snake River &middot; Counting Season 2015</p>
+            <p class="reach">
+              <span>Snake River &middot; Counting Season</span>
+              <!-- Options and the initial value are written from
+                   AVAILABLE_YEARS in main.js, so the vendored range is
+                   declared in exactly one place. -->
+              <select id="year-select" aria-label="Counting season"></select>
+            </p>
+            <!-- The date stays a printed reading rather than a picker. The
+                 season select above, the clickable month ticks under the
+                 timeline, the slider and the arrow keys already reach any day,
+                 month or year between them; a date field on top of that was a
+                 second way to do what the axis already does, and a form
+                 control in the middle of a reading. -->
             <p class="readout">
               <span id="date-label">Loading run data…</span>
               <span id="day-ordinal"></span>
@@ -84,7 +102,19 @@
           <!-- 2. The day's counts. Real per-day DART numbers, not the
                simulated boid count (which is capped well below them — see
                MAX_POPULATION in main.js). Key colors match each species'
-               InstancedMesh tint in scene/fishMesh.js's SPECIES_COLORS. -->
+               InstancedMesh tint in scene/fishMesh.js's SPECIES_COLORS.
+
+               All EIGHT species DART counts at this project, not just the five
+               the flock draws. Sockeye, coho and jack coho are small numbers
+               next to the others — a few hundred each across a season — and
+               that is exactly why they belong here: a passage report showing
+               only the abundant species hides the ones anyone is actually
+               worried about. They carry a dagger and the footnote below says
+               what it means, so the table never implies they are in the water.
+
+               Bull trout, chum and pink are parsed too (see data.js) but stay
+               out: they are structurally zero at Lower Granite, and three rows
+               of "0" is not information. -->
           <div class="field" id="passage">
             <p class="field-head">
               <span class="label">Daily adult passage</span>
@@ -92,48 +122,93 @@
             </p>
             <table id="species-breakdown">
               <tbody>
-                <tr data-species="chinook">
-                  <td class="key"><i></i>Chinook</td>
+                <tr>
+                  <td class="key" data-species="chinook"><i></i>Chinook</td>
                   <td class="count" id="count-chinook">0</td>
-                  <td class="key"><i></i>Steelhead</td>
+                  <td class="key" data-species="steelhead"><i></i>Steelhead</td>
                   <td class="count" id="count-steelhead">0</td>
                 </tr>
-                <tr data-species="jackChinook">
-                  <td class="key"><i></i>Jack Chinook</td>
+                <tr>
+                  <td class="key" data-species="jackChinook"><i></i>Jack Chinook</td>
                   <td class="count" id="count-jackChinook">0</td>
-                  <td class="key"><i></i>Shad</td>
+                  <td class="key" data-species="shad"><i></i>Shad</td>
                   <td class="count" id="count-shad">0</td>
                 </tr>
-                <tr data-species="lamprey">
-                  <td class="key"><i></i>Lamprey</td>
+                <tr>
+                  <td class="key" data-species="lamprey"><i></i>Lamprey</td>
                   <td class="count" id="count-lamprey">0</td>
-                  <td class="key"></td>
-                  <td class="count"></td>
+                  <td class="key reported" data-species="sockeye"><i></i>Sockeye&dagger;</td>
+                  <td class="count" id="count-sockeye">0</td>
+                </tr>
+                <tr>
+                  <td class="key reported" data-species="coho"><i></i>Coho&dagger;</td>
+                  <td class="count" id="count-coho">0</td>
+                  <td class="key reported" data-species="jackCoho"><i></i>Jack Coho&dagger;</td>
+                  <td class="count" id="count-jackCoho">0</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          <!-- 3. Conditions at the project, straight off the same feed. -->
+          <!-- 3. Conditions at the project, straight off the same feed.
+               Temperature rides in on the adult-passage CSV; outflow, spill
+               and dissolved gas come from a separate river-environment export
+               fetched AFTER boot (see loadConditionsForYear in main.js), so
+               these three read "—" for the first moment and stay that way for
+               a season with no vendored river file. -->
           <div class="field" id="conditions">
             <p class="field-head"><span class="label">Conditions</span></p>
             <p><span class="label">Water</span><b id="water-temp">—</b></p>
+            <p><span class="label">Outflow</span><b id="outflow">—</b></p>
+            <p><span class="label">Spill</span><b id="spill">—</b></p>
+            <p><span class="label">Diss. gas</span><b id="dissolved-gas">—</b></p>
             <p><span class="label">Chinook run</span><b id="chinook-run">—</b></p>
-            <p><span class="label">Season to date</span><b id="season-total">0</b></p>
           </div>
 
-          <!-- 4. The season, and the controls that move through it. -->
-          <!-- The button sits OUTSIDE the stack below it, not between the
-               chart and the slider, so the chart and the slider are the same
-               width and start at the same x. That is the whole point of the
-               arrangement: the red cursor has to read against the curve above
-               it, and indenting one but not the other by the button's width
-               quietly breaks it. -->
+          <!-- 4. Where this season stands. A cumulative count on its own says
+               nothing about whether a run is large or small — the ten-year
+               daily mean is what turns it into a reading. Both figures count
+               the same five species (see the note on `count` in
+               dart/parseAdultDaily.js and the envelope in
+               scripts/fetch-dart.mjs), so the comparison is like for like. -->
+          <div class="field" id="run-status">
+            <p class="field-head"><span class="label">Run to date</span></p>
+            <p><span class="label">Season</span><b id="season-total">0</b></p>
+            <p><span class="label">10-yr avg</span><b id="season-average">—</b></p>
+            <p><span class="label">Vs. avg</span><b id="season-delta">—</b></p>
+          </div>
+
+          <!-- 4. The season, and the controls that move through it.
+
+               Laid out as a column — transport row, then the chart/slider/axis
+               stack — rather than [button | stack]. The stack's three parts
+               have to be the same width and start at the same x, because the
+               red cursor reads against the curve above it and indenting one
+               but not the others quietly breaks that. A control column beside
+               them would do exactly that; a row above them cannot. -->
           <div class="field" id="controls">
-            <!-- No aria-label: it would override the visible text, which is
-                 the actual state. aria-pressed is set from setPlaying() in
-                 main.js. Space toggles this from anywhere on the page. -->
-            <button id="play-pause" aria-pressed="false">Pause</button>
+            <!-- Deliberately short. Day-to-day stepping lives on the arrow
+                 keys and the slider, and the ends of the season on Home/End —
+                 a row of glyph buttons duplicating all of that was more
+                 apparatus than this interface wants.
+
+                 What stays are the two things with nowhere else to live: the
+                 run/hold state, and the pace. -->
+            <div id="transport">
+              <!-- No aria-label: it would override the visible text, which is
+                   the actual state. aria-pressed is set from setPlaying() in
+                   main.js. Space toggles this from anywhere on the page. -->
+              <button id="play-pause" aria-pressed="false">Pause</button>
+              <button class="transport-btn" id="to-peak" type="button">Peak</button>
+
+              <!-- A counting season is ~300 days; at 1x that is a twenty-minute
+                   watch, which is too long to ever see the shape of a run. The
+                   buttons are written from SPEEDS in main.js so the labels and
+                   the divisors cannot disagree. -->
+              <div id="speed" role="group" aria-label="Playback speed">
+                <span class="label">Speed</span>
+              </div>
+            </div>
             <div id="timeline-block">
               <!-- The whole season at a glance: daily passage as an area,
                    water temperature as a line. Drawn at boot from runData
@@ -176,6 +251,10 @@
              and jack coho get a real chart instead of an 8px aside, and
              wild/hatchery steelhead gets FIG. 3 to itself. -->
         <div class="report-foot">
+          <p class="footnote">
+            &dagger; counted at the dam, not drawn in the water &middot;
+            ten-year average from 2006&ndash;2015, inclusive of the season shown
+          </p>
           <p class="source">
             Columbia Basin Research DART &middot; adult passage daily counts
             &middot; data courtesy of the U.S. Army Corps of Engineers

@@ -10,13 +10,29 @@
 // timeline axis: record index i sits at seasonFraction(i, last) along the
 // x-axis (see seasonScale.js). That is what lets a single moving cursor line
 // mean the same date on every plate at once.
-import { runData, runDataSource, loadRiverConditions, loadRunHistory } from "./data.js";
+import {
+  runData,
+  runYear,
+  runDataSource,
+  loadRiverConditions,
+  loadRunHistory,
+} from "./data.js";
 import { seasonFraction } from "./seasonScale.js";
 import { dayOfYear } from "./scene/season.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_W = 1000;
-const LAST = runData.length - 1;
+
+// Last record index of the CURRENT season. A `let`, not a `const`, because the
+// year control swaps runData underneath this module and seasons differ in
+// length (290-306 days) — every path helper below reads it, so a stale value
+// would silently rescale every figure in the drawer. syncYear() is the one
+// place it is written, and rebuildPlatesForYear() is what calls it.
+let LAST = runData.length - 1;
+
+function syncYear() {
+  LAST = runData.length - 1;
+}
 
 // The eight DART counts at LWG that have a color: the five the flock draws,
 // and the three it doesn't (see --sockeye etc. in style.css). Shared order
@@ -150,7 +166,8 @@ function note(text) {
 // ---------------------------------------------------------------------
 // FIG. 1 — Season passage: the bar's own chart, full size, with the
 // 2006-2015 daily mean traced behind it as a ghost line so a viewer can see
-// at a glance whether 2015 ran ahead of or behind the ten-year average.
+// at a glance whether the season on screen ran ahead of or behind the
+// ten-year average.
 // ---------------------------------------------------------------------
 // Returns the figure plus an `addGhost(history)` hook: run history arrives
 // later (a network fetch, see build()) than the season passage this plate is
@@ -175,13 +192,15 @@ function buildPassagePlate(cursorSetters) {
   dayCursor(svg, cursorSetters);
 
   figure.appendChild(svg);
-  const noteEl = note(`Daily passage, 2015 · √ scale · peak ${peak.toLocaleString()}/day`);
+  const noteEl = note(
+    `Daily passage, ${runYear} · √ scale · peak ${peak.toLocaleString()}/day`,
+  );
   figure.appendChild(noteEl);
 
   function addGhost(history) {
     const doyToMean = new Map(history.dailyEnvelope.map((d) => [d.doy, d.mean]));
     // Rescale against whichever of the two is larger so the mean line never
-    // clips against 2015's own peak.
+    // clips against the current season's own peak.
     const ghostPeak = Math.max(...doyToMean.values(), 0);
     const combinedPeak = Math.max(peak, ghostPeak, 1);
     const rescale = (v) => 200 - Math.sqrt(v / combinedPeak) * 200;
@@ -404,7 +423,7 @@ function buildConditionsPlate(cursorSetters, rows) {
 
   figure.appendChild(
     note(
-      "Outflow and spill at Lower Granite, 2015 (Columbia River DART river environment feed). " +
+      `Outflow and spill at Lower Granite, ${runYear} (Columbia River DART river environment feed). ` +
         "Dissolved gas and scroll-case temperature are not published for this project.",
     ),
   );
@@ -413,12 +432,16 @@ function buildConditionsPlate(cursorSetters, rows) {
 
 // ---------------------------------------------------------------------
 // FIG. 5 — Run history, 2006-2015: per-year totals, and the day-of-year
-// envelope with 2015 traced through it. Needs loadRunHistory().
+// envelope with the season on screen traced through it. Needs
+// loadRunHistory(). The envelope itself is fixed at 2006-2015 whichever year
+// is showing, which is why the footnote in index.html says the average is
+// inclusive of the season shown.
 // ---------------------------------------------------------------------
 function buildHistoryPlate(cursorSetters, history) {
   const figure = figureShell("FIG. 5", "Run History, 2006–2015");
 
-  // (a) Per-year stacked totals. 2015 gets the accent border everywhere else
+  // (a) Per-year stacked totals. The season on screen gets the accent border
+  // everywhere else
   // in this app reserves for the current reading (see style.css's four
   // rules); every other year gets the neutral hairline.
   const barSvg = svgEl("svg", {
@@ -443,7 +466,7 @@ function buildHistoryPlate(cursorSetters, history) {
         width: barW.toFixed(2),
         height: Math.max(0, h).toFixed(2),
       });
-      if (y.year === 2015) rect.setAttribute("class", "plate-history-current");
+      if (y.year === runYear) rect.setAttribute("class", "plate-history-current");
       barSvg.appendChild(rect);
       below += h;
     }
@@ -451,7 +474,10 @@ function buildHistoryPlate(cursorSetters, history) {
       svgEl("text", {
         x: (cx + barW / 2).toFixed(2),
         y: 172,
-        class: y.year === 2015 ? "plate-history-year plate-history-year-current" : "plate-history-year",
+        class:
+          y.year === runYear
+            ? "plate-history-year plate-history-year-current"
+            : "plate-history-year",
         "text-anchor": "middle",
       }),
     );
@@ -461,9 +487,11 @@ function buildHistoryPlate(cursorSetters, history) {
     t.textContent = String(years[i].year).slice(2);
   });
   figure.appendChild(barSvg);
-  figure.appendChild(note("Season totals by species. 2015 outlined in red."));
+  figure.appendChild(
+    note(`Season totals by species. ${runYear} outlined in red.`),
+  );
 
-  // (b) Day-of-year envelope, with 2015 traced through it. This sub-chart's
+  // (b) Day-of-year envelope, with the current season traced through it. This sub-chart's
   // x-axis is day-of-year, not record index — a different domain from every
   // other plate here — so it gets its own cursor setter rather than sharing
   // the shared seasonFraction() one the rest of the drawer uses.
@@ -511,7 +539,7 @@ function buildHistoryPlate(cursorSetters, history) {
   figure.appendChild(envSvg);
   figure.appendChild(
     note(
-      `Day-of-year range across all ten years (min–max band), 2015's own daily count traced through it. √ scale, peak ${envPeak.toLocaleString()}/day.`,
+      `Day-of-year range across all ten years (min–max band), ${runYear}'s own daily count traced through it. √ scale, peak ${envPeak.toLocaleString()}/day.`,
     ),
   );
 
@@ -563,6 +591,7 @@ function buildTitleBlock() {
   const block = el("div", { id: "plates-titleblock" });
   const rows = [
     ["Project", "Lower Granite Lock & Dam"],
+    ["Season", `${runYear} · ${runData.length} days counted`],
     ["Source", runDataSource === "live" ? "Live DART query" : "Vendored snapshot"],
     ["Retrieved", "2026-08-24"],
     ["Scale", "√ passage · linear conditions"],
@@ -611,8 +640,27 @@ export function initPlates() {
   toggleBtn.addEventListener("click", () => setOpen(!isOpen));
 
   window.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    // Escape closes, and is checked BEFORE the focused-control guard below.
+    // That ordering is the point: the toggle is itself a button, so after
+    // clicking it open the focus is sitting on exactly the element the guard
+    // skips — the one moment Escape is most likely to be pressed is the one
+    // moment the guard would have swallowed it. No control on this page uses
+    // Escape for anything else.
+    if (e.key === "Escape" && isOpen) {
+      e.preventDefault();
+      setOpen(false);
+      toggleBtn.focus();
+      return;
+    }
+
+    // BUTTON alongside INPUT/SELECT for the same reason main.js's handler
+    // skips it: the transport and the month ticks are buttons, and "P" typed
+    // with one of them focused should do nothing.
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON") return;
+
     if (e.key.toLowerCase() !== "p") return;
     e.preventDefault();
     setOpen(!isOpen);
@@ -627,8 +675,17 @@ function setOpen(next) {
   if (isOpen && !built) build();
 }
 
+// Incremented on every build. Both async plates below capture it and drop
+// their result if it has moved on — a river-conditions fetch that resolves
+// after the viewer has switched seasons would otherwise replace a placeholder
+// belonging to a drawer that no longer exists, or worse, draw last year's
+// gauges into this year's figure.
+let buildToken = 0;
+
 function build() {
   built = true;
+  const token = ++buildToken;
+  const year = runYear;
   cursorSetters = [];
   todayUpdaters = [];
   scrollEl.innerHTML = "";
@@ -646,29 +703,55 @@ function build() {
   scrollEl.appendChild(buildLampreyPlate(cursorSetters));
   scrollEl.appendChild(buildTitleBlock());
 
-  loadRiverConditions()
+  loadRiverConditions(year)
     .then((rows) => {
+      if (token !== buildToken) return;
       conditionsPlaceholder.replaceWith(buildConditionsPlate(cursorSetters, rows));
       setPlatesDay(lastDayIndex);
     })
     .catch((err) => {
-      console.warn("River conditions plate unavailable:", err);
-      conditionsPlaceholder.replaceWith(unavailablePlate("FIG. 4", "River Conditions"));
+      if (token !== buildToken) return;
+      console.warn(`River conditions plate unavailable for ${year}:`, err);
+      // Says which season is missing rather than a bare "unavailable": nine of
+      // the ten have no vendored river file, and "no data for 2011" is a fact
+      // about the archive, not a failure the viewer should read as a bug.
+      const missing = unavailablePlate("FIG. 4", "River Conditions");
+      missing.querySelector(".plate-note").textContent =
+        `No river-environment record vendored for ${year}. ` +
+        `Outflow, spill and dissolved gas are available for 2015.`;
+      conditionsPlaceholder.replaceWith(missing);
     });
 
   loadRunHistory()
     .then((history) => {
+      if (token !== buildToken) return;
       passage.addGhost(history);
       historyPlaceholder.replaceWith(buildHistoryPlate(cursorSetters, history));
       setPlatesDay(lastDayIndex);
     })
     .catch((err) => {
+      if (token !== buildToken) return;
       console.warn("Run history plate unavailable:", err);
       historyPlaceholder.replaceWith(unavailablePlate("FIG. 5", "Run History, 2006–2015"));
     });
 
   setPlatesDay(lastDayIndex);
   if (lastAt) updatePlatesToday(lastAt);
+}
+
+// Called from main.js's setYear() once the new season is assigned. Every
+// figure in the drawer is drawn from runData at build time, so there is
+// nothing to update in place — the honest move is to throw them away and draw
+// again, which is what build() already does.
+//
+// Deferred when the drawer is closed, reusing the same lazy path first open
+// uses: rebuilding six figures nobody is looking at is work for its own sake,
+// and two of them would fire network requests to do it.
+export function rebuildPlatesForYear() {
+  syncYear();
+  if (!scrollEl) return;
+  if (isOpen) build();
+  else built = false;
 }
 
 export function setPlatesDay(idx) {

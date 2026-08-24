@@ -1,7 +1,19 @@
 import { Flock, REMOVE_FADE_FRAMES } from "./boids.js";
-import { runData } from "./data.js";
+import {
+  runData,
+  runYear,
+  AVAILABLE_YEARS,
+  loadYear,
+  loadRiverConditions,
+  loadRunHistory,
+} from "./data.js";
 import { seasonFraction } from "./seasonScale.js";
-import { initPlates, setPlatesDay, updatePlatesToday } from "./plates.js";
+import {
+  initPlates,
+  setPlatesDay,
+  updatePlatesToday,
+  rebuildPlatesForYear,
+} from "./plates.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
 import {
   buildTerrainMesh,
@@ -39,17 +51,36 @@ const canvas = document.getElementById("river-canvas");
 
 const dateLabel = document.getElementById("date-label");
 const dayOrdinalLabel = document.getElementById("day-ordinal");
+const yearSelect = document.getElementById("year-select");
 const playPauseBtn = document.getElementById("play-pause");
 const timelineInput = document.getElementById("timeline");
 const timelineAxis = document.getElementById("timeline-axis");
 const fishCountLabel = document.getElementById("fish-count");
-const speciesCountEls = {
-  chinook: document.getElementById("count-chinook"),
-  jackChinook: document.getElementById("count-jackChinook"),
-  steelhead: document.getElementById("count-steelhead"),
-  shad: document.getElementById("count-shad"),
-  lamprey: document.getElementById("count-lamprey"),
-};
+
+// The five species the flock actually draws. These and only these sum to
+// #fish-count, matching `count` in dart/parseAdultDaily.js and the population
+// the day tables are built from.
+const SIMULATED_COUNT_KEYS = [
+  "chinook",
+  "jackChinook",
+  "steelhead",
+  "shad",
+  "lamprey",
+];
+
+// Counted at the dam, reported here, never in the water. Kept as a SEPARATE
+// list rather than folded into the map below, and that separation is
+// load-bearing: the headline total is derived by summing the displayed
+// species, so adding these three to one flat map would have silently started
+// reporting sockeye and coho as fish the simulation was showing.
+const REPORTED_COUNT_KEYS = ["sockeye", "coho", "jackCoho"];
+
+const speciesCountEls = Object.fromEntries(
+  [...SIMULATED_COUNT_KEYS, ...REPORTED_COUNT_KEYS].map((key) => [
+    key,
+    document.getElementById(`count-${key}`),
+  ]),
+);
 const fishLoadingEl = document.getElementById("fish-loading");
 const noticeEl = document.getElementById("notice");
 
@@ -82,8 +113,13 @@ function dismissLoadingOverlay() {
 }
 
 const waterTempLabel = document.getElementById("water-temp");
+const outflowLabel = document.getElementById("outflow");
+const spillLabel = document.getElementById("spill");
+const dissolvedGasLabel = document.getElementById("dissolved-gas");
 const chinookRunLabel = document.getElementById("chinook-run");
 const seasonTotalLabel = document.getElementById("season-total");
+const seasonAverageLabel = document.getElementById("season-average");
+const seasonDeltaLabel = document.getElementById("season-delta");
 const chartPassagePath = document.getElementById("chart-passage");
 const chartTempPath = document.getElementById("chart-temp");
 const chartScaleLabel = document.getElementById("chart-scale");
@@ -128,11 +164,19 @@ function updateFishCountDisplay(idx, progress = 0) {
       (today[key] ?? 0) + ((tomorrow[key] ?? 0) - (today[key] ?? 0)) * progress,
     );
 
+  // Only the simulated five are summed. The three reported species are
+  // written to their cells and deliberately left OUT of the total: the
+  // headline figure has to keep meaning "the run this scene is showing", and
+  // the day tables, the spawn mix and `count` in the source data all agree on
+  // those five (see dart/parseAdultDaily.js).
   let total = 0;
-  for (const key of Object.keys(speciesCountEls)) {
+  for (const key of SIMULATED_COUNT_KEYS) {
     const value = at(key);
     total += value;
     setReadout(speciesCountEls[key], value);
+  }
+  for (const key of REPORTED_COUNT_KEYS) {
+    setReadout(speciesCountEls[key], at(key));
   }
   // Bare number: the HUD labels it (see index.html), the way a report column
   // is headed once rather than repeating its unit on every row.
@@ -144,21 +188,21 @@ function updateFishCountDisplay(idx, progress = 0) {
   // been opened once and built its figures.
   updatePlatesToday(at);
 
-  // Conditions. Temperature interpolates like the counts do — it is a real
-  // continuous quantity, so a day-to-day ramp is honest — but only when both
-  // ends of the interpolation actually exist. A null means DART published no
-  // reading, and inventing one would be worse than showing nothing.
-  const tempToday = today.tempC;
-  const tempTomorrow = tomorrow.tempC;
-  if (tempToday === null || tempToday === undefined) {
-    waterTempLabel.textContent = "—";
-  } else {
-    const blended =
-      tempTomorrow === null || tempTomorrow === undefined
-        ? tempToday
-        : tempToday + (tempTomorrow - tempToday) * progress;
-    waterTempLabel.textContent = `${blended.toFixed(1)} °C`;
-  }
+  // Conditions. Every one of these is a real continuous quantity, so a
+  // day-to-day ramp is honest — but only when both ends of the interpolation
+  // actually exist. A null means the gauge published no reading, and inventing
+  // one would be worse than showing nothing. See writeMeasurement().
+  writeMeasurement(waterTempLabel, today.tempC, tomorrow.tempC, progress, 1, "°C");
+
+  // Outflow, spill and dissolved gas ride in on a separate river-environment
+  // file loaded after boot, and it is missing entirely for nine of the ten
+  // seasons — riverConditionsByDate is empty until (and unless) it resolves,
+  // so these stay at "—" rather than reading zero.
+  const flowToday = riverConditionsByDate.get(today.date);
+  const flowTomorrow = riverConditionsByDate.get(tomorrow.date);
+  writeMeasurement(outflowLabel, flowToday?.outflowKcfs, flowTomorrow?.outflowKcfs, progress, 1, "kcfs");
+  writeMeasurement(spillLabel, flowToday?.spillKcfs, flowTomorrow?.spillKcfs, progress, 1, "kcfs");
+  writeMeasurement(dissolvedGasLabel, flowToday?.dissolvedGasMmHg, flowTomorrow?.dissolvedGasMmHg, progress, 0, "mmHg");
 
   // Null outside the runs' scheduled windows, which is most of the winter.
   // Snaps at the day boundary rather than interpolating — it is a label, not
@@ -166,6 +210,121 @@ function updateFishCountDisplay(idx, progress = 0) {
   chinookRunLabel.textContent = today.chinookRun ?? "—";
 
   setReadout(seasonTotalLabel, seasonToDate[idx]);
+  updateRunComparison(idx);
+}
+
+// One reading, interpolated across the day the way the counts are, with the
+// null discipline every measurement in this report needs: a blank cell in the
+// source means the gauge published nothing, and it has to stay visibly
+// different from a measured zero. Dissolved gas in particular is blank for
+// long stretches of the 2015 file, and spill is legitimately 0.000 on most
+// days — printing "0 mmHg" for the first would be a fabricated reading.
+function writeMeasurement(el, today, tomorrow, progress, digits, unit) {
+  if (today === null || today === undefined) {
+    if (el.textContent !== "—") el.textContent = "—";
+    return;
+  }
+  const blended =
+    tomorrow === null || tomorrow === undefined
+      ? today
+      : today + (tomorrow - today) * progress;
+  const text = `${blended.toFixed(digits)} ${unit}`;
+  if (el.textContent !== text) el.textContent = text;
+}
+
+// ---------------------------------------------------------------------
+// Enrichment loaded after boot: the river-environment gauges and the
+// ten-year daily mean.
+//
+// Neither is on the critical path — the bar is complete and correct without
+// them, showing "—" — so neither is awaited at boot and a failure in either
+// costs one field, never the river. Both are memoized per fetch in data.js,
+// so calling these again on a year change is cheap for a season already seen.
+// ---------------------------------------------------------------------
+
+// date -> { outflowKcfs, spillKcfs, dissolvedGasMmHg }, empty until the
+// current season's river file resolves. Replaced wholesale rather than
+// mutated, so a stale year's readings can never be half-mixed with a new
+// year's.
+let riverConditionsByDate = new Map();
+
+function loadConditionsForYear() {
+  const year = runYear;
+  riverConditionsByDate = new Map();
+  loadRiverConditions(year)
+    .then((rows) => {
+      // A slow fetch can land after the viewer has moved on to another
+      // season. Dropping it is the only correct option: these are readings
+      // for a year that is no longer on screen.
+      if (year !== runYear) return;
+      riverConditionsByDate = new Map(rows.map((row) => [row.date, row]));
+      updateFishCountDisplay(dayIndex);
+    })
+    .catch((err) => {
+      console.warn(`River conditions unavailable for ${year}:`, err);
+    });
+}
+
+// The 2006-2015 day-of-year envelope as loaded, and the cumulative mean
+// derived from it for the CURRENT season. Both null until the history file
+// resolves; meanToDate is indexed the same way seasonToDate is, so the two are
+// directly comparable.
+let historyEnvelope = null;
+let meanToDate = null;
+
+function loadHistoryComparison() {
+  loadRunHistory()
+    .then((history) => {
+      historyEnvelope = history.dailyEnvelope;
+      rebuildMeanToDate();
+      updateRunComparison(dayIndex);
+    })
+    .catch((err) => {
+      console.warn("Ten-year comparison unavailable:", err);
+    });
+}
+
+// Walks the season's own dates against the day-of-year envelope, accumulating
+// the mean daily count. Rebuilt per season rather than once: the envelope is
+// keyed by day-of-year and every season starts and ends on a different one,
+// so the running total through "record 40" is not the same figure in 2006 as
+// in 2015.
+function rebuildMeanToDate() {
+  if (!historyEnvelope) return;
+  const meanByDoy = new Map(historyEnvelope.map((d) => [d.doy, d.mean]));
+  meanToDate = new Float64Array(runData.length);
+  let running = 0;
+  for (let i = 0; i < runData.length; i++) {
+    running += meanByDoy.get(dayOfYear(runData[i].date)) ?? 0;
+    meanToDate[i] = running;
+  }
+}
+
+function updateRunComparison(idx) {
+  if (!meanToDate || meanToDate.length !== runData.length) {
+    seasonAverageLabel.textContent = "—";
+    seasonDeltaLabel.textContent = "—";
+    seasonDeltaLabel.className = "";
+    return;
+  }
+  const average = meanToDate[idx];
+  setReadout(seasonAverageLabel, Math.round(average));
+
+  // Guarded rather than assumed: the first counted day of a season can fall on
+  // a day-of-year no other year in the envelope reached, which makes the
+  // running mean genuinely 0 and the percentage genuinely undefined.
+  if (average <= 0) {
+    seasonDeltaLabel.textContent = "—";
+    seasonDeltaLabel.className = "";
+    return;
+  }
+  const delta = ((seasonToDate[idx] - average) / average) * 100;
+  const text = `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(0)}%`;
+  if (seasonDeltaLabel.textContent !== text) seasonDeltaLabel.textContent = text;
+  // The one saturated colour, on the one reading in the bar that is a
+  // judgement rather than a measurement — and only when the run is running
+  // ahead. Behind the average is the neutral case, not an alarm.
+  seasonDeltaLabel.className = delta >= 0 ? "above" : "below";
 }
 
 // The masthead's date line. Both halves move together, and three call sites
@@ -192,16 +351,33 @@ const MONTH_ABBREVIATIONS = [
 // Running total of the five simulated species from the first counted day
 // through day i — the figure a passage report actually leads with, since a
 // single day's count says nothing about whether the run is large or small.
-// Precomputed once: runData never changes after the fetch resolves.
-const seasonToDate = (() => {
-  const totals = new Float64Array(runData.length);
+//
+// Precomputed, but no longer once: the year control swaps runData underneath
+// this module (see loadYear in data.js), and seasons differ in length, so this
+// is reallocated per season by rebuildForYear() rather than being a `const`
+// filled at module scope. Same reason applies to dayTargets and friends
+// further down.
+let seasonToDate = new Float64Array(0);
+
+// The index of the season's heaviest day, for the transport's "peak" jump.
+// Derived here rather than searched on click so the button is O(1) and the
+// figure is available to anything else that wants it.
+let peakDayIndex = 0;
+
+function rebuildSeasonTotals() {
+  seasonToDate = new Float64Array(runData.length);
   let running = 0;
+  let peak = -1;
   for (let i = 0; i < runData.length; i++) {
-    running += runData[i].count ?? 0;
-    totals[i] = running;
+    const count = runData[i].count ?? 0;
+    running += count;
+    seasonToDate[i] = running;
+    if (count > peak) {
+      peak = count;
+      peakDayIndex = i;
+    }
   }
-  return totals;
-})();
+}
 
 // The whole season as one chart, drawn once at boot into the SVG in the HUD:
 // daily passage as a filled area, water temperature as a line over it, both
@@ -282,14 +458,74 @@ function buildTimelineAxis() {
     if (month === previousMonth || !MONTH_ABBREVIATIONS[month]) continue;
     previousMonth = month;
     const percent = (seasonFraction(i, last) * 100).toFixed(3);
+    // The tick stays an <i> — it is the hairline mark, and it is 1px wide,
+    // which is no kind of click target. The LABEL is the button, which is
+    // both big enough to hit and the thing a viewer is actually aiming at.
     marks.push(
-      `<i style="left:${percent}%"><b>${MONTH_ABBREVIATIONS[month]}</b></i>`,
+      `<i style="left:${percent}%">` +
+        `<button type="button" data-index="${i}">${MONTH_ABBREVIATIONS[month]}</button>` +
+        `</i>`,
     );
   }
   // Only ever the fixed abbreviations above and numbers derived from the
   // array index — nothing off the network reaches this string.
   timelineAxis.innerHTML = marks.join("");
+  thinMonthLabels();
 }
+
+// Hides any month label that would overlap the one before it, measured rather
+// than guessed.
+//
+// The ticks are positioned from real dates, so their spacing is uneven by
+// construction — a season starting on March 5 puts Mar and Apr about nine
+// percent of the track apart, which collides at any bar width — and the field
+// they sit in is fluid, so there is no width at which a fixed rule is right.
+// This used to be a media query hiding every other label below 640px, which
+// both under- and over-corrected, and it mattered more once the labels became
+// click targets: two overlapping labels means one of them jumps to the wrong
+// month.
+//
+// The TICKS are never hidden, so the axis still reads as a full season.
+const MONTH_LABEL_GAP_PX = 6;
+
+function thinMonthLabels() {
+  const labels = timelineAxis.querySelectorAll("button");
+  // Cleared first: a label hidden at a narrow width has a zero-width rect, so
+  // leaving it hidden would make it invisible to the collision test forever
+  // and it could never come back on a widened window.
+  for (const label of labels) label.style.visibility = "";
+
+  let previousRight = -Infinity;
+  for (const label of labels) {
+    const rect = label.getBoundingClientRect();
+    // A zero rect means the bar has not been laid out yet (this runs during
+    // module evaluation at boot, before first paint). Nothing to measure, so
+    // leave every label visible; the resize handler and the rAF below both
+    // re-run it once there is a layout.
+    if (rect.width === 0) return;
+    if (rect.left < previousRight + MONTH_LABEL_GAP_PX) {
+      label.style.visibility = "hidden";
+      continue;
+    }
+    previousRight = rect.right;
+  }
+}
+
+// First layout. buildTimelineAxis() runs during module evaluation, before the
+// bar has been laid out, so the measurement above has nothing to work with
+// until the browser has painted once.
+requestAnimationFrame(thinMonthLabels);
+
+// Delegated once, at module scope, rather than re-bound inside
+// buildTimelineAxis() — that function re-runs on every year change, and
+// per-build listeners on a container that is being replaced wholesale is how
+// you end up with a jump firing ten times.
+timelineAxis.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-index]");
+  if (!btn) return;
+  setPlaying(false);
+  jumpToDay(Number(btn.dataset.index));
+});
 
 // ---------------------------------------------------------------------
 // Scene: bounds map 1:1 onto world units — worldX = fish.x (downstream),
@@ -730,6 +966,10 @@ window.addEventListener("resize", () => {
     !widthChanged && heightDelta > 0 && heightDelta < CHROME_BAR_THRESHOLD_PX;
   lastViewport = { width, height };
 
+  // Cheap, and the bar reflows on a chrome-bar change too, so this is not
+  // behind the isBrowserChrome guard below.
+  if (widthChanged) thinMonthLabels();
+
   pixelBounds = { width, height };
   // The cheap half runs on every event regardless, so the canvas never looks
   // stretched — that includes the chrome-bar case, where the viewport really
@@ -829,17 +1069,20 @@ let frameCounter = 0;
 // the numbers moved too fast to follow. It also stretches the spawn ramp that
 // shares this progress value, so the school fills in and thins out more
 // gradually.
-const FRAMES_PER_DAY = 240;
-
-timelineInput.max = String(runData.length - 1);
-buildTimelineAxis();
-buildSeasonChart();
+//
+// No longer a constant, because the transport's speed selector divides it (see
+// setSpeed below). BASE is the 1x figure the tuning above describes;
+// `framesPerDay` is what the loop actually reads.
+const BASE_FRAMES_PER_DAY = 240;
+let framesPerDay = BASE_FRAMES_PER_DAY;
+let speedMultiple = 1;
 
 // ---------------------------------------------------------------------
-// Per-day population/species tables, precomputed once at load.
+// Per-day population/species tables, precomputed per season at load.
 //
-// These are pure functions of runData, which never changes after the fetch
-// resolves, but they used to be recomputed on demand — and each computation
+// These are pure functions of runData, which changes only when the year
+// control swaps a season in, but they used to be recomputed on demand — and
+// each computation
 // allocated a fresh counts object. desiredPopulation() alone called it twice
 // per frame, and every single spawn called it again to pick a species, so a
 // busy day was allocating dozens of throwaway objects per frame for numbers
@@ -858,13 +1101,13 @@ buildSeasonChart();
 // Counts stay fractional after scaling — deliberately, since they're only
 // ever used as weights or summed before rounding.
 // ---------------------------------------------------------------------
-const dayTargets = new Int32Array(runData.length);
-const dayWeights = new Float64Array(runData.length * SPECIES_KEYS.length);
+let dayTargets = new Int32Array(0);
+let dayWeights = new Float64Array(0);
 
 // Precomputed day-over-day change in target population, one entry per day,
 // used by applyDaySpeed to make the school swim faster/slower as the run
 // ramps up or tapers off. Derived from dayTargets, so it is rebuilt with it.
-const dailyRateOfChange = new Int32Array(runData.length);
+let dailyRateOfChange = new Int32Array(0);
 
 // (Re)fills all three tables against the CURRENT tier's population cap.
 //
@@ -883,11 +1126,19 @@ const dailyRateOfChange = new Int32Array(runData.length);
 // refilled to the high one — and the overflow was silently dropped from the
 // draw.
 //
-// The arrays are sized off runData.length, which never changes after the fetch
-// resolves, so they stay `const` and are filled in place. Anything holding a
-// reference to them keeps seeing current values.
+// The arrays are sized off runData.length, which the year control DOES change
+// (see loadYear in data.js — seasons run 290-306 days), so this reallocates
+// them rather than filling in place. That is why they are module-level `let`s
+// and why nothing may hold a long-lived reference to one across a year switch;
+// every reader below goes through the binding.
 function rebuildDayTables() {
   const cap = maxPopulation();
+
+  if (dayTargets.length !== runData.length) {
+    dayTargets = new Int32Array(runData.length);
+    dayWeights = new Float64Array(runData.length * SPECIES_KEYS.length);
+    dailyRateOfChange = new Int32Array(runData.length);
+  }
 
   for (let i = 0; i < runData.length; i++) {
     const day = runData[i];
@@ -913,8 +1164,6 @@ function rebuildDayTables() {
     dailyRateOfChange[i] = i === 0 ? 0 : dayTargets[i] - dayTargets[i - 1];
   }
 }
-
-rebuildDayTables();
 
 // ---------------------------------------------------------------------
 // Diurnal arrival shape
@@ -1027,7 +1276,26 @@ function applyDaySpeed(idx, progress = 0) {
 }
 
 let spawnAccumulator = 0;
+
+// Fraction of the remaining gap to the day's target closed per frame — so a
+// gap takes roughly 1/GAIN frames to close, ~15 at this value.
+//
+// That is comfortable at 240 frames a day and useless at 30: run the transport
+// at 8x and the school spends every day chasing a target that has already
+// moved on, visibly lagging the readout beside it. So the gain follows the
+// speed (see correctionGain() below) — the ramp is defined in terms of the
+// fraction of a DAY it takes, not a fraction of a second.
 const POPULATION_CORRECTION_GAIN = 0.15;
+
+// Capped well below 1: past about 0.6 the "ramp" is really a step, and the
+// school pops into existence at each day boundary instead of filling in. At
+// 8x this clamp is what binds, so the very top speed does lag slightly — the
+// honest trade, since the alternative is a visible pop.
+const MAX_CORRECTION_GAIN = 0.6;
+
+function correctionGain() {
+  return Math.min(MAX_CORRECTION_GAIN, POPULATION_CORRECTION_GAIN * speedMultiple);
+}
 
 // Floor on how much of the outgoing flow gets replaced — see
 // replacementFraction() below for what this is a floor on.
@@ -1155,6 +1423,157 @@ timelineInput.addEventListener("input", (e) => {
   jumpToDay(Number(e.target.value));
 });
 
+// ---------------------------------------------------------------------
+// Season switching.
+//
+// data.js exports runData as a live binding, so the swap itself is free —
+// every reader in this file sees the new array the moment loadYear() assigns
+// it. What is NOT free is everything DERIVED from the record: three typed
+// arrays sized off its length, the cumulative season totals, two SVG paths and
+// the month axis. rebuildForYear() is the one place that knows the full list,
+// and it is called both at boot and on every year change so the two paths
+// cannot drift.
+// ---------------------------------------------------------------------
+function rebuildForYear() {
+  rebuildSeasonTotals();
+  rebuildDayTables();
+  // Keyed by day-of-year, so a new season's record indices map onto different
+  // envelope entries — see the note on rebuildMeanToDate. A no-op before the
+  // history file has resolved; loadHistoryComparison() runs it again then.
+  rebuildMeanToDate();
+  timelineInput.max = String(runData.length - 1);
+  buildTimelineAxis();
+  buildSeasonChart();
+  // The heaviest day is a different date every season, and the button's title
+  // is the only place that says which one it is.
+  peakBtn.title = `Heaviest day of ${runYear}: ${runData[peakDayIndex].date}`;
+  peakBtn.setAttribute(
+    "aria-label",
+    `Jump to the heaviest day of ${runYear}, ${runData[peakDayIndex].date}`,
+  );
+  // Clamped rather than reset to 0: switching seasons mid-run should land near
+  // the same point in the season, not throw the viewer back to March.
+  jumpToDay(Math.min(dayIndex, runData.length - 1));
+}
+
+// Guards against a second switch landing while the first is still fetching —
+// the control is disabled for the duration, but a keyboard repeat can still
+// outrun a slow network.
+let yearSwitchInFlight = false;
+
+async function setYear(year) {
+  if (yearSwitchInFlight || year === runYear) return;
+  yearSwitchInFlight = true;
+  yearSelect.disabled = true;
+
+  // Held for the duration and restored after. A season change reallocates the
+  // day tables the pacing loop reads every frame, and letting it run through
+  // that is asking for a frame that indexes a half-built table.
+  const wasPlaying = isPlaying;
+  setPlaying(false);
+
+  try {
+    await loadYear(year);
+    rebuildForYear();
+    rebuildPlatesForYear();
+    loadConditionsForYear();
+    if (noticeEl && noticeEl.className === "warn") noticeEl.hidden = true;
+  } catch (err) {
+    console.warn(`Could not load the ${year} season:`, err);
+    // runData/runYear are untouched on a failed load (see loadYear in
+    // data.js), so the app is still showing a complete, correct season — this
+    // is a warning, not the error state.
+    showNotice(
+      `The ${year} counting season could not be loaded. ` +
+        `Still showing ${runYear}.`,
+      "warn",
+    );
+  } finally {
+    yearSelect.value = String(runYear);
+    yearSelect.disabled = false;
+    yearSwitchInFlight = false;
+    setPlaying(wasPlaying);
+  }
+}
+
+for (const year of AVAILABLE_YEARS) {
+  yearSelect.appendChild(new Option(String(year), String(year)));
+}
+yearSelect.value = String(runYear);
+yearSelect.addEventListener("change", () => setYear(Number(yearSelect.value)));
+
+// ---------------------------------------------------------------------
+// Transport.
+//
+// Both of these route through jumpToDay(), which already holds playback and
+// re-seeds the flock, the HUD, the season and the plates cursor — so they add
+// reach, not a second code path for "the day changed."
+// ---------------------------------------------------------------------
+function stepDay(delta) {
+  setPlaying(false);
+  // Wraps at both ends, matching the loop's own `(dayIndex + 1) % length`.
+  jumpToDay((dayIndex + delta + runData.length) % runData.length);
+}
+
+// The one jump that isn't reachable by dragging or stepping: finding the
+// heaviest day of a season by hand means scrubbing until the curve peaks,
+// and it is the day most worth looking at.
+const peakBtn = document.getElementById("to-peak");
+peakBtn.addEventListener("click", () => {
+  setPlaying(false);
+  jumpToDay(peakDayIndex);
+});
+
+// ---------------------------------------------------------------------
+// Playback speed.
+//
+// Divides BASE_FRAMES_PER_DAY, so 8x is 30 frames a day and a whole season is
+// about two and a half minutes rather than twenty.
+// ---------------------------------------------------------------------
+const SPEEDS = [
+  { multiple: 0.5, label: "½×" },
+  { multiple: 1, label: "1×" },
+  { multiple: 2, label: "2×" },
+  { multiple: 4, label: "4×" },
+  { multiple: 8, label: "8×" },
+];
+const DEFAULT_SPEED_INDEX = 1;
+const speedGroup = document.getElementById("speed");
+const speedButtons = [];
+
+function setSpeed(index) {
+  const clamped = Math.max(0, Math.min(SPEEDS.length - 1, index));
+  speedMultiple = SPEEDS[clamped].multiple;
+  framesPerDay = BASE_FRAMES_PER_DAY / speedMultiple;
+
+  // frameCounter is in frames, and the budget it is measured against just
+  // changed underneath it — rescale rather than reset, so changing speed
+  // mid-day holds the day's progress instead of jumping the readout and the
+  // spawn ramp back to dawn.
+  frameCounter = Math.min(frameCounter, framesPerDay);
+
+  speedButtons.forEach((btn, i) => {
+    btn.setAttribute("aria-pressed", String(i === clamped));
+  });
+}
+
+SPEEDS.forEach((speed, i) => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "speed-btn";
+  btn.textContent = speed.label;
+  btn.setAttribute("aria-label", `${speed.multiple}× speed`);
+  btn.addEventListener("click", () => setSpeed(i));
+  speedGroup.appendChild(btn);
+  speedButtons.push(btn);
+});
+setSpeed(DEFAULT_SPEED_INDEX);
+
+function nudgeSpeed(delta) {
+  const current = SPEEDS.findIndex((s) => s.multiple === speedMultiple);
+  setSpeed(current + delta);
+}
+
 // Keyboard control for the two things the interface actually does: run/hold,
 // and move through the season. Until now the only key bound was the debug
 // panel's "D", so a keyboard user could reach the timeline slider by tab but
@@ -1166,24 +1585,52 @@ timelineInput.addEventListener("input", (e) => {
 window.addEventListener("keydown", (e) => {
   // Never steal a key from a focused control — the timeline slider's own
   // arrow-key handling in particular, which fires `input` and routes through
-  // the handler above.
-  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  // the handler above. BUTTON is in the list because the transport and the
+  // month ticks are buttons: Space and Enter must activate the focused one
+  // rather than being intercepted here, which would double-fire.
+  const tag = e.target.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON") return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-  if (e.key === " " || e.key === "Spacebar") {
+  switch (e.key) {
     // Space scrolls the page by default. This page has nothing to scroll, but
     // the default also fires the focused button, which would double-toggle.
-    e.preventDefault();
-    setPlaying(!isPlaying);
-    return;
+    case " ":
+    case "Spacebar":
+      e.preventDefault();
+      setPlaying(!isPlaying);
+      return;
+    case "ArrowRight":
+      e.preventDefault();
+      stepDay(1);
+      return;
+    case "ArrowLeft":
+      e.preventDefault();
+      stepDay(-1);
+      return;
+    case "Home":
+      e.preventDefault();
+      setPlaying(false);
+      jumpToDay(0);
+      return;
+    case "End":
+      e.preventDefault();
+      setPlaying(false);
+      jumpToDay(runData.length - 1);
+      return;
+    // "=" rather than "+" so it works without Shift, and "_"/"+" accepted too
+    // for anyone who holds it anyway.
+    case "-":
+    case "_":
+      e.preventDefault();
+      nudgeSpeed(-1);
+      return;
+    case "=":
+    case "+":
+      e.preventDefault();
+      nudgeSpeed(1);
+      return;
   }
-
-  const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-  if (step === 0) return;
-  e.preventDefault();
-  setPlaying(false);
-  // Wraps at both ends, matching the loop's own `(dayIndex + 1) % length`.
-  jumpToDay((dayIndex + step + runData.length) % runData.length);
 });
 
 // ---------------------------------------------------------------------
@@ -1411,7 +1858,7 @@ function loop(t) {
   // count tracks `desiredPopulation`'s smooth ramp (rather than snapping),
   // and advance to the next day once this day's frame budget is spent.
   if (isPlaying) {
-    const progress = frameCounter / FRAMES_PER_DAY;
+    const progress = frameCounter / framesPerDay;
 
     // Tick the HUD's figures toward tomorrow's across the day, on the same
     // `progress` the spawn ramp below runs on — so the readout climbs at the
@@ -1441,7 +1888,7 @@ function loop(t) {
     // baked into this term's own slope and applying it again would square it.
     //
     // A per-frame RATE, hence the dt below.
-    let arrivals = Math.max(0, target - active) * POPULATION_CORRECTION_GAIN;
+    let arrivals = Math.max(0, target - active) * correctionGain();
 
     // Scaled by dt for the same reason flock.step() is: `arrivals` above is a
     // per-60fps-frame rate, so leaving it unscaled would make the run fill in
@@ -1489,7 +1936,7 @@ function loop(t) {
     }
 
     frameCounter += dt;
-    if (frameCounter >= FRAMES_PER_DAY) {
+    if (frameCounter >= framesPerDay) {
       frameCounter = 0;
       dayIndex = (dayIndex + 1) % runData.length;
       applyDaySpeed(dayIndex, 0);
@@ -1581,7 +2028,12 @@ sceneSetup.renderer.domElement.addEventListener(
 // ---------------------------------------------------------------------
 initPlates();
 createWorld();
-jumpToDay(0);
+// Builds everything derived from the season — the day tables, the cumulative
+// totals, the chart, the month axis — and ends by seeding the timeline. Same
+// function the year control calls, so boot and a switch cannot drift.
+rebuildForYear();
+loadConditionsForYear();
+loadHistoryComparison();
 frameHandle = requestAnimationFrame(loop);
 
 loadFishAssets()
