@@ -31,29 +31,44 @@
          MATERIAL_OVERRIDES in fishMesh.js and is recoverable from git
          history) to what a visitor actually wants: which species, whether it
          swims and turns, and now the anatomy plate. -->
+    <!-- Sectioned rather than a flat stack of controls: pick a fish, set up
+         the view, then read about it. Each section's contents are built in
+         src/inspect.js from the same data the river reads, so nothing here is
+         a hand-maintained copy of a species list. -->
     <div id="inspect-panel">
       <p class="field-head"><span class="label">Fish viewer</span></p>
 
-      <label class="row">
-        <span class="label">Species</span>
-        <select id="species-select">
-          <option value="chinook">Chinook</option>
-          <option value="jackChinook">Jack Chinook</option>
-          <option value="steelhead" selected>Steelhead</option>
-          <option value="shad">Shad</option>
-          <option value="lamprey">Pacific Lamprey</option>
-        </select>
-      </label>
+      <!-- Was a <select>. A list shows the whole roster at rest, carries each
+           species' own water tint as a key (the same vars the river's passage
+           table uses), and puts the scientific name where it can be read
+           rather than behind a click. Populated from SPECIES in inspect.js. -->
+      <div id="species-list" role="radiogroup" aria-label="Species"></div>
 
-      <div class="row toggles">
-        <label><input type="checkbox" id="playing-toggle" checked /> Swimming</label>
-        <label><input type="checkbox" id="rotate-toggle" checked /> Turntable</label>
-        <label><input type="checkbox" id="labels-toggle" checked /> Anatomy labels</label>
+      <div class="panel-section">
+        <p class="field-head"><span class="label">View</span></p>
+        <!-- Turntable OFF by default. It reads well as a demo and badly as a
+             plate: a rotating fish means every anatomy label is chasing an
+             anchor that never stops moving, so the one view where you would
+             actually read the labels is the one where they never settle.
+             Anyone who wants the rotation is one click away. -->
+        <div class="toggles">
+          <label><input type="checkbox" id="playing-toggle" checked /> Swimming</label>
+          <label><input type="checkbox" id="rotate-toggle" /> Turntable</label>
+          <label><input type="checkbox" id="labels-toggle" checked /> Anatomy labels</label>
+        </div>
+        <button id="reset-view" type="button">Reset view</button>
       </div>
 
-      <button id="reset-view" type="button">Reset view</button>
+      <!-- Adult length across all five on one scale, so "a jack is a small
+           Chinook" and "a lamprey is long and thin" are things you see rather
+           than work out from two numbers in a row. -->
+      <div class="panel-section" id="length-scale"></div>
 
-      <div id="field-guide"></div>
+      <!-- This species' own season at Lower Granite: a passage sparkline on
+           the same x-axis as the river's chart, then the figures. -->
+      <div class="panel-section" id="season-card"></div>
+
+      <div class="panel-section" id="field-guide"></div>
     </div>
 
     <div id="fish-loading">

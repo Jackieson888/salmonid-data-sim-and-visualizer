@@ -1087,6 +1087,48 @@ function bakeVertexAnimationTexture(
     }
   }
 
+  // Remove any net TRANSLATION the clip carries.
+  //
+  // These are swim-in-place clips: the body sweeps side to side about its rest
+  // pose and goes nowhere, because travel is the simulation's job (see
+  // centerPos in createFishInstancedMesh). So the mean offset over every
+  // vertex of every frame is zero by definition — for a clip that was authored
+  // that way.
+  //
+  // chinook-final.glb is not. Its clip displaces the entire body -2.082 along
+  // Z, which is 49% of that model's length, on every frame — a near-constant,
+  // not motion (the extreme is 2.128, so the variation about it is ~0.05).
+  // Everything downstream trusts the rest pose's own extent: the camera in
+  // inspect.js frames the bbox centre, and noseOffsetLocal puts the tracked
+  // nose at +modelLength/2. So the fish rendered half a body length behind
+  // where every one of those thought it was — in the fish viewer, visibly
+  // pushed back and out of frame.
+  //
+  // Corrected here rather than in the model, and rather than at any one call
+  // site, because this is the layer that owns the contract: whatever a clip
+  // was authored with, what comes out of this function is a displacement field
+  // about the rest pose. Removing the MEAN over all vertices takes out a rigid
+  // translation only; it cannot flatten the swim itself, which is what the
+  // per-vertex variation around that mean is. On the three models authored
+  // correctly it subtracts 0.2-0.6%, i.e. nothing.
+  let meanX = 0;
+  let meanY = 0;
+  let meanZ = 0;
+  const sampleCount = vertexCount * frameCount;
+  for (let o = 0; o < data.length; o += 4) {
+    meanX += data[o];
+    meanY += data[o + 1];
+    meanZ += data[o + 2];
+  }
+  meanX /= sampleCount;
+  meanY /= sampleCount;
+  meanZ /= sampleCount;
+  for (let o = 0; o < data.length; o += 4) {
+    data[o] -= meanX;
+    data[o + 1] -= meanY;
+    data[o + 2] -= meanZ;
+  }
+
   const texture = new THREE.DataTexture(
     data,
     vertexCount,

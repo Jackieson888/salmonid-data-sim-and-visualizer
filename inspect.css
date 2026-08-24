@@ -15,7 +15,10 @@
   position: absolute;
   top: 18px;
   right: 18px;
-  width: 240px;
+  /* Was 240px. The panel carries a species roster with scientific names, a
+     length scale and a season card now — at 240 the sparkline was too narrow
+     to show a run's shape and every stat row wrapped. */
+  width: 300px;
   max-height: calc(100vh - 36px);
   overflow-y: auto;
   padding: 10px 14px 12px;
@@ -36,36 +39,106 @@
   color: var(--text-faint);
 }
 
-#inspect-panel .row {
+/* Each block of the panel is one section with its own head, divided by a
+   hairline — the same way the report bar divides its fields. */
+.panel-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+#inspect-panel input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------
+   Species picker — a list, not a <select>. The whole roster is readable at
+   rest, each row keyed with that species' own water tint.
+   --------------------------------------------------------------------- */
+
+#species-list {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 0;
+  flex-direction: column;
 }
 
-#inspect-panel .row .label {
-  font-size: var(--t-2);
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-#inspect-panel select {
+.species-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px 5px 5px;
   background: transparent;
-  color: var(--text);
-  border: 1px solid var(--line);
+  border: none;
+  /* The selected marker. Reserved on every row so selecting one does not
+     shift the text of all five sideways. */
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
   font-family: var(--sans);
-  font-size: var(--t-3);
-  padding: 2px 4px;
 }
+
+.species-option:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.species-option.selected {
+  border-left-color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.species-option:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* Square, not a dot — matching the report bar's species keys. */
+.species-key {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--text-faint);
+  transform: translateY(-1px);
+}
+
+.species-option[data-species="chinook"] .species-key { background: var(--chinook); }
+.species-option[data-species="jackChinook"] .species-key { background: var(--jack-chinook); }
+.species-option[data-species="steelhead"] .species-key { background: var(--steelhead); }
+.species-option[data-species="shad"] .species-key { background: var(--shad); }
+.species-option[data-species="lamprey"] .species-key { background: var(--lamprey); }
+
+.species-names {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.species-common {
+  font-size: var(--t-3);
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.species-option.selected .species-common {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.species-scientific {
+  font-size: var(--t-1);
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------------
+   View controls
+   --------------------------------------------------------------------- */
 
 #inspect-panel .toggles {
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  padding-top: 8px;
-  margin-top: 4px;
-  border-top: 1px solid var(--line-soft);
 }
 
 #inspect-panel .toggles label {
@@ -75,10 +148,6 @@
   font-size: var(--t-3);
   color: var(--text-dim);
   cursor: pointer;
-}
-
-#inspect-panel input[type="checkbox"] {
-  accent-color: var(--accent);
 }
 
 #reset-view {
@@ -102,33 +171,164 @@
   border-color: var(--text-dim);
 }
 
+#reset-view:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ---------------------------------------------------------------------
-   Field guide card — species facts, rebuilt on every species change (see
-   updateFieldGuide in src/inspect.js).
+   Adult length — all five species on one scale, so the comparison is the
+   thing you see rather than something you work out from two numbers.
    --------------------------------------------------------------------- */
 
-#field-guide {
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line-soft);
+.len-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
 }
 
-#field-guide .field-head {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
+/* Wide enough for "Steelhead" set in uppercase with letter-spacing — `ch` is
+   the width of a "0" in the current font, which under-measures spaced capitals
+   badly, and at 8.5ch every row but "Shad" and "Jack" ellipsised into
+   "CHINO…"/"LAMP…", which names nothing. */
+.len-name {
+  flex: none;
+  width: 11ch;
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
-.fg-common {
-  font-size: var(--t-4);
-  font-weight: 700;
+.len-track {
+  position: relative;
+  flex: 1;
+  height: 7px;
+  /* The scale itself, so a bar's position on it is readable without a grid. */
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.len-bar {
+  position: absolute;
+  top: 0;
+  height: 6px;
+  background: var(--line);
+}
+
+.len-row.current .len-name {
+  color: var(--text-dim);
+}
+
+.len-row.current .len-bar {
+  background: var(--accent);
+}
+
+.len-row.current .len-figure {
   color: var(--text);
 }
 
-.fg-scientific {
-  margin-top: 1px;
-  margin-bottom: 6px;
-  font-size: var(--t-2);
+.len-figure {
+  flex: none;
+  width: 5ch;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-1);
   color: var(--text-faint);
+  text-align: right;
+}
+
+/* The axis is a .len-row too, so its track is the same element at the same
+   width as every bar's — which is what makes "24" sit above the 24-inch mark
+   rather than merely near it. */
+.len-axis-row {
+  margin-top: 2px;
+}
+
+.len-axis-track {
+  border-bottom: none;
+  height: auto;
+}
+
+.len-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-1);
+  color: var(--text-faint);
+}
+
+/* The end ticks would hang half off the track if centred. */
+.len-tick:first-child {
+  transform: none;
+}
+
+.len-tick:last-child {
+  transform: translateX(-100%);
+}
+
+.len-axis-row .len-figure {
+  color: var(--text-dimmer);
+}
+
+/* ---------------------------------------------------------------------
+   Season card — this species' own daily passage, on the same x-axis and the
+   same √ scale as the river's chart and every plate in the drawer.
+   --------------------------------------------------------------------- */
+
+.spark {
+  display: block;
+  width: 100%;
+  height: 46px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.spark-area {
+  fill: var(--series);
+  stroke: none;
+}
+
+.spark-area[data-species="chinook"] { fill: var(--chinook); }
+.spark-area[data-species="jackChinook"] { fill: var(--jack-chinook); }
+.spark-area[data-species="steelhead"] { fill: var(--steelhead); }
+.spark-area[data-species="shad"] { fill: var(--shad); }
+.spark-area[data-species="lamprey"] { fill: var(--lamprey); }
+
+.spark-rule {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The one day the whole shape is about. */
+.spark-peak {
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Absolutely positioned from the same seasonFraction the rules above are drawn
+   at (see buildSparkAxis), not spaced evenly — the counting season starts
+   partway through March, so the months are not equal fractions of the track.
+   Same arrangement the river's own month axis uses. */
+.spark-axis {
+  position: relative;
+  height: 12px;
+  margin: 2px 0 6px;
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.spark-axis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .fg-row {
@@ -155,7 +355,6 @@
 }
 
 .fg-note {
-  margin-top: 8px;
   font-size: var(--t-2);
   line-height: 1.45;
   color: var(--text-dim);

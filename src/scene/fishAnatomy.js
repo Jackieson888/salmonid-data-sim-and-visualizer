@@ -34,7 +34,14 @@ const SALMONID_PARTS = [
   { id: "pectoralFin", label: "Pectoral Fin", t: 0.24, x: 0.9, y: -0.5, note: "Paired fin just behind the gills. Steers and brakes." },
   { id: "dorsalFin", label: "Dorsal Fin", t: 0.45, x: 0, y: 1, note: "The fin along the back. Keeps the fish from rolling." },
   { id: "pelvicFin", label: "Pelvic Fin", t: 0.55, x: 0.6, y: -0.9, note: "Paired fin on the belly. Fine steering and stability." },
-  { id: "adiposeFin", label: "Adipose Fin", t: 0.68, x: 0, y: 0.9, note: "A small, rayless fin found only on salmon and trout. Hatchery fish usually have it clipped before release — that clip is how wild and hatchery fish are told apart at the dam (see FIG. 3, Wild vs. Hatchery Steelhead)." },
+  // t was 0.68, which is barely past the midpoint between the dorsal fin
+  // (~0.46) and the caudal peduncle (~0.91) — forward of where a salmonid's
+  // adipose fin actually sits, and forward enough on these meshes that the
+  // authored y of 0.9 had no vertex anywhere near it: the point snapped down
+  // to ~0.26 of half-height, onto the upper flank rather than the dorsal
+  // ridge, and the label pointed at bare side. 0.79 puts it just ahead of the
+  // peduncle where the fin belongs, and y stays at the ridge.
+  { id: "adiposeFin", label: "Adipose Fin", t: 0.79, x: 0, y: 1, note: "A small, rayless fin found only on salmon and trout. Hatchery fish usually have it clipped before release — that clip is how wild and hatchery fish are told apart at the dam (see FIG. 3, Wild vs. Hatchery Steelhead)." },
   { id: "analFin", label: "Anal Fin", t: 0.74, x: 0, y: -0.9, note: "Behind the vent. Stabilizes against side-to-side yaw." },
   { id: "lateralLine", label: "Lateral Line", t: 0.5, x: 0.95, y: 0, note: "A row of sensory pores along the flank, sensing vibration and pressure change in the water." },
   { id: "caudalPeduncle", label: "Caudal Peduncle", t: 0.9, x: 0.3, y: 0, note: "The narrow “wrist” joining body to tail, where swimming power concentrates." },
