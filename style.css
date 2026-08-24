@@ -1428,25 +1428,72 @@ body {
   }
 }
 
+/* Below this the five fields can only stack, and stacked they ate 744px of an
+   812px phone screen — the bar became the page and the river was a strip
+   above it. So the narrow layout is a two-column grid rather than a column:
+   the fields pair up, which roughly halves the height, and the chart keeps
+   the full width it needs. */
 @media (max-width: 640px) {
   #hud {
     padding: 10px;
+  }
+
+  .report-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px var(--s3);
+    padding: 9px 12px 8px;
+  }
+
+  /* Grid items are min-width:auto by default, so a field whose content has a
+     fixed width — the species table is `table-layout: fixed` with ch-sized
+     cells — refuses to shrink and pushes its track wider than the 1fr says.
+     That blew both columns past the viewport: conditions ran off the right
+     edge and took the season chart with it. */
+  .report-body > .field {
+    min-width: 0;
+  }
+
+  /* The vertical hairlines divided fields in a row; in a grid they would draw
+     down the middle of the left column only. The grid's own gaps do the
+     dividing here. */
+  .field + .field {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  /* Full-width: the masthead because its identity type wraps badly in half a
+     phone screen, the counts because they are the point of the thing and
+     already two columns of their own, the chart because the cursor has to
+     read against it. That leaves conditions and the run comparison to share
+     the one paired row. */
+  #masthead,
+  #passage,
+  #controls {
+    grid-column: 1 / -1;
   }
 
   #masthead h1 {
     font-size: var(--t-5);
   }
 
+  /* The station and reach lines are provenance, and provenance is what a
+     phone screen has least room for. The footnote strip below still carries
+     the source. */
+  #masthead .station,
+  #masthead .reach {
+    font-size: var(--t-1);
+  }
+
   #species-breakdown .count {
     padding-right: 8px;
   }
 
-  /* Ten month labels do not fit under a track this narrow, and letting them
-     collide is worse than thinning them. The ticks all stay, so the axis
-     still reads as a full season. */
-  #timeline-axis i:nth-child(even) button {
-    display: none;
-  }
+  /* Month labels are thinned by measurement (see thinMonthLabels in main.js),
+     which handles this width along with every other. There used to be a rule
+     here hiding every other one, and it fought that pass: a display:none
+     label has a zero-width rect, which the measurement could not reason
+     about. */
 
   /* The speed group wraps under the transport rather than squeezing it. */
   #transport {

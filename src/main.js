@@ -489,20 +489,22 @@ function buildTimelineAxis() {
 const MONTH_LABEL_GAP_PX = 6;
 
 function thinMonthLabels() {
+  // Nothing laid out yet — this runs during module evaluation at boot, before
+  // first paint. Checked once on the CONTAINER rather than per label: a
+  // per-label zero-width test that bailed out of the whole pass was a bug,
+  // because it would stop at the first unmeasurable label and leave every
+  // label after it visible and overlapping.
+  if (timelineAxis.clientWidth === 0) return;
+
   const labels = timelineAxis.querySelectorAll("button");
-  // Cleared first: a label hidden at a narrow width has a zero-width rect, so
-  // leaving it hidden would make it invisible to the collision test forever
-  // and it could never come back on a widened window.
+  // Cleared first: a hidden label has a zero-width rect, so leaving it hidden
+  // would make it invisible to the collision test forever and it could never
+  // come back on a widened window.
   for (const label of labels) label.style.visibility = "";
 
   let previousRight = -Infinity;
   for (const label of labels) {
     const rect = label.getBoundingClientRect();
-    // A zero rect means the bar has not been laid out yet (this runs during
-    // module evaluation at boot, before first paint). Nothing to measure, so
-    // leave every label visible; the resize handler and the rAF below both
-    // re-run it once there is a layout.
-    if (rect.width === 0) return;
     if (rect.left < previousRight + MONTH_LABEL_GAP_PX) {
       label.style.visibility = "hidden";
       continue;
@@ -1582,15 +1584,26 @@ function nudgeSpeed(delta) {
 // Space and the arrows are the conventional bindings for a transport, and
 // stepping a day reuses jumpToDay(), which already pauses and re-seeds
 // everything a scrub does.
+// Keys a focused button handles itself. Nothing else on this page is bound to
+// either, so anything outside this set is safe to act on even while a button
+// has focus.
+const BUTTON_OWN_KEYS = new Set([" ", "Spacebar", "Enter"]);
+
 window.addEventListener("keydown", (e) => {
-  // Never steal a key from a focused control — the timeline slider's own
-  // arrow-key handling in particular, which fires `input` and routes through
-  // the handler above. BUTTON is in the list because the transport and the
-  // month ticks are buttons: Space and Enter must activate the focused one
-  // rather than being intercepted here, which would double-fire.
-  const tag = e.target.tagName;
-  if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON") return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  // Never steal a key from a focused control. INPUT and SELECT are skipped
+  // outright — the timeline slider's arrow keys, a select's type-ahead — but
+  // a BUTTON only owns Space and Enter.
+  //
+  // Skipping buttons outright, which is what this did first, was a real trap:
+  // clicking any transport button leaves focus on it, so every binding on the
+  // page went dead until the user happened to click somewhere else. Pressing
+  // Peak and then finding that Home, the arrows and the speed keys did
+  // nothing is exactly the sort of thing that reads as the page being broken.
+  const tag = e.target.tagName;
+  if (tag === "INPUT" || tag === "SELECT") return;
+  if (tag === "BUTTON" && BUTTON_OWN_KEYS.has(e.key)) return;
 
   switch (e.key) {
     // Space scrolls the page by default. This page has nothing to scroll, but

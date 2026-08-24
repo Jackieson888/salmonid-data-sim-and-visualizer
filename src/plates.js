@@ -655,11 +655,8 @@ export function initPlates() {
       return;
     }
 
-    // BUTTON alongside INPUT/SELECT for the same reason main.js's handler
-    // skips it: the transport and the month ticks are buttons, and "P" typed
-    // with one of them focused should do nothing.
     const tag = e.target.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON") return;
+    if (tag === "INPUT" || tag === "SELECT") return;
 
     if (e.key.toLowerCase() !== "p") return;
     e.preventDefault();
