@@ -71,7 +71,14 @@ const SETTINGS = {
     // knob means the same thing at every tier.
     causticTaps: 1,
 
-    population: 300,
+    // Was 300. Cut alongside the other two tiers' population when the river
+    // itself (main.js's WORLD_SCALE) shrank to 55% of its former size — a
+    // fish's own rendered size didn't change, so relative to the smaller
+    // channel it now covers roughly (1/0.55)^2 ≈ 3.3x the screen area it used
+    // to, and holding the population at its old count would have been
+    // simulating/shading a school far denser than the shot needs to read as
+    // full. See the matching notes at the medium/high entries below.
+    population: 220,
     particleCount: 0,
     shaftCount: 0,
 
@@ -89,29 +96,30 @@ const SETTINGS = {
     // Blinn-Phong specular and the rim term are two pow() calls per fragment
     // across the whole flock. Legible on a 27" display, invisible on a phone.
     fishHighlights: false,
-
-    // Halves the VAT texture and its per-vertex fetch cost. The tailbeat is a
-    // smooth loop, so 15 poses interpolate to something very close to 30.
-    vatFrames: 15,
   },
 
   medium: {
     pixelRatio: 1.5,
     realCaustics: true,
     waterSimSize: 256,
-    causticsSegments: 128,
+    // Scaled with the coverage restructure (see causticsWorldSize in
+    // water.js): 128 -> 68 holds world-space vertex density constant against a
+    // coverage that went from 2.1 span per side to ~1.11.
+    causticsSegments: 68,
     causticsTargetSize: 512,
     causticsEnvSize: 256,
     causticsIterations: 20,
     causticsInterval: 3,
     causticTaps: 1,
-    population: 650,
+    // Was 650 — see the low tier's population comment above; not cut by the
+    // same ~3x the screen-area math suggests, because a mid-density day was
+    // already the tier most likely to look sparse rather than crowded.
+    population: 460,
     particleCount: 1400,
     shaftCount: 8,
     bloom: "half",
     waterSizeMultiplier: 2.1,
     fishHighlights: true,
-    vatFrames: 30,
   },
 
   high: {
@@ -120,19 +128,36 @@ const SETTINGS = {
     // 512 rather than the 600 this shipped with. Not a power of two, 27%
     // fewer texels, and no visible difference in the height field.
     waterSimSize: 512,
-    causticsSegments: 256,
+    // 256 -> 120. The caustics pass is the frame's dominant cost — a
+    // segments² grid whose VERTEX shader runs a causticsIterations-deep
+    // texture-fetch loop — and it used to cover waterWorldSize(), i.e. 2.4
+    // span per side. It now covers the distance light is still legible
+    // through the fog, ~1.11 span (see causticsWorldSize in water.js), so this
+    // holds the same world-space vertex density over a smaller area:
+    // 257² = 66k vertices down to 121² = 15k.
+    //
+    // causticsTargetSize is deliberately NOT cut to match. Holding 1024 over a
+    // smaller area is a free resolution increase in the accumulation texture,
+    // at identical fill cost — the pass got cheaper on its expensive axis and
+    // sharper on its cheap one.
+    //
+    // causticsInterval is also left alone. The pass is now several times
+    // cheaper, so there is likely room to drop it from 2 to 1 and buy back
+    // temporal smoothness, but that is a real-hardware measurement rather
+    // than an arithmetic one.
+    causticsSegments: 120,
     causticsTargetSize: 1024,
     causticsEnvSize: 512,
     causticsIterations: 40,
     causticsInterval: 2,
     causticTaps: 5,
-    population: 1200,
+    // Was 1200 — see the low tier's population comment above.
+    population: 850,
     particleCount: 4200,
     shaftCount: 18,
     bloom: "full",
     waterSizeMultiplier: 2.4,
     fishHighlights: true,
-    vatFrames: 30,
   },
 };
 

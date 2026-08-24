@@ -124,6 +124,65 @@ export function waterWorldSize(bounds) {
   };
 }
 
+// How far out the caustic net is worth computing, as a multiple of the fog's
+// own saturation distance. At `fogDensity * dist = 2.0` a surface is
+// 1 - exp(-4) = 98.2% fog, so ADDED caustic light there is ~2% visible; past
+// that the pass is rasterizing a light net into haze.
+const CAUSTICS_FOG_REACH = 2.0;
+
+// The caustics pass's own world coverage — deliberately NOT waterWorldSize().
+//
+// The two used to be the same function, which is why they drifted into being
+// the same idea. They are not. The water sim's coverage is set by how much
+// PLANE has to be drawn: the surface and riverbed extend waterSizeMultiplier()
+// (2.4 at the high tier, so 5.76x the bounds AREA) past the river so their
+// edges dissolve into fog instead of ending on a visible line. The caustics
+// coverage is set by something completely different — how far light is still
+// legible — and that is a much shorter distance.
+//
+// It matters because the caustics pass is the frame's most expensive item: a
+// segments² grid whose VERTEX shader runs a causticsIterations-deep
+// texture-fetch loop. Its cost is proportional to the area covered at constant
+// world-space vertex density, so covering 5.76x the bounds when ~1.2x is
+// legible was most of the pass being spent below the fog's noise floor.
+//
+// Centered on the eye->target midpoint for the same reason particles.js sizes
+// its silt volume that way (see the note there): the camera sits at the edge
+// of the channel looking across it, so a box centered on the EYE hangs half
+// its area off the bank behind the viewer and starves the far water actually
+// in frame.
+export function causticsWorldSize(bounds, cameraPosition, cameraTarget) {
+  const span = Math.max(bounds.width, bounds.height);
+  // fogDensity() is 3.6 / span (see fog.js), so this resolves to
+  // CAUSTICS_FOG_REACH * span / 3.6 — about 0.56 span at the default.
+  const reach = CAUSTICS_FOG_REACH / fogDensity(bounds);
+
+  const centerX = (cameraPosition.x + cameraTarget.x) * 0.5;
+  const centerZ = (cameraPosition.z + cameraTarget.z) * 0.5;
+
+  // Never larger than the water coverage: past that edge the surface and bed
+  // have already faded out, so there is nothing left to light.
+  const water = waterWorldSize(bounds);
+  const width = Math.min(reach * 2, water.width);
+  const height = Math.min(reach * 2, water.height);
+
+  // Same {marginX, marginZ} contract as waterWorldSize: the offset that turns
+  // a world XZ into this coverage's [0,1] uv. The box is centered on
+  // (centerX, centerZ) rather than on bounds, so the margin carries that
+  // recentering too — a consumer's uv math is unchanged, which is what lets
+  // all four readers keep the identical `(worldPos.xz + margin) / worldSize`
+  // line they already had.
+  return {
+    width,
+    height,
+    marginX: width / 2 - centerX,
+    marginZ: height / 2 - centerZ,
+    centerX,
+    centerZ,
+    span,
+  };
+}
+
 const VERTEX_SHADER = /* glsl */ `
   varying vec3 vWorldPos;
   void main() {
@@ -148,6 +207,12 @@ const fragmentShader = () => /* glsl */ `
   uniform sampler2D uCaustics;
   uniform vec2 uWorldSize;
   uniform vec2 uMargin;
+  // The caustics pass covers a SHORTER reach than the water sim does (see
+  // causticsWorldSize in this file), so it needs its own world->uv mapping.
+  // This shader used to compute one uv and use it for both, which was correct
+  // only for as long as the two coverages were the same call.
+  uniform vec2 uCausticsWorldSize;
+  uniform vec2 uCausticsMargin;
   uniform vec2 uTexel;
   // Drives the procedural surface/caustics at the low tier, where there is no
   // simulation to read (see quality.js). Unused — and compiled out — on the
@@ -214,8 +279,10 @@ const fragmentShader = () => /* glsl */ `
     // surface glints with the same light pattern that lands underwater
     // instead of an unrelated procedural shimmer, through the same
     // softSaturate() curve (see glsl.js).
+    vec2 causticsUv = (vWorldPos.xz + uCausticsMargin) / uCausticsWorldSize;
     float glint = softSaturate(
-      causticGlowAt(uCaustics, uv, uTexel, vWorldPos.xz, uTime) * uCausticsStrength
+      causticGlowAt(uCaustics, causticsUv, uTexel, vWorldPos.xz, uTime)
+        * uCausticsStrength
     );
     color +=
       uCausticsColor * glint * 0.35 * mix(${f(MIRROR_GLINT)}, 1.0, window);
@@ -237,7 +304,7 @@ const fragmentShader = () => /* glsl */ `
   }
 `;
 
-export function buildWaterMesh(bounds, causticsTextureSize) {
+export function buildWaterMesh(bounds, causticsTextureSize, causticsCoverage) {
   // Drawn waterSizeMultiplier() bigger than the river bounds, but
   // re-centered on the same center point, so the extra size grows evenly
   // past the edges rather than shifting the visible area.
@@ -260,6 +327,18 @@ export function buildWaterMesh(bounds, causticsTextureSize) {
     uTime: { value: 0 },
     uWorldSize: { value: new THREE.Vector2(planeWidth, planeHeight) },
     uMargin: { value: new THREE.Vector2(marginX, marginZ) },
+    uCausticsWorldSize: {
+      value: new THREE.Vector2(
+        causticsCoverage.width,
+        causticsCoverage.height,
+      ),
+    },
+    uCausticsMargin: {
+      value: new THREE.Vector2(
+        causticsCoverage.marginX,
+        causticsCoverage.marginZ,
+      ),
+    },
     uTexel: {
       value: new THREE.Vector2(1 / causticsTextureSize, 1 / causticsTextureSize),
     },

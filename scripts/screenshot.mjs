@@ -10,11 +10,24 @@
 // Usage:
 //   node scripts/screenshot.mjs <out.png> [--url http://localhost:5173]
 //     [--day 63] [--width 1600] [--height 1000] [--wait 9000] [--brighten]
+//     [--burst N] [--headless]
 //
 // --day scrubs the timeline slider to that index before capturing (the run's
 // interesting days are well past 0); --brighten applies a CSS filter, since
 // the scene is deliberately dark and detail is hard to compare at true
-// exposure.
+// exposure. --burst N writes N frames spaced across the settle window as
+// out.0.png, out.1.png, … instead of one file, which is how you catch the
+// defects that only exist in MOTION — a species' paint order flipping, a fish
+// popping at the cull band, a tailbeat desyncing from travel. A still frame
+// of any of those looks perfectly fine.
+//
+// Runs HEADED by default, which is not a preference. Headless Chromium decides
+// the page isn't visible and throttles requestAnimationFrame to about 1Hz, so
+// the settle window below bought roughly nine simulation frames rather than
+// nine seconds' worth — captures were of a scene that had never actually
+// filled in or settled, and nothing said so. --headless is kept for CI, where
+// a still of an unsettled scene is still enough to catch a shader that has
+// stopped drawing.
 
 import { chromium } from "playwright";
 
@@ -36,8 +49,17 @@ const width = Number(flag("width", 1600));
 const height = Number(flag("height", 1000));
 const settleMs = Number(flag("wait", 9000));
 const day = flag("day", null);
+const burst = Number(flag("burst", 0));
 
-const browser = await chromium.launch({ args: ["--no-sandbox"] });
+const browser = await chromium.launch({
+  headless: has("headless"),
+  args: [
+    "--no-sandbox",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+  ],
+});
 const page = await browser.newPage({
   viewport: { width, height },
   deviceScaleFactor: 1.5,
@@ -62,20 +84,45 @@ if (day !== null) {
     el.value = String(v);
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }, Number(day));
+
+  // Scrubbing the timeline pauses playback (see the input handler in main.js),
+  // and a paused scene advances nothing: the water sim stops stepping, the
+  // caustics pass is gated on isPlaying, and the flock holds the formation it
+  // was dropped into. So the settle window below was waiting out a freeze
+  // frame. Resume, and let it actually settle.
+  const label = (await page.locator("#play-pause").textContent()).trim();
+  if (label === "Play") await page.locator("#play-pause").click();
 }
 
-// Let the flock settle into the day's population and the water sim build up
-// some ripple history before capturing.
-await page.waitForTimeout(settleMs);
-
-if (has("brighten")) {
+const brighten = async () => {
+  if (!has("brighten")) return;
   await page.evaluate(() => {
     document.body.style.filter = "brightness(2.2) contrast(1.15)";
   });
-}
+};
 
-await page.screenshot({ path: outPath });
-console.log(`wrote ${outPath}`);
+if (burst > 0) {
+  // Spread the captures across the same settle window a single shot would
+  // have waited out, so the series covers real elapsed motion rather than N
+  // frames from one instant.
+  await page.waitForTimeout(settleMs);
+  await brighten();
+  const gap = Math.max(100, Math.round(settleMs / burst));
+  const ext = outPath.match(/\.[a-z]+$/i)?.[0] ?? ".png";
+  const stem = outPath.slice(0, outPath.length - ext.length);
+  for (let i = 0; i < burst; i++) {
+    await page.screenshot({ path: `${stem}.${i}${ext}` });
+    if (i < burst - 1) await page.waitForTimeout(gap);
+  }
+  console.log(`wrote ${burst} frames: ${stem}.0${ext} … ${stem}.${burst - 1}${ext}`);
+} else {
+  // Let the flock settle into the day's population and the water sim build up
+  // some ripple history before capturing.
+  await page.waitForTimeout(settleMs);
+  await brighten();
+  await page.screenshot({ path: outPath });
+  console.log(`wrote ${outPath}`);
+}
 console.log("CONSOLE_ERRORS:", JSON.stringify(errors, null, 2));
 
 await browser.close();

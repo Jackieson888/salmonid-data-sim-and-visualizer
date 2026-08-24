@@ -6,7 +6,11 @@ import {
   setTerrainSeason,
   riverDepth,
 } from "./scene/terrain.js";
-import { buildWaterMesh, waterWorldSize } from "./scene/water.js";
+import {
+  buildWaterMesh,
+  waterWorldSize,
+  causticsWorldSize,
+} from "./scene/water.js";
 import { buildParticles } from "./scene/particles.js";
 import { buildGodRays } from "./scene/godRays.js";
 import { createWaterSimulation } from "./scene/waterSim.js";
@@ -44,13 +48,46 @@ const speciesCountEls = {
   shad: document.getElementById("count-shad"),
 };
 const fishLoadingEl = document.getElementById("fish-loading");
+const noticeEl = document.getElementById("notice");
+
+// Surfaces a real failure to the viewer instead of only to the console. Kept
+// deliberately small: this scene has exactly two things that can fail in a way
+// someone watching would notice and be able to act on — the fish assets not
+// loading, and an opted-in live data refresh not arriving — and both are
+// recoverable enough that a reload is genuine advice rather than a shrug.
+function showNotice(message, kind = "error") {
+  if (!noticeEl) return;
+  noticeEl.textContent = message;
+  noticeEl.className = kind;
+  noticeEl.hidden = false;
+}
+
+// Fades the loading overlay out and then drops it from the DOM.
+//
+// The removal is NOT left to transitionend alone. That event does not fire at
+// all if the element is already at its target opacity, if the tab is
+// backgrounded when the class lands, or if a user agent honouring
+// prefers-reduced-motion has zeroed the duration — and in every one of those
+// cases the overlay would sit there dimming the finished scene forever. The
+// timeout is the actual guarantee; the event just makes it prompt.
+function dismissLoadingOverlay() {
+  if (!fishLoadingEl || !fishLoadingEl.isConnected) return;
+  fishLoadingEl.classList.add("hidden");
+  const remove = () => fishLoadingEl.remove();
+  fishLoadingEl.addEventListener("transitionend", remove, { once: true });
+  setTimeout(remove, 1200);
+}
 
 // Reported but not simulated (see data.js). Keyed by the same field names the
 // parser writes, so the loop below is a straight lookup.
+// The row's <b> is resolved once here rather than by a querySelector inside
+// updateFishCountDisplay's loop — that ran five times per HUD update, on a
+// path that is already the most allocation-heavy thing in the frame, to
+// re-answer a question fixed when the markup was parsed.
 const secondaryCountEls = new Map(
   [...document.querySelectorAll("#secondary-counts [data-field]")].map((el) => [
     el.dataset.field,
-    el,
+    { row: el, value: el.querySelector("b") },
   ]),
 );
 const waterTempLabel = document.getElementById("water-temp");
@@ -88,9 +125,10 @@ function setReadout(el, value) {
 // interpolated on its own, so the column always adds up: `count` is exactly
 // that sum in the source data (see parseDartCsv in data.js), but rounding
 // four interpolated values independently and a fifth separately would let
-// them disagree by a digit or two mid-day. Days with no breakdown at all —
-// generatePlaceholderRun()'s fallback entries — have only `count`, and fall
-// back to interpolating it.
+// them disagree by a digit or two mid-day. The `?? 0` guards are what keep
+// this honest against a row missing a column — DART's column set has changed
+// between years (see parseDartCsv), so a future year could legitimately arrive
+// without one of these.
 function updateFishCountDisplay(idx, progress = 0) {
   const today = runData[idx];
   const tomorrow = runData[(idx + 1) % runData.length];
@@ -113,10 +151,10 @@ function updateFishCountDisplay(idx, progress = 0) {
   // hides itself on a day with none, rather than showing a zero: over a full
   // season most of these are zero most of the time, and five permanent zeroes
   // would read as broken instrumentation instead of as an absent species.
-  for (const [field, el] of secondaryCountEls) {
+  for (const [field, els] of secondaryCountEls) {
     const value = at(field);
-    el.hidden = value === 0;
-    if (value !== 0) setReadout(el.querySelector("b"), value);
+    els.row.hidden = value === 0;
+    if (value !== 0) setReadout(els.value, value);
   }
 
   // Conditions. Temperature interpolates like the counts do — it is a real
@@ -270,10 +308,33 @@ function buildTimelineAxis() {
 // Scene: bounds map 1:1 onto world units — worldX = fish.x (downstream),
 // worldZ = fish.y (across-river), worldY is a cosmetic-only "up" the 2D
 // simulation never sees. See scene/*.js for the render-side details.
+//
+// `bounds` (the world) and `pixelBounds` (the actual browser viewport) used
+// to be the same object — every world unit was exactly one CSS pixel. They
+// are split now so the river can be smaller than the window: WORLD_SCALE
+// shrinks `bounds` on both axes, camera framing/fog/terrain/water/the flock
+// all read the smaller `bounds` and are none the wiser, and `pixelBounds`
+// alone reaches sceneSetup's renderer/composer sizing, so the canvas still
+// fills the real viewport at full resolution. Fish are the one thing whose
+// absolute size (BODY_VISUAL_SCALE, in boids.js) does NOT scale down with
+// `bounds` — that's deliberate, and it's the entire effect: relative to a
+// smaller river, a fish of the same real-world size reads as bigger and the
+// channel reads as more full, so a smaller simulated population still holds
+// the shot, which is the performance win (fewer flocked, shaded, VAT-sampled
+// instances) and the visual one (a tighter, more intimate river) both at
+// once. Since both axes scale by the same factor, `bounds`' aspect ratio
+// always matches `pixelBounds`', so nothing about the framing distorts.
 // ---------------------------------------------------------------------
-let bounds = { width: window.innerWidth, height: window.innerHeight };
+const WORLD_SCALE = 0.55;
 
-const sceneSetup = createSceneSetup(canvas, bounds);
+
+let pixelBounds = { width: window.innerWidth, height: window.innerHeight };
+let bounds = {
+  width: pixelBounds.width * WORLD_SCALE,
+  height: pixelBounds.height * WORLD_SCALE,
+};
+
+const sceneSetup = createSceneSetup(canvas, pixelBounds, bounds);
 const { renderer, scene, camera, cameraTarget, setSeason } = sceneSetup;
 const renderScene = sceneSetup.render;
 
@@ -342,6 +403,11 @@ let lastFrameTime = null;
 // other.
 // ---------------------------------------------------------------------
 let waterSize;
+// The caustics pass's own, shorter world coverage. Separate from waterSize
+// because they answer different questions: waterSize is how much PLANE has to
+// be drawn for its edges to dissolve into fog, causticsSize is how far light
+// is still legible. See causticsWorldSize in water.js.
+let causticsSize;
 let terrainMesh;
 let particles;
 let godRays;
@@ -356,6 +422,9 @@ function createWorld() {
   // propagate all the way out to the water plane's faded edges instead of
   // the edge texel just clamping/stretching across that whole margin.
   waterSize = waterWorldSize(bounds);
+  // Depends on the camera as well as on bounds — it is centered on what the
+  // eye is actually looking through, not on the river's middle.
+  causticsSize = causticsWorldSize(bounds, camera.position, cameraTarget);
 
   terrainMesh = buildTerrainMesh(bounds);
 
@@ -385,13 +454,18 @@ function createWorld() {
     // sim's live height field. The riverbed is the surface the refracted light
     // is marched against, but it no longer displays the result (see terrain.js)
     // — the caustics you can actually see are on the water surface and the fish.
-    causticsGenerator = createCausticsGenerator(renderer, bounds, terrainMesh);
+    causticsGenerator = createCausticsGenerator(
+      renderer,
+      bounds,
+      terrainMesh,
+      causticsSize,
+    );
   } else {
     waterSim = null;
     causticsGenerator = null;
   }
 
-  water = buildWaterMesh(bounds, causticsTargetSize() || 1);
+  water = buildWaterMesh(bounds, causticsTargetSize() || 1, causticsSize);
 
   // Suspended silt and the light shafts coming down through the surface (see
   // particles.js/godRays.js). Both are placed relative to the fixed camera and
@@ -413,8 +487,8 @@ function createWorld() {
   water.setCausticsTexture(causticsTexture);
   particles.setCausticsTexture(causticsTexture);
   godRays.setCausticsTexture(causticsTexture);
-  particles.setWorldSize(waterSize, bounds);
-  godRays.setWorldSize(waterSize, bounds);
+  particles.setWorldSize(causticsSize, bounds);
+  godRays.setWorldSize(causticsSize, bounds);
   particles.setSeason(currentDayOfYear);
   godRays.setSeason(currentDayOfYear);
 
@@ -437,9 +511,22 @@ function createWorld() {
   // depth-attenuation rates, and the world->sim UV mapping. Only changes on
   // resize, so it's pushed here rather than recomputed inside the per-frame
   // update(). Null until the models finish loading, which re-pushes it.
-  fishRenderer?.setBounds(bounds, waterSize, depthRange, camera.position);
+  fishRenderer?.setBounds(bounds, causticsSize, depthRange, camera.position);
   fishRenderer?.setCausticsTexture(causticsTexture);
 
+
+  // Explicit transparency layering (see the matching note on fishRenderer's
+  // InstancedMesh in fishMesh.js for why this has to be explicit rather than
+  // left to THREE's automatic sort): terrain (the riverbed, farthest from a
+  // camera that sits well up off the bottom) behind water (the Y=0 ceiling,
+  // usually farther than the fish swimming beneath it) behind fish (2 — set
+  // in fishMesh.js, since this function only reaches these four) behind the
+  // silt/shafts, which drift through the whole column and read best as a
+  // hazy overlay on top of everything solid.
+  terrainMesh.renderOrder = 0;
+  water.mesh.renderOrder = 1;
+  particles.mesh.renderOrder = 3;
+  godRays.mesh.renderOrder = 3;
   scene.add(terrainMesh, water.mesh, particles.mesh, godRays.mesh);
 }
 
@@ -480,9 +567,16 @@ function rebuildWorld() {
 // (sceneSetup owns those), then the bounds-shaped world, then the fish, which
 // read the freshly-built caustics texture.
 function applyTier() {
-  sceneSetup.applyQuality(bounds);
+  sceneSetup.applyQuality(pixelBounds, bounds);
   rebuildWorld();
   buildFishRenderer();
+
+  // Re-derive the per-day population targets against the new cap, BEFORE the
+  // trim below. Without this the trim was cosmetic: it cut the live flock, and
+  // the pacing loop refilled it moments later against targets still scaled to
+  // the tier the page booted at. See rebuildDayTables for the full shape of
+  // that bug — it made the governor's single biggest lever a no-op.
+  rebuildDayTables();
 
   // Bring the live population down to the new cap immediately rather than
   // waiting for fish to drain out through the exit line. The pacing loop only
@@ -579,7 +673,7 @@ function buildFishRenderer() {
   scene.add(fishRenderer.mesh);
   // createWorld()/applySeason() have both already run by the first call — the
   // mesh didn't exist yet to receive either, so hand it the current state.
-  fishRenderer.setBounds(bounds, waterSize, depthRange, camera.position);
+  fishRenderer.setBounds(bounds, causticsSize, depthRange, camera.position);
   fishRenderer.setCausticsTexture(causticsGenerator?.texture ?? null);
   fishRenderer.setSeason(currentDayOfYear);
 }
@@ -625,29 +719,96 @@ function applySeason(dateStr) {
 const REBUILD_DEBOUNCE_MS = 150;
 let rebuildTimer = 0;
 
+// Mobile browsers fire `resize` when their own chrome slides in or out — the
+// address bar collapsing on scroll, the toolbar reappearing on a tap. Those
+// events change the height by roughly a chrome bar and the width by nothing,
+// and treating them as real viewport changes means a full world rebuild
+// (terrain, water planes, both caustics targets, the sim's ping-pong pair)
+// every time a finger moves. The scene visibly hitches for something the user
+// did not do.
+//
+// So a height-only change smaller than this is absorbed: the canvas is
+// re-sized to fill the new viewport, but `bounds` is left alone and nothing
+// downstream of it is rebuilt. The threshold is above a typical mobile
+// address bar (~56-100 CSS px) and well below any deliberate resize.
+const CHROME_BAR_THRESHOLD_PX = 120;
+let lastViewport = { width: window.innerWidth, height: window.innerHeight };
+
 window.addEventListener("resize", () => {
-  bounds = { width: window.innerWidth, height: window.innerHeight };
-  sceneSetup.resize(bounds);
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const widthChanged = width !== lastViewport.width;
+  const heightDelta = Math.abs(height - lastViewport.height);
+  const isBrowserChrome =
+    !widthChanged && heightDelta > 0 && heightDelta < CHROME_BAR_THRESHOLD_PX;
+  lastViewport = { width, height };
+
+  pixelBounds = { width, height };
+  // The cheap half runs on every event regardless, so the canvas never looks
+  // stretched — that includes the chrome-bar case, where the viewport really
+  // has changed even though the simulated world should not.
+  if (!isBrowserChrome) {
+    bounds = {
+      width: pixelBounds.width * WORLD_SCALE,
+      height: pixelBounds.height * WORLD_SCALE,
+    };
+  }
+  sceneSetup.resize(pixelBounds, bounds);
+
+  if (isBrowserChrome) return;
+
   clearTimeout(rebuildTimer);
-  rebuildTimer = setTimeout(rebuildWorld, REBUILD_DEBOUNCE_MS);
+  rebuildTimer = setTimeout(() => {
+    // The composer's ~13 render targets are reallocated here rather than on
+    // every event — see resizeComposer in sceneSetup.js.
+    sceneSetup.resizeComposer(pixelBounds);
+    rebuildWorld();
+  }, REBUILD_DEBOUNCE_MS);
 });
 
 // Was 2.4 — halved so a fish's spawn-to-exit crossing takes roughly twice as
 // long (see FRAMES_PER_DAY below, doubled to match), giving more time to
 // actually watch individual fish swim through the scene instead of them
 // blowing past in a couple seconds.
-const BASE_MAX_SPEED = 1.2;
+//
+// Scaled by WORLD_SCALE on top of that halving, for the same reason: crossing
+// distance (bounds.width) just shrank by WORLD_SCALE, and a fish's absolute
+// swim speed did not previously depend on how big the river was, so left
+// alone it would now cross in WORLD_SCALE as many frames — the same "blowing
+// past in a couple seconds" problem the halving above already fixed once.
+// This keeps crossing TIME where it was tuned, at the cost of the fish now
+// swimming slower in raw world-units/frame — which is invisible on its own,
+// since nothing else in the sim reads an absolute speed independent of the
+// bounds it's crossing.
+const BASE_MAX_SPEED = 1.2 * WORLD_SCALE;
 
 const flock = new Flock(bounds, {
   maxSpeed: BASE_MAX_SPEED,
   perceptionRadius: 70,
-  // Was 20 — well under a fish's actual rendered body length (~72-84 world
-  // units, fish.length * boids.js's BODY_VISUAL_SCALE), so the separation
-  // force's steady state let meshes clip well before this force pushed back
-  // hard. Now close to Flock.step's overlap-resolution clearance so the
-  // soft force does most of the work and the hard correction is a rare
-  // safety net instead of the only thing keeping fish apart.
-  separationRadius: 45,
+  // Was 20, then 45. 20 was well under a fish's actual rendered body length
+  // (~72-105 world units, fish.length * boids.js's BODY_VISUAL_SCALE), so the
+  // separation force's steady state let meshes clip well before this force
+  // pushed back hard.
+  //
+  // 45 overcorrected in a way that was easy to miss, because it was chosen to
+  // sit "close to" Flock.step's overlap-resolution clearance — and close is
+  // exactly wrong. That clearance is at most
+  // (44 + 44) * 0.5 * BODY_VISUAL_SCALE * OVERLAP_CLEARANCE ≈ 42.2 for two
+  // large Chinook, so a separation radius of 45 gave the soft force a working
+  // band under three units wide before the hard positional correction took
+  // over. The stated intent — soft force does most of the work, hard
+  // correction is a rare safety net — needs the opposite: a wide margin
+  // between where steering starts pushing back and where the sim gives up and
+  // moves fish bodily, since only the first of those two turns the fish to
+  // face where it is going.
+  //
+  // 65 gives that force about 23 units of approach to work across instead of
+  // 3. It is deliberately just UNDER perceptionRadius below and must stay
+  // there: Flock.step only ever examines neighbours inside perceptionRadius
+  // (its spatial grid is sized to exactly that, so nothing beyond it is even
+  // found), and a separationRadius above it would silently clamp to it while
+  // reading as though it were doing something more.
+  separationRadius: 65,
 });
 
 // ---------------------------------------------------------------------
@@ -656,7 +817,20 @@ const flock = new Flock(bounds, {
 // never rendering, so the 3D migration doesn't change any of it.
 // ---------------------------------------------------------------------
 let dayIndex = 0;
-let isPlaying = true;
+// A full-screen animated scene is the clearest case there is for honouring
+// this: the whole page is motion, and there is no way to opt out of it once it
+// starts. So it boots HELD rather than running — the first frame is rendered
+// and the river is fully composed, it simply is not advancing, and Play (or
+// Space) starts it. Nobody who wants the animation is prevented from having
+// it; nobody who asked not to be moved is moved without asking.
+//
+// Deliberately read once at boot rather than watched: flipping the OS setting
+// mid-session should not yank a running simulation out from under someone.
+const PREFERS_REDUCED_MOTION =
+  typeof matchMedia === "function" &&
+  matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let isPlaying = !PREFERS_REDUCED_MOTION;
 let frameCounter = 0;
 // Frames a simulated day is given before the timeline advances. 40 -> 80 ->
 // 240: at 60fps that is four seconds a day, and a little over twenty minutes
@@ -700,36 +874,60 @@ buildSeasonChart();
 const dayTargets = new Int32Array(runData.length);
 const dayWeights = new Float64Array(runData.length * SPECIES_KEYS.length);
 
-for (let i = 0; i < runData.length; i++) {
-  const day = runData[i];
-  let total = 0;
-  for (const key of SPECIES_KEYS) total += day[key] ?? 0;
-
-  const scale = total > maxPopulation() ? maxPopulation() / total : 1;
-  const base = i * SPECIES_KEYS.length;
-  let cumulative = 0;
-  for (let s = 0; s < SPECIES_KEYS.length; s++) {
-    cumulative += (day[SPECIES_KEYS[s]] ?? 0) * scale;
-    dayWeights[base + s] = cumulative;
-  }
-
-  // Falls back to the day's plain `count`, still capped, when there's no
-  // species breakdown at all — generatePlaceholderRun()'s fallback entries
-  // (see data.js) only carry `count`. Rounded because callers compare it
-  // against integer fish counts, and a fractional target would never be
-  // reachable.
-  dayTargets[i] =
-    total > 0
-      ? Math.round(cumulative)
-      : Math.min(maxPopulation(), Math.round(day.count ?? 0));
-}
-
 // Precomputed day-over-day change in target population, one entry per day,
 // used by applyDaySpeed to make the school swim faster/slower as the run
-// ramps up or tapers off.
-const dailyRateOfChange = Int32Array.from(runData, (_, i) =>
-  i === 0 ? 0 : dayTargets[i] - dayTargets[i - 1],
-);
+// ramps up or tapers off. Derived from dayTargets, so it is rebuilt with it.
+const dailyRateOfChange = new Int32Array(runData.length);
+
+// (Re)fills all three tables against the CURRENT tier's population cap.
+//
+// This has to be re-runnable, and for a long time it wasn't — it was
+// straight-line code at module scope, evaluated once against whatever tier
+// detection guessed at boot. The performance governor's whole job is to
+// correct that guess (see quality.js), and `population` is the biggest lever
+// it has, but a downgrade only ever trimmed the LIVE flock: applyTier() cut
+// the excess, and then the pacing loop immediately refilled it against these
+// stale, higher targets. Within a second or two the flock was back over the
+// new cap and the downgrade had bought nothing at all.
+//
+// Worse, it was quietly destructive. The fish renderers are rebuilt at the new
+// tier during the same applyTier(), so their instance capacity is
+// maxPopulation() + FISH_RENDER_HEADROOM at the LOW figure while the flock
+// refilled to the high one — and the overflow was silently dropped from the
+// draw.
+//
+// The arrays are sized off runData.length, which never changes after the fetch
+// resolves, so they stay `const` and are filled in place. Anything holding a
+// reference to them keeps seeing current values.
+function rebuildDayTables() {
+  const cap = maxPopulation();
+
+  for (let i = 0; i < runData.length; i++) {
+    const day = runData[i];
+    let total = 0;
+    for (const key of SPECIES_KEYS) total += day[key] ?? 0;
+
+    const scale = total > cap ? cap / total : 1;
+    const base = i * SPECIES_KEYS.length;
+    let cumulative = 0;
+    for (let s = 0; s < SPECIES_KEYS.length; s++) {
+      cumulative += (day[SPECIES_KEYS[s]] ?? 0) * scale;
+      dayWeights[base + s] = cumulative;
+    }
+
+    // Falls back to the day's plain `count`, still capped, when there's no
+    // species breakdown at all. Rounded because callers compare it against
+    // integer fish counts, and a fractional target would never be reachable.
+    dayTargets[i] =
+      total > 0 ? Math.round(cumulative) : Math.min(cap, Math.round(day.count ?? 0));
+  }
+
+  for (let i = 0; i < runData.length; i++) {
+    dailyRateOfChange[i] = i === 0 ? 0 : dayTargets[i] - dayTargets[i - 1];
+  }
+}
+
+rebuildDayTables();
 
 // ---------------------------------------------------------------------
 // Diurnal arrival shape
@@ -814,10 +1012,31 @@ function speedMultiplierForRate(rate) {
   return 1 - normalized * 0.45;
 }
 
-// Applies the current day's speed multiplier to the flock's shared maxSpeed.
-function applyDaySpeed(idx) {
+// Applies the day's speed multiplier to the flock's shared maxSpeed,
+// interpolated across the day rather than stepped at the boundary.
+//
+// `speedMultiplierForRate` spans 0.55 to 1.45, and this used to be set once
+// per day rollover — so at FRAMES_PER_DAY the shared speed clamp could jump by
+// up to 45% in a single frame, every four seconds, applied to every fish at
+// once. The whole school surged or braked together on a schedule, which is
+// exactly the kind of periodic hitch the eye reads as the simulation
+// stuttering rather than as the run speeding up.
+//
+// `smoothSpeed` (boids.js) does not help here: it low-passes what the renderer
+// drives the TAILBEAT from, well downstream of the velocity clamp doing the
+// jumping — so the tail stayed smooth while the fish underneath it lurched.
+//
+// Interpolating toward tomorrow's multiplier on the same `progress` the
+// population ramp runs on gets the same total change spread across the day's
+// 240 frames. Endpoints are unchanged, so days still line up exactly where
+// they did; only the path between them is continuous now.
+function applyDaySpeed(idx, progress = 0) {
+  const today = speedMultiplierForRate(dailyRateOfChange[idx]);
+  const tomorrow = speedMultiplierForRate(
+    dailyRateOfChange[(idx + 1) % runData.length],
+  );
   flock.options.maxSpeed =
-    BASE_MAX_SPEED * speedMultiplierForRate(dailyRateOfChange[idx]);
+    BASE_MAX_SPEED * (today + (tomorrow - today) * progress);
 }
 
 let spawnAccumulator = 0;
@@ -924,15 +1143,59 @@ function jumpToDay(idx) {
   applySeason(runData[idx].date);
 }
 
-playPauseBtn.addEventListener("click", () => {
-  isPlaying = !isPlaying;
+// One place that writes the play state, so the button's label and its
+// aria-pressed can never drift apart from `isPlaying` — they did before,
+// because the timeline handler below set the state and the label by hand.
+//
+// aria-pressed rather than the old static aria-label="Play or pause": that
+// label overrode the button's visible text, so a screen reader announced the
+// same "Play or pause" whichever state it was in — it named the control but
+// never reported it. With the attribute gone, the visible word IS the
+// accessible name, and aria-pressed carries the state.
+function setPlaying(next) {
+  isPlaying = next;
   playPauseBtn.textContent = isPlaying ? "Pause" : "Play";
-});
+  playPauseBtn.setAttribute("aria-pressed", String(!isPlaying));
+}
+
+setPlaying(isPlaying);
+
+playPauseBtn.addEventListener("click", () => setPlaying(!isPlaying));
 
 timelineInput.addEventListener("input", (e) => {
-  isPlaying = false;
-  playPauseBtn.textContent = "Play";
+  setPlaying(false);
   jumpToDay(Number(e.target.value));
+});
+
+// Keyboard control for the two things the interface actually does: run/hold,
+// and move through the season. Until now the only key bound was the debug
+// panel's "D", so a keyboard user could reach the timeline slider by tab but
+// had no way to pause and nothing at all outside that one control.
+//
+// Space and the arrows are the conventional bindings for a transport, and
+// stepping a day reuses jumpToDay(), which already pauses and re-seeds
+// everything a scrub does.
+window.addEventListener("keydown", (e) => {
+  // Never steal a key from a focused control — the timeline slider's own
+  // arrow-key handling in particular, which fires `input` and routes through
+  // the handler above.
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  if (e.key === " " || e.key === "Spacebar") {
+    // Space scrolls the page by default. This page has nothing to scroll, but
+    // the default also fires the focused button, which would double-toggle.
+    e.preventDefault();
+    setPlaying(!isPlaying);
+    return;
+  }
+
+  const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+  if (step === 0) return;
+  e.preventDefault();
+  setPlaying(false);
+  // Wraps at both ends, matching the loop's own `(dayIndex + 1) % length`.
+  jumpToDay((dayIndex + step + runData.length) % runData.length);
 });
 
 // ---------------------------------------------------------------------
@@ -1141,7 +1404,13 @@ function loop(t) {
   // even with the fish standing still. `isPlaying` is passed through so the
   // tailbeat can keep running at a fraction of its rate through a pause while
   // everything else holds; see PAUSED_SWIM_RATE in fishMesh.js.
-  if (fishRenderer) fishRenderer.update(flock.fish, simTime, isPlaying);
+  //
+  // `dt` is passed for the same reason flock.step() gets it: the renderer
+  // accumulates the tailbeat and the body pitch per call, so both have to
+  // advance by the amount of simulated time this frame actually represents
+  // rather than by one fixed step per rendered frame. See the note on
+  // `advance` in fishMesh.js's update().
+  if (fishRenderer) fishRenderer.update(flock.fish, simTime, isPlaying, dt);
 
   // Silt drift and shaft sway are driven entirely from this one uniform each
   // — see particles.js for why nothing per-mote happens on the CPU.
@@ -1172,39 +1441,70 @@ function loop(t) {
       updateFishCountDisplay(dayIndex, progress);
     }
 
+    // Walk the shared swim speed toward tomorrow's across the day, rather
+    // than stepping it at the boundary — see applyDaySpeed.
+    applyDaySpeed(dayIndex, progress);
+
     const target = desiredPopulation(dayIndex, progress);
     const active = flock.activeCount();
 
     // Growth: close whatever gap is left to the day's target. Not shaped by
     // diurnalRate — `target` is already the eased ramp, so the midday hump is
     // baked into this term's own slope and applying it again would square it.
+    //
+    // A per-frame RATE, hence the dt below.
     let arrivals = Math.max(0, target - active) * POPULATION_CORRECTION_GAIN;
 
-    // Turnover: fish that left downstream this frame make room for fish
+    // Scaled by dt for the same reason flock.step() is: `arrivals` above is a
+    // per-60fps-frame rate, so leaving it unscaled would make the run fill in
+    // at a speed that depended on the display.
+    spawnAccumulator += arrivals * dt;
+
+    // Turnover: fish that left downstream this step make room for fish
     // entering upstream. This is the term that keeps the run continuous
     // through the long flat and falling stretches the growth term above sits
     // out entirely, and it *is* shaped by diurnalRate, so the steady stream
     // thickens toward midday and thins to a trickle at either end of the day
     // rather than running at one rate around the clock.
-    arrivals +=
+    //
+    // Added AFTER the dt scaling above, deliberately, and this is a fix rather
+    // than a rearrangement. `exitedLastStep` is a COUNT of departures from a
+    // step of size dt — it already scales with dt, because step(dt) advances
+    // positions by vx * dt — so folding it in before the multiply scaled it a
+    // second time. That was not a mild over-spawn: replacement only balances
+    // where replacementFraction * diurnalRate * dt ≈ 1, and with
+    // REPLACEMENT_FLOOR at 0.4 any dt >= 2 through a midday diurnalRate above
+    // 1.25 leaves that product permanently over 1 — no equilibrium at all, so
+    // a device running at 30fps grew its flock without bound through every
+    // simulated midday. On exactly the hardware least able to carry it.
+    spawnAccumulator +=
       flock.exitedLastStep *
       replacementFraction(target, active) *
       diurnalRate(progress);
 
-    // Scaled by dt for the same reason flock.step() is: `arrivals` is a
-    // per-60fps-frame rate, so leaving it unscaled would make the run fill in
-    // at a speed that depended on the display.
-    spawnAccumulator += arrivals * dt;
+    // Hard ceiling, independent of the day tables above.
+    //
+    // A no-op in normal operation — dayTargets is already capped at
+    // maxPopulation() (see rebuildDayTables) — but the pacing loop had no
+    // ceiling of its own, so every path to an over-target population depended
+    // on those tables being correct and current to stop it. Making the cap
+    // structural means a future bug in the tables costs some accuracy in the
+    // run's shape rather than an unbounded flock.
+    const ceiling = maxPopulation();
     while (spawnAccumulator >= 1) {
-      spawnAtLeftEdge();
       spawnAccumulator -= 1;
+      if (flock.activeCount() >= ceiling) {
+        spawnAccumulator = 0;
+        break;
+      }
+      spawnAtLeftEdge();
     }
 
     frameCounter += dt;
     if (frameCounter >= FRAMES_PER_DAY) {
       frameCounter = 0;
       dayIndex = (dayIndex + 1) % runData.length;
-      applyDaySpeed(dayIndex);
+      applyDaySpeed(dayIndex, 0);
       setDateReadout(dayIndex);
       updateFishCountDisplay(dayIndex);
       timelineInput.value = String(dayIndex);
@@ -1212,8 +1512,78 @@ function loop(t) {
     }
   }
 
-  requestAnimationFrame(loop);
+  frameHandle = requestAnimationFrame(loop);
 }
+
+// ---------------------------------------------------------------------
+// Lifecycle: page visibility and WebGL context loss.
+//
+// Neither of these was handled, and both are routine rather than exotic on
+// the mobile browsers this now ships to.
+// ---------------------------------------------------------------------
+
+// The outstanding rAF handle, so the loop can actually be stopped rather than
+// merely ignored. `loop` reassigns it on every frame (above).
+let frameHandle = 0;
+let loopRunning = true;
+
+function stopLoop() {
+  if (!loopRunning) return;
+  loopRunning = false;
+  cancelAnimationFrame(frameHandle);
+}
+
+function startLoop() {
+  if (loopRunning) return;
+  loopRunning = true;
+  // The clock has to be re-seeded before the first frame back. `loop` derives
+  // dt from `t - lastFrameTime`, and after minutes in a background tab that
+  // difference is enormous — MAX_STEP_FRAMES caps how far the sim jumps, but
+  // the frame-time governor would still read the gap as a catastrophically
+  // slow frame and downgrade the tier for something that never rendered.
+  lastFrameTime = null;
+  frameHandle = requestAnimationFrame(loop);
+}
+
+// Browsers already throttle rAF in a hidden tab, but they do not stop it, and
+// what keeps running here is not cheap: the water sim's ping-pong step and the
+// caustics pass both advance on frames nobody is looking at. Stopping outright
+// is both cheaper and kinder to a phone's battery.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopLoop();
+  else startLoop();
+});
+
+// Context loss is a normal event on mobile — the OS reclaims the GPU when the
+// browser is backgrounded, another tab allocates heavily, the device sleeps.
+// Nothing listened for it, so the routine outcome was a permanently black
+// canvas with no indication of why.
+sceneSetup.renderer.domElement.addEventListener(
+  "webglcontextlost",
+  (event) => {
+    // WITHOUT preventDefault the context is never restorable and
+    // webglcontextrestored below can never fire. This one line is the
+    // difference between a recoverable interruption and a dead canvas.
+    event.preventDefault();
+    stopLoop();
+    showNotice("Rendering was interrupted. Restoring…", "warn");
+  },
+  false,
+);
+
+sceneSetup.renderer.domElement.addEventListener(
+  "webglcontextrestored",
+  () => {
+    // Every GPU resource is gone: textures, buffers, programs, render
+    // targets. three re-uploads what it still holds JS-side on the next
+    // render, but the world's own targets (the water sim's ping-pong pair,
+    // the caustics accumulation) are ours and have to be rebuilt.
+    rebuildWorld();
+    if (noticeEl) noticeEl.hidden = true;
+    startLoop();
+  },
+  false,
+);
 
 // ---------------------------------------------------------------------
 // Boot. Ordered so every `let` above is initialized before anything reads
@@ -1222,7 +1592,7 @@ function loop(t) {
 // ---------------------------------------------------------------------
 createWorld();
 jumpToDay(0);
-requestAnimationFrame(loop);
+frameHandle = requestAnimationFrame(loop);
 
 loadFishAssets()
   .then((assetsByUrl) => {
@@ -1230,15 +1600,23 @@ loadFishAssets()
     // assets without re-fetching or re-baking them — see buildFishRenderer.
     fishAssets = assetsByUrl;
     buildFishRenderer();
-
-    // Fade the loading overlay out, then drop it from the DOM once the
-    // transition finishes (see style.css) rather than leaving a hidden-but-
-    // present element around indefinitely.
-    fishLoadingEl.classList.add("hidden");
-    fishLoadingEl.addEventListener(
-      "transitionend",
-      () => fishLoadingEl.remove(),
-      { once: true },
-    );
+    dismissLoadingOverlay();
   })
-  .catch((err) => console.error("Failed to load fish model:", err));
+  .catch((err) => {
+    console.error("Failed to load fish model:", err);
+    // The overlay has to come down either way. It was console-only before, so
+    // this failure left the scene dimmed under "Loading fish assets"
+    // permanently — the river, the water and the HUD all work without the
+    // fish, and a viewer looking at a working scene they cannot see is worse
+    // off than one told what is missing.
+    dismissLoadingOverlay();
+    showNotice(
+      "The fish models could not be loaded, so the river is running empty. " +
+        "Reloading the page may fix it.",
+    );
+  });
+
+// Everything above has evaluated, so a failure from here on is a runtime
+// problem this module can report through showNotice() itself. Tells the boot
+// handler in index.html to stop claiming errors as fatal startup failures.
+window.__riverBooted = true;

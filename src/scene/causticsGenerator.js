@@ -241,10 +241,10 @@ const CAUSTICS_FRAGMENT_SHADER = /* glsl */ `
 // surface (y=0) and with a far plane deep enough below the terrain floor
 // that a reasonable range of WATER_HEIGHT_SCALE-driven start heights can't
 // clip out either end.
-function buildLightCamera(bounds) {
-  const { width: planeWidth, height: planeHeight } = waterWorldSize(bounds);
-  const centerX = bounds.width / 2;
-  const centerZ = bounds.height / 2;
+function buildLightCamera(bounds, coverage) {
+  const { width: planeWidth, height: planeHeight } = coverage;
+  const centerX = coverage.centerX;
+  const centerZ = coverage.centerZ;
   const depth = riverDepth(bounds);
 
   const camHeight = depth + 600;
@@ -269,10 +269,10 @@ function buildLightCamera(bounds) {
 // directly, so unlike buildWaterMesh/buildTerrainMesh this is never rotated
 // into the actual 3D XZ plane (it's only ever rasterized through the light
 // camera's projection, never drawn as real 3D geometry).
-function buildCausticsGeometry(bounds) {
-  const { width: planeWidth, height: planeHeight } = waterWorldSize(bounds);
-  const centerX = bounds.width / 2;
-  const centerZ = bounds.height / 2;
+function buildCausticsGeometry(coverage) {
+  const { width: planeWidth, height: planeHeight } = coverage;
+  const centerX = coverage.centerX;
+  const centerZ = coverage.centerZ;
   const segments = causticsMeshSegments();
 
   const geometry = new THREE.PlaneGeometry(
@@ -293,8 +293,20 @@ function makeTarget(size) {
   });
 }
 
-export function createCausticsGenerator(renderer, bounds, terrainMesh) {
-  const lightCamera = buildLightCamera(bounds);
+export function createCausticsGenerator(renderer, bounds, terrainMesh, coverage) {
+  // `coverage` is the caustics pass's own, shorter reach (see
+  // causticsWorldSize in water.js). It sets what this pass RASTERIZES: the
+  // light camera's frustum and the refraction grid's extent, which together
+  // define the accumulation texture's world->uv mapping.
+  const lightCamera = buildLightCamera(bounds, coverage);
+
+  // The water SIM's coverage, which is a different and larger area. This pair
+  // is what the vertex shader samples the height field with, so it must stay
+  // on waterWorldSize even though everything else here moved: the sim texture
+  // is laid out over the plane, not over the caustics coverage, and reading it
+  // through the wrong mapping would refract against the wrong part of the
+  // surface. The two used to be the same call, which is exactly why splitting
+  // them needs this said out loud.
   const { width: planeWidth, height: planeHeight, marginX, marginZ } =
     waterWorldSize(bounds);
 
@@ -337,7 +349,7 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh) {
   causticsMaterial.blendSrcAlpha = THREE.OneFactor;
   causticsMaterial.blendDstAlpha = THREE.ZeroFactor;
 
-  const causticsGeometry = buildCausticsGeometry(bounds);
+  const causticsGeometry = buildCausticsGeometry(coverage);
   const causticsMesh = new THREE.Mesh(causticsGeometry, causticsMaterial);
 
   const black = new THREE.Color(0, 0, 0);

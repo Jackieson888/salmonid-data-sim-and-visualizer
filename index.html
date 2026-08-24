@@ -4,6 +4,50 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Salmon Run — A Boids Simulation</title>
+  <meta
+    name="description"
+    content="A Three.js flocking simulation of the salmon run past Lower
+             Granite Dam on the Snake River, driven by real daily adult
+             passage counts from Columbia Basin Research DART."
+  />
+  <!-- An explicit icon, not only for the tab: without one the browser
+       requests /favicon.ico on every load and the 404 lands in the console,
+       which scripts/screenshot.mjs treats as a failure (it has no other way
+       to catch a GLSL compile error — see its header). -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- Matches the report bar's ink so mobile browser chrome doesn't frame a
+       dark scene in white. -->
+  <meta name="theme-color" content="#0a0f12" />
+
+  <!-- Social card. Without these a shared link unfurls as a bare URL, which
+       for a page that is entirely one image is the worst possible preview.
+       og-image.png is a real capture of the running scene at day 118 (peak
+       shad), generated with scripts/screenshot.mjs — regenerate it from there
+       rather than hand-making one, so the preview cannot drift from what the
+       page actually looks like.
+
+       og:image:alt and twitter:image:alt are not decorative: they are what a
+       screen reader announces in a timeline, where the image is the only
+       content the card has. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Salmon Run — A Boids Simulation" />
+  <meta
+    property="og:description"
+    content="A Three.js flocking simulation of the salmon run past Lower
+             Granite Dam on the Snake River, driven by real daily adult
+             passage counts from Columbia Basin Research DART."
+  />
+  <meta property="og:image" content="/og-image.png" />
+  <meta property="og:image:width" content="1800" />
+  <meta property="og:image:height" content="945" />
+  <meta
+    property="og:image:alt"
+    content="An underwater view of a dense school of shad and chinook salmon
+             in green river water, over a data readout of the day's fish
+             passage counts at Lower Granite Dam."
+  />
+  <meta name="twitter:card" content="summary_large_image" />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -80,7 +124,10 @@
                it, and indenting one but not the other by the button's width
                quietly breaks it. -->
           <div class="field" id="controls">
-            <button id="play-pause" aria-label="Play or pause">Pause</button>
+            <!-- No aria-label: it would override the visible text, which is
+                 the actual state. aria-pressed is set from setPlaying() in
+                 main.js. Space toggles this from anywhere on the page. -->
+            <button id="play-pause" aria-pressed="false">Pause</button>
             <div id="timeline-block">
               <!-- The whole season at a glance: daily passage as an area,
                    water temperature as a line. Drawn at boot from runData
@@ -154,8 +201,45 @@
       <div class="bar"></div>
       <p>Loading fish assets</p>
     </div>
+
+    <!-- Real failures the viewer should know about, rather than console-only.
+         role="status" so a screen reader announces it without stealing focus;
+         written by showNotice() in main.js and by the boot handler below. -->
+    <div id="notice" role="status" hidden></div>
   </main>
 
+  <!-- main.js is a module, so if it — or anything it imports, data.js
+       especially — throws while evaluating, NOTHING in it runs, including its
+       own error handling. A classic script is the only thing that can still
+       report that, because it has already executed by then. Without this the
+       failure is a permanently dimmed canvas under "Loading fish assets" and
+       one line in a console the viewer will never open. -->
+  <script>
+    (function () {
+      function onBootFailure(event) {
+        // main.js sets this once it has finished evaluating. After that point
+        // errors are runtime problems it can report itself, and are not
+        // necessarily fatal — so this handler stops claiming them.
+        if (window.__riverBooted) return;
+
+        var loading = document.getElementById("fish-loading");
+        if (loading) loading.remove();
+
+        var notice = document.getElementById("notice");
+        if (!notice) return;
+        notice.hidden = false;
+        notice.className = "error";
+        notice.textContent =
+          "The simulation could not start — the passage data failed to load. " +
+          "Reloading the page may fix it.";
+
+        var reason = (event && (event.reason || event.error)) || null;
+        if (reason) console.error("Boot failed:", reason);
+      }
+      window.addEventListener("error", onBootFailure);
+      window.addEventListener("unhandledrejection", onBootFailure);
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

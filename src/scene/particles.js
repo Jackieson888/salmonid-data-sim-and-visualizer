@@ -43,9 +43,18 @@ const VOLUME_FRAC = 0.62;
 // boids.js), so these are on the order of a centimetre of real silt against a
 // three-foot Chinook. Small enough to read as suspended matter rather than
 // snow, which is the failure mode this effect always has — MAX_SIZE came down
-// from 9.0 because the largest near-field motes were crossing into it.
-const MIN_SIZE = 2.6;
-const MAX_SIZE = 7.2;
+// from 9.0 because the largest near-field motes were crossing into it, and
+// again from 7.2 (MIN_SIZE from 2.6) once the river itself shrank to 55% of
+// its former size (see WORLD_SCALE in main.js): the drift volume shrank
+// along with it — VOLUME_FRAC below is a fraction of bounds, and depth a
+// fraction of bounds.height, so volume scales with WORLD_SCALE^3 — but
+// PARTICLE_COUNT didn't, so the same motes are now packed roughly 6x denser
+// per unit volume. That reads as more field to look at, at the same size
+// each, rather than as more silt in the same water; sizing back down doesn't
+// undo the density but does stop the field competing with the fish for
+// attention at any one point in frame.
+const MIN_SIZE = 2.0;
+const MAX_SIZE = 5.5;
 
 // Overall visibility of the field, split across the three dials that set it.
 //
@@ -53,8 +62,9 @@ const MAX_SIZE = 7.2;
 // individual objects. Kept as named constants because they trade off against
 // each other — dropping opacity while raising brightness gets you back where
 // you started — and because this is the first thing to reach for when the
-// effect is over- or under-stated.
-const OPACITY = 0.62;
+// effect is over- or under-stated. Was 0.62, brought down alongside the size
+// cut above for the same reason.
+const OPACITY = 0.46;
 // Motes catch light from every direction rather than presenting one shaded
 // face, so they sit brighter than the riverbed color they're derived from.
 const BRIGHTNESS = 1.85;
@@ -261,9 +271,14 @@ export function buildParticles(bounds, cameraPosition, cameraTarget) {
     uniforms.uCaustics.value = texture;
   }
 
-  function setWorldSize(waterSize, bounds) {
-    uniforms.uWorldSize.value.set(waterSize.width, waterSize.height);
-    uniforms.uMargin.value.set(waterSize.marginX, waterSize.marginZ);
+  // `coverage` is the CAUSTICS pass's world coverage, not the water sim's —
+  // the only thing this shader samples is the caustic net (see the vertex
+  // shader's vGlow), so it maps world XZ through that pass's own extent. Those
+  // two used to be the same value; they are not any more (see
+  // causticsWorldSize in water.js).
+  function setWorldSize(coverage, bounds) {
+    uniforms.uWorldSize.value.set(coverage.width, coverage.height);
+    uniforms.uMargin.value.set(coverage.marginX, coverage.marginZ);
     uniforms.uFogDensity.value = fogDensity(bounds);
   }
 

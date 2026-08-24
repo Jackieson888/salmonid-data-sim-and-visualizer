@@ -1,6 +1,6 @@
 // data.js
-// Real Lower Granite Dam (LWG) daily adult passage counts, fetched live from
-// Columbia Basin Research DART at module load.
+// Real Lower Granite Dam (LWG) daily adult passage counts, read at module load
+// from a snapshot vendored into this repo (public/lwg-adult-daily-2015.csv).
 //
 // Four species drive the simulation — Chinook, Jack Chinook, Steelhead and
 // Shad — and `count` (the number behind the whole population, spawn rate and
@@ -21,11 +21,41 @@
 // assumes otherwise (see dayOfYear() in scene/season.js, which derives the
 // day-of-year straight from each entry's own date string).
 //
-// Falls back to a placeholder run (bell-curve-shaped, not real data) if the
-// fetch fails — offline, DART unreachable, etc. — so the app still loads.
+// WHY A SNAPSHOT RATHER THAN A LIVE FETCH.
+//
+// DART_YEAR is a fixed historical year, so the live query returns the same 302
+// rows on every load, forever — there is nothing to be fresh about. What
+// fetching it at boot did buy was a hard dependency on a third-party host
+// being up and fast, on the critical path of a module-level `await`: nothing
+// in the app can evaluate until it settles, and it had no timeout, so a
+// hanging connection left a blank canvas indefinitely rather than failing.
+//
+// The snapshot is served from our own origin instead, and the live path below
+// is opt-in (see liveRefreshRequested). It stays in the file because the year
+// will not be hardcoded forever — the moment DART_YEAR becomes a control, the
+// live query is what backs it.
 const DART_YEAR = 2015;
+
+// Retrieved 2026-08-24 from the DART URL below, byte-for-byte as served.
+//
+// Deliberately unmodified — no header comment marking the retrieval, which is
+// what a vendored data file usually gets. Two reasons: parseDartCsv reads
+// lines[0] as the column header, so a leading comment would have to be parsed
+// around; and DART's export already carries its own provenance in its footer
+// (generation timestamp, the USACE disclaimer, and the full DART data
+// citation), which is better evidence of where this came from than a line we
+// wrote ourselves. The footnote lines are skipped by the project-name prefix
+// test in parseDartCsv, same as they are in a live response.
+const SNAPSHOT_URL = "/lwg-adult-daily-2015.csv";
+
 const COLUMBIA_BASIN_RESEARCH_DART_URL =
   `https://www.cbr.washington.edu/dart/cs/php/rpt/adult_daily.php?sc=1&outputFormat=csv&year=${DART_YEAR}&proj=LWG&span=no&startdate=1%2F1&enddate=12%2F31&run=&syear=2026&eyear=2026`;
+
+// Same-origin static asset, so this is generous rather than tight — it exists
+// to bound a wedged connection, not to police a slow one.
+const SNAPSHOT_TIMEOUT_MS = 15000;
+// Third-party host on the boot path, so this one is the real guard.
+const DART_TIMEOUT_MS = 5000;
 
 // DART marks some days with a negative value (e.g. "-1") — a correction/
 // adjustment to a prior count, not a literal negative number of fish — so
@@ -153,43 +183,77 @@ function parseDartCsv(csvText) {
   return data;
 }
 
-async function fetchRunData() {
-  const response = await fetch(COLUMBIA_BASIN_RESEARCH_DART_URL);
-  if (!response.ok) {
-    throw new Error(`DART request failed: ${response.status}`);
+// fetch() has no timeout of its own — a connection that opens and then stalls
+// hangs the promise forever, which is exactly the failure this module used to
+// sit on. AbortController is the only way to bound it.
+async function fetchCsv(url, timeoutMs, label) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`${label} request failed: HTTP ${response.status}`);
+    }
+    return await response.text();
+  } catch (err) {
+    // An abort surfaces as a bare "AbortError"/"The operation was aborted",
+    // which says nothing about what was being fetched or for how long.
+    if (err.name === "AbortError") {
+      throw new Error(`${label} request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return parseDartCsv(await response.text());
 }
 
-function generatePlaceholderRun() {
-  const days = 365; // roughly Jan 1 - Dec 31
-  const data = [];
-  const start = new Date("2023-01-01");
-
-  for (let i = 0; i < days; i++) {
-    // Bell-curve-ish run shape peaking around day 55, plus a little noise.
-    const peak = 55;
-    const spread = 18;
-    const base = 400 * Math.exp(-Math.pow(i - peak, 2) / (2 * spread * spread));
-    const noise = Math.random() * 40;
-    const count = Math.max(5, Math.round(base + noise));
-
-    const date = new Date(start);
-    date.setDate(date.getDate() + i);
-
-    data.push({
-      date: date.toISOString().slice(0, 10),
-      count,
-    });
-  }
-
-  return data;
+// Opt-in live refresh: `?live` or `?live=1` on the URL. Off by default, and
+// the default is the honest one — see the note on SNAPSHOT_URL above. Guarded
+// for a non-browser context (a test harness importing this module) rather than
+// assuming `location` exists.
+function liveRefreshRequested() {
+  if (typeof location === "undefined") return false;
+  return new URLSearchParams(location.search).has("live");
 }
 
-export const runData = await fetchRunData().catch((err) => {
-  console.warn(
-    "DART fetch failed, falling back to placeholder run data:",
-    err,
+// Which of the two the data below actually came from. Exported so the HUD can
+// be honest about its own provenance instead of asserting a source it has no
+// way to check — see the masthead in index.html.
+export let runDataSource = "snapshot";
+
+async function loadRunData() {
+  // The snapshot first and unconditionally: it is the baseline, and it is also
+  // what the live path falls back to, so there is no ordering where we want to
+  // be holding a live response and no snapshot.
+  const snapshot = parseDartCsv(
+    await fetchCsv(SNAPSHOT_URL, SNAPSHOT_TIMEOUT_MS, "Run data snapshot"),
   );
-  return generatePlaceholderRun();
-});
+
+  if (!liveRefreshRequested()) return snapshot;
+
+  try {
+    const live = parseDartCsv(
+      await fetchCsv(
+        COLUMBIA_BASIN_RESEARCH_DART_URL,
+        DART_TIMEOUT_MS,
+        "DART live",
+      ),
+    );
+    runDataSource = "live";
+    return live;
+  } catch (err) {
+    // Non-fatal by construction: the snapshot is already parsed and correct,
+    // so a failed refresh costs nothing but the freshness nobody asked for.
+    console.warn("Live DART refresh failed, using the vendored snapshot:", err);
+    return snapshot;
+  }
+}
+
+// There is no synthetic fallback any more, and that is the point. The old one
+// generated a bell curve of made-up 2023 counts and handed them to a HUD whose
+// masthead reads "COUNTING SEASON 2015 · DATA COURTESY OF THE U.S. ARMY CORPS
+// OF ENGINEERS" — so the one situation it existed to cover was the one where
+// the app confidently presented invented numbers as a federal measurement
+// record. With the data vendored into the bundle there is no offline case left
+// for it to cover, and failing loudly beats lying quietly.
+export const runData = await loadRunData();

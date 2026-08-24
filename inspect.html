@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fish Viewer — Salmon Run</title>
+  <!-- Same reason index.html carries one: without it the browser requests
+       /favicon.ico on every load and the 404 lands in the console, which is
+       the one signal the capture scripts have for a GLSL compile failure. -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="inspect.css" />
 </head>
@@ -38,6 +42,11 @@
         <input type="range" id="amplitude-range" min="0" max="150" value="100" />
       </label>
 
+      <!-- Every slider below is set from the selected species' own material on
+           load and on each species change (see syncSlidersFromMaterial in
+           inspect.js), so the `value` attributes here are only what shows
+           during the moment before the GLBs finish loading. The three models
+           each ship their own tuning — see MATERIAL_OVERRIDES in fishMesh.js. -->
       <p class="field-head"><span class="label">Material</span></p>
 
       <label class="row">
@@ -47,7 +56,7 @@
 
       <label class="row">
         <span class="label">Specular strength</span>
-        <input type="range" id="specular-strength-range" min="0" max="150" value="55" />
+        <input type="range" id="specular-strength-range" min="0" max="150" value="50" />
       </label>
 
       <label class="row">
@@ -56,8 +65,23 @@
       </label>
 
       <label class="row">
+        <span class="label">Specular tint</span>
+        <input type="range" id="specular-tint-range" min="0" max="100" value="55" />
+      </label>
+
+      <label class="row">
+        <span class="label">Diffuse floor</span>
+        <input type="range" id="diffuse-floor-range" min="0" max="150" value="70" />
+      </label>
+
+      <label class="row">
+        <span class="label">Diffuse ceiling</span>
+        <input type="range" id="diffuse-ceil-range" min="0" max="150" value="110" />
+      </label>
+
+      <label class="row">
         <span class="label">Scale bump</span>
-        <input type="range" id="bump-strength-range" min="0" max="100" value="35" />
+        <input type="range" id="bump-strength-range" min="0" max="100" value="22" />
       </label>
 
       <label class="row">
@@ -67,7 +91,7 @@
 
       <label class="row">
         <span class="label">Iridescence</span>
-        <input type="range" id="iridescence-strength-range" min="0" max="100" value="25" />
+        <input type="range" id="iridescence-strength-range" min="0" max="100" value="6" />
       </label>
 
       <div class="row toggles">

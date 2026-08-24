@@ -271,7 +271,16 @@ const SKY_RADIUS_FRAC = 0.9;
 const EYE_FRAC = { x: 0.648, y: -0.2, z: 0.853 };
 const TARGET_FRAC = { x: 0.4, y: -0.075, z: 0.22 };
 
-export function createSceneSetup(canvas, bounds) {
+// `pixelBounds` is the actual on-screen size (window.innerWidth/innerHeight
+// — see main.js) and drives everything that has to match the physical
+// display: renderer.setSize, the composer's own buffers, camera.aspect.
+// `worldBounds` is the (now smaller, see WORLD_SCALE in main.js) size the
+// scene's *content* is built against — the camera framing, its far plane,
+// the sky sphere's scale, and the fog falloff, all of which are meant to
+// track how big the river itself is, not how many physical pixels it's
+// rasterized into. The two used to be the same object; splitting them is
+// what lets the world shrink independently of the browser window.
+export function createSceneSetup(canvas, pixelBounds, worldBounds) {
   // `antialias` is deliberately OFF, and it is not a quality compromise.
   //
   // MSAA applies to the default framebuffer only. Everything in this scene is
@@ -336,8 +345,8 @@ export function createSceneSetup(canvas, bounds) {
     uSunIntensity: { value: 1.5 },
     uHorizonStrength: { value: 0.6 },
     uFogColor: { value: FOG_COLOR },
-    uFogDensity: { value: fogDensity(bounds) },
-    uFogDepthRate: { value: fogDepthRate(bounds) },
+    uFogDensity: { value: fogDensity(worldBounds) },
+    uFogDepthRate: { value: fogDepthRate(worldBounds) },
   };
 
   // Background is a sky sphere rather than a flat scene.background color, so
@@ -551,47 +560,77 @@ export function createSceneSetup(canvas, bounds) {
     return next;
   }
 
-  let composer = buildComposer(bounds);
+  // Bloom operates on the rasterized frame, so its internal targets are
+  // sized off the actual pixel resolution — not the (now smaller, see
+  // WORLD_SCALE in main.js) world content those pixels happen to depict.
+  let composer = buildComposer(pixelBounds);
 
   // Resizes the renderer/camera to the new viewport and re-applies the fixed
-  // framing at the new bounds. Re-framing here is safe now that the camera
-  // is static: there is no user drag/zoom state left for it to stomp on, and
-  // since the framing is defined as fractions of bounds, not re-applying it
-  // would leave the shot subtly mis-composed after any window change.
-  function resize(b) {
+  // framing at the new world bounds. Re-framing here is safe now that the
+  // camera is static: there is no user drag/zoom state left for it to stomp
+  // on, and since the framing is defined as fractions of bounds, not
+  // re-applying it would leave the shot subtly mis-composed after any window
+  // change.
+  //
+  // Takes both bounds because they drive different halves of this: anything
+  // that has to match the physical screen (renderer/composer size, aspect)
+  // reads pixelBounds; anything about how big the river itself is (the
+  // camera's position/far-plane, the sky's scale, the fog falloff) reads
+  // worldBounds. The two share an aspect ratio — worldBounds is always
+  // pixelBounds scaled by the same factor on both axes (see main.js) — so
+  // camera.aspect is correct off either one; pixelBounds is used since
+  // that's what it's actually matching.
+  function resize(pixelBounds, worldBounds) {
     // Re-read devicePixelRatio here, not just at startup: dragging the window
     // to a monitor with a different DPI fires resize but leaves a pixel ratio
     // set for the old screen, which renders soft (or needlessly large).
     renderer.setPixelRatio(
       Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio),
     );
-    renderer.setSize(b.width, b.height);
-    camera.aspect = b.width / b.height;
-    camera.far = Math.max(b.width, b.height) * 5;
-    applyFraming(b);
+    renderer.setSize(pixelBounds.width, pixelBounds.height);
+    camera.aspect = pixelBounds.width / pixelBounds.height;
+    camera.far = Math.max(worldBounds.width, worldBounds.height) * 5;
+    applyFraming(worldBounds);
     camera.updateProjectionMatrix();
     sky.scale.setScalar(camera.far * SKY_RADIUS_FRAC);
     // The sky's murk path length is in world units, so its density has to
     // track bounds the same way every other surface's fog does (see fog.js).
-    skyUniforms.uFogDensity.value = fogDensity(b);
+    skyUniforms.uFogDensity.value = fogDensity(worldBounds);
     // Same for the depth ramp: it is keyed to the depth of the water column,
     // which is a fraction of bounds.height (see fog.js).
-    skyUniforms.uFogDepthRate.value = fogDepthRate(b);
+    skyUniforms.uFogDepthRate.value = fogDepthRate(worldBounds);
+  }
+
+  // The expensive half of a resize, split out so it can run on a debounce
+  // while resize() above stays on every event.
+  //
+  // composer.setSize() reallocates EffectComposer's two full-resolution
+  // targets AND calls setSize() on every pass, which rebuilds
+  // UnrealBloomPass's ~11-target mip chain. That is ~13 GPU allocations, and
+  // it was running on every single event of a window drag — the exact churn
+  // main.js's debounce comment claimed to be avoiding, and on mobile it fires
+  // on every address-bar show/hide too.
+  //
+  // Between the two, the composer's buffers are simply still at the previous
+  // size and the final pass scales them to the canvas. That reads as a
+  // momentary softness while the edge is moving, which is a much better
+  // trade than reallocating the whole chain at drag frame rate.
+  function resizeComposer(pixelBounds) {
     // EffectComposer caches the renderer's pixel ratio in its CONSTRUCTOR and
     // multiplies setSize() by that cached value — so without this line its
-    // targets stay at whatever DPI the page booted at, and the comment above
+    // targets stay at whatever DPI the page booted at, and resize()'s note
     // about tracking a monitor change would be true of the renderer but not
     // of the buffers actually being drawn into. It also matters on a tier
     // change, which is precisely a deliberate pixel-ratio change.
     composer.setPixelRatio(renderer.getPixelRatio());
-    // Resizes the composer's own buffers AND calls setSize() on every pass,
-    // which is what re-allocates UnrealBloomPass's mip chain. (Assigning
-    // bloomPass.resolution here as well used to look like the line doing
-    // that, but the pass only reads `resolution` in its constructor.)
-    composer.setSize(b.width, b.height);
+    // (Assigning bloomPass.resolution here as well used to look like the line
+    // rebuilding the mip chain, but the pass only reads `resolution` in its
+    // constructor.)
+    composer.setSize(pixelBounds.width, pixelBounds.height);
   }
 
-  resize(bounds);
+  resize(pixelBounds, worldBounds);
+  resizeComposer(pixelBounds);
 
   // Replaces a direct renderer.render(scene, camera) call — see composer
   // above for why the bloom/tone-mapping chain needs to run instead.
@@ -657,13 +696,17 @@ export function createSceneSetup(canvas, bounds) {
   // things that change — whether UnrealBloomPass is in the chain at all, and
   // the resolution its eleven internal targets are allocated at — are only
   // read in constructors.
-  function applyQuality(b) {
+  function applyQuality(pixelBounds, worldBounds) {
     composer.dispose();
-    composer = buildComposer(b);
+    composer = buildComposer(pixelBounds);
 
     // Picks up the new pixel ratio, re-sizes the fresh composer, and re-scales
-    // the sky to the current far plane.
-    resize(b);
+    // the sky to the current far plane. Both halves, not just the cheap one:
+    // a tier change has just built a brand-new composer whose targets are at
+    // the constructor's default size, so this is one of the cases where the
+    // reallocation is the entire point.
+    resize(pixelBounds, worldBounds);
+    resizeComposer(pixelBounds);
   }
 
   return {
@@ -672,6 +715,7 @@ export function createSceneSetup(canvas, bounds) {
     camera,
     cameraTarget,
     resize,
+    resizeComposer,
     updateCamera,
     setSeason,
     setSunDirection,

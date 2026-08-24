@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Matches the HUD's palette: the report bar's dark ink ground and the
+       single accent red it uses for the rule above the masthead and the
+       timeline cursor (see --ink / --accent in style.css). -->
+  <rect width="32" height="32" fill="#0a0f12"/>
+  <!-- A salmon in the scene's own orientation: nose downstream (screen right),
+       the way the run crosses the frame. -->
+  <g fill="#c1272d">
+    <!-- Body: a lens shape, blunt at the head and tapering to the peduncle. -->
+    <path d="M4.5 16c3-4.6 7.4-7 12.4-7s8.4 2.4 10.1 7c-1.7 4.6-5.1 7-10.1 7s-9.4-2.4-12.4-7z"/>
+    <!-- Caudal fin. -->
+    <path d="M4.8 16 1 11.2v9.6z"/>
+    <!-- Dorsal fin. -->
+    <path d="M15 9.2c1.3-2.1 3-3.4 5-4-.4 1.5-.5 2.8-.4 4z"/>
+    <!-- Anal fin. -->
+    <path d="M14.6 22.8c1 1.7 2.4 2.8 4.1 3.3-.3-1.2-.4-2.3-.3-3.3z"/>
+  </g>
+  <!-- Eye, punched back to the ground colour. -->
+  <circle cx="24" cy="14.6" r="1.15" fill="#0a0f12"/>
+</svg>

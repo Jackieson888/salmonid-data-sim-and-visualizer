@@ -2,7 +2,7 @@
 
 A Three.js flocking simulation (Reynolds boids: separation, alignment,
 cohesion) styled as a salmon run past Lower Granite Dam on the Snake River,
-with a timeline scrubber driven by real daily passage counts fetched from
+with a timeline scrubber driven by real daily passage counts published by
 Columbia Basin Research DART.
 
 The shot is a fixed underwater camera in the water column: the school sweeps
@@ -33,11 +33,15 @@ Simulation (dimension-agnostic, no rendering):
   (`x`, `y`); the renderer reinterprets those as `worldX`/`worldZ` at the
   render boundary. Both neighbor searches (flocking forces, overlap
   resolution) run through a spatial grid, not an all-pairs scan.
-- `src/data.js` — real Lower Granite daily adult passage counts fetched live
-  from DART at module load, with a bell-curve placeholder run as an offline
-  fallback. Four species drive the simulation (Chinook, Jack Chinook,
-  Steelhead, Shad); the rest of the feed is parsed and reported in the HUD
-  without being simulated — wild steelhead (a *subset* of the steelhead count,
+- `src/data.js` — real Lower Granite daily adult passage counts, read at load
+  from a snapshot vendored into the repo (`public/lwg-adult-daily-2015.csv`,
+  retrieved 2026-08-24). The year is fixed, so there is nothing to be fresh
+  about; a live DART query is kept behind `?live` for when the year becomes a
+  control. There is no synthetic fallback — the HUD presents these as a
+  federal measurement record, so failing visibly beats substituting invented
+  numbers under that masthead. Four species drive the simulation (Chinook,
+  Jack Chinook, Steelhead, Shad); the rest of the feed is parsed and reported
+  in the HUD without being simulated — wild steelhead (a *subset* of the count,
   not an addition to it), sockeye, coho, jack coho, Pacific lamprey, water
   temperature, and the scheduled Chinook run for the date. Columns are read by
   header name and the non-essential ones tolerate being absent, since DART's
@@ -86,12 +90,29 @@ Rendering (`src/scene/`):
 
 Assets:
 
-- `public/steelhead-final.glb` — the only model currently loaded. All four
-  species point at it (see `SPECIES_MODEL_URL`) and are told apart by a flat
-  per-instance tint; give a species its own URL and it gets its own
-  `InstancedMesh` with no other change. A new model needs its own
-  `MODEL_ROTATION_FIX` entry — see the note there on why the right correction
-  depends on where the source file put its compensating rotation.
+- `public/steelhead-final.glb`, `chinook-final.glb`, `shad-final.glb` — three
+  authored models, one per species, each a single skinned mesh plus a
+  loop-closed `"Swimming"` clip built by `scripts/swim_rig.py` against a
+  shared 16-bone spine. Jack Chinook has no model of its own and borrows the
+  chinook (it is the same species at a smaller, earlier-maturing size, not a
+  different body shape), told apart by a flat per-instance tint — see
+  `SPECIES_MODEL_URL`. Give it its own URL and it gets its own `InstancedMesh`
+  with no other change. A new model needs a `MODEL_ROTATION_FIX` entry: see
+  the note there on why the right correction depends on where the source file
+  put its compensating rotation.
+
+  Each model also carries its own material tuning (`MATERIAL_OVERRIDES` in
+  `fishMesh.js`). The three skins are painted to very different keys — the
+  chinook is near-white silver, the shad already has its iridescence painted
+  in — and every shader term here is a modifier on finished art rather than a
+  light rig on a blank body. `inspect.html` is where to tune them: it loads
+  one fish up close and its sliders read the selected species' shipped values.
+- `public/lwg-adult-daily-2015.csv` — the passage-count snapshot (see
+  `src/data.js`), byte-for-byte as DART served it, footnotes and citation
+  included.
+- `public/og-image.png` — the social card, a real capture of the running
+  scene. Regenerate with `scripts/screenshot.mjs` rather than hand-making one,
+  so the preview cannot drift from what the page looks like.
 
 ## Running locally
 
@@ -104,13 +125,24 @@ Then open the printed `localhost` URL. `npm run build` / `npm run preview`
 produce and serve a production build.
 
 There is no test suite. `scripts/screenshot.mjs` drives the running dev server
-in headless Chromium and captures a frame, failing on any console error — which
-is the only automatic signal for a GLSL compile failure, since a broken shader
-doesn't throw, it just stops drawing one surface:
+and captures a frame, failing on any console error — which is the only
+automatic signal for a GLSL compile failure, since a broken shader doesn't
+throw, it just stops drawing one surface:
 
 ```
 node scripts/screenshot.mjs out.png --day 250
+node scripts/screenshot.mjs out.png --day 250 --burst 6   # frames over time
+node scripts/screenshot.mjs out.png --url http://localhost:5173/inspect.html
 ```
+
+It runs **headed** by default, which is not a preference: headless Chromium
+decides the page isn't visible and throttles `requestAnimationFrame` to about
+1Hz, so the settle window buys about nine simulation frames rather than nine
+seconds' worth, and captures are of a scene that never filled in. `--headless`
+is kept for CI, where a still of an unsettled scene is still enough to catch a
+shader that has stopped drawing. `--burst N` writes N frames spread across the
+settle window, which is how you catch the defects that only exist in motion —
+a fish popping at the cull band, a tailbeat desyncing from travel.
 
 ## Controls
 
@@ -118,23 +150,46 @@ node scripts/screenshot.mjs out.png --day 250
   day gets `FRAMES_PER_DAY` frames (240 — about four seconds) and the HUD's
   figures count toward the next day's across that span rather than snapping at
   the boundary.
+- **Space** toggles play/pause from anywhere on the page; **←/→** step a day
+  and hold. Under `prefers-reduced-motion: reduce` the scene boots held rather
+  than running — the river is fully composed on the first frame, it just is
+  not advancing until you start it.
 - **D** toggles a camera debug readout — the way to read off a new
   `EYE_FRAC`/`TARGET_FRAC` by eye if the framing ever needs re-tuning.
 
 ## Next steps
 
-1. **Per-species models** — all four species currently share
-   `steelhead-final.glb`. Each new mesh needs to be authored against the same
-   vertex budget and swim rig, then pointed at in `SPECIES_MODEL_URL`.
+1. **Caustics coverage** — the largest efficiency win still on the table, and
+   the riskiest change in the renderer. The pass covers
+   `waterWorldSize(bounds)`: `waterSizeMultiplier` 2.4 on both axes, i.e. 5.76x
+   the bounds area. But `applyFog` saturates at
+   `1 - exp(-(density·dist)²)` with `density = 3.6 / max(w, h)`, so at
+   `density·dist = 2.0` a surface is 98.2% fog and any *added* caustic light is
+   2% visible. Useful radius is about `0.55·span` — roughly a 62% area
+   reduction, taking high-tier segments from 256 to ~160 and the vertex count
+   from ~65k to ~25k at constant world-space density.
+
+   The crux is that the caustics texture's UV space is currently *identical*
+   to the water sim's, because both derive from `waterWorldSize()`. Splitting
+   them is the change: a new `causticsWorldSize()`, both UVs computed
+   separately in `water.js` (it currently computes one and uses it for both),
+   every reader's `uWorldSize`/`uMargin` repointed, and a UV edge fade added
+   inside `causticGlowAt` in `glsl.js` so all five consumers inherit it from
+   one place. Without that fade, sampling outside the new coverage clamps to
+   the edge texel and smears the boundary net across the plane.
+
+   Verify by A/B-ing `--brighten` captures at several days, watching
+   specifically for a hard line where the coverage ends.
 2. **Revisit the population cap** — this used to read "a fish LOD", on the
    basis that the cap was bounded by vertex cost at ~1300 vertices per fish.
-   That figure was wrong: `steelhead-final.glb` holds **435** vertices (654
-   triangles), so the flock costs roughly a quarter of what was assumed, and it
-   is not the frame's most expensive item — the caustics pass and the water
-   simulation each cost considerably more (see `src/quality.js`). The cap is
-   really a fill-rate and CPU-simulation limit, and it now scales by device
-   tier. Worth re-measuring what the high tier can actually carry before
-   building an LOD for a cost that is not the bottleneck.
+   That figure was wrong: the models hold 435–560 vertices each, so the flock
+   costs roughly a quarter of what was assumed, and it is not the frame's most
+   expensive item — the caustics pass and the water simulation each cost
+   considerably more (see `src/quality.js`). The cap is really a fill-rate and
+   CPU-simulation limit, and it now scales by device tier. Worth re-measuring
+   what the high tier can actually carry before building an LOD for a cost
+   that is not the bottleneck.
 3. **Tune the "feel"** — the `Flock` options in `src/main.js`
    (`perceptionRadius`, `separationRadius`, `maxSpeed`) and the framing
-   constants in `src/scene/sceneSetup.js`.
+   constants in `src/scene/sceneSetup.js`. Note that `separationRadius` must
+   stay below `perceptionRadius`, or the spatial grid silently truncates it.

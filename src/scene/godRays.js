@@ -280,9 +280,14 @@ export function buildGodRays(bounds, cameraPosition, cameraTarget) {
     uniforms.uCaustics.value = texture;
   }
 
-  function setWorldSize(waterSize, bounds) {
-    uniforms.uWorldSize.value.set(waterSize.width, waterSize.height);
-    uniforms.uMargin.value.set(waterSize.marginX, waterSize.marginZ);
+  // `coverage` is the CAUSTICS pass's world coverage, not the water sim's —
+  // a shaft's only texture read is the net at its surface entry point (see the
+  // fragment shader), so it maps world XZ through that pass's own extent. Those
+  // two used to be the same value; they are not any more (see
+  // causticsWorldSize in water.js).
+  function setWorldSize(coverage, bounds) {
+    uniforms.uWorldSize.value.set(coverage.width, coverage.height);
+    uniforms.uMargin.value.set(coverage.marginX, coverage.marginZ);
     uniforms.uFogDensity.value = fogDensity(bounds);
   }
 

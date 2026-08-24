@@ -235,6 +235,10 @@ export const WATER_INFO_PROC_GLSL = /* glsl */ `
 // tap (per-vertex reads, and anything small enough on screen that the grid
 // never resolved). It is ignored entirely on the procedural path, which has
 // no texels to blur.
+// How much of the caustics coverage, per side, is spent dissolving the net to
+// nothing. In uv units, so 0.08 is the outer 8% of each edge.
+const CAUSTICS_EDGE_FADE = 0.08;
+
 export function causticGlowChunk({ taps = 1 } = {}) {
   if (!QUALITY.realCaustics) {
     return /* glsl */ `
@@ -251,9 +255,31 @@ export function causticGlowChunk({ taps = 1 } = {}) {
 
   return /* glsl */ `
     ${taps >= 5 ? CAUSTIC_GLOW_GLSL : CAUSTIC_GLOW_POINT_GLSL}
+
+    // Fades the net out across the outermost band of uv on each side (see
+    // CAUSTICS_EDGE_FADE), and kills it entirely outside [0, 1].
+    //
+    // This is here — inside the shared entry point — rather than in each
+    // consumer, so all four inherit it from one place (see causticsWorldSize
+    // in water.js for what the coverage now is).
+    //
+    // It is not optional. The accumulation target is CLAMP-sampled, so a uv
+    // outside its coverage does not read black: it reads the edge texel and
+    // holds it, which smears whatever bright knot happens to sit on the
+    // boundary in an infinite streak across everything beyond it. And now that
+    // the coverage is sized to the fog's own reach rather than to the whole
+    // water plane, there is real geometry out there to smear it onto.
+    //
+    // The fade band is generous because the boundary is invisible ONLY if
+    // nothing crosses it abruptly. At the coverage edge a surface is ~98% fog,
+    // so this is dissolving something already almost gone — which is exactly
+    // why it can afford to be soft rather than tight.
     float causticGlowAt(sampler2D caustics, vec2 uv, vec2 texel,
                         vec2 worldXZ, float time) {
-      return ${read};
+      vec2 d = min(uv, 1.0 - uv);
+      float edge = smoothstep(0.0, ${CAUSTICS_EDGE_FADE.toFixed(3)}, min(d.x, d.y));
+      if (edge <= 0.0) return 0.0;
+      return ${read} * edge;
     }
   `;
 }

@@ -30,7 +30,6 @@ import { QUALITY } from "./quality.js";
 // glint even with no caustics pipeline behind it.
 QUALITY.realCaustics = false;
 QUALITY.fishHighlights = true;
-QUALITY.vatFrames = 30;
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -48,6 +47,9 @@ const wireframeToggle = document.getElementById("wireframe-toggle");
 const shininessRange = document.getElementById("shininess-range");
 const specularStrengthRange = document.getElementById("specular-strength-range");
 const specularFresnelRange = document.getElementById("specular-fresnel-range");
+const specularTintRange = document.getElementById("specular-tint-range");
+const diffuseFloorRange = document.getElementById("diffuse-floor-range");
+const diffuseCeilRange = document.getElementById("diffuse-ceil-range");
 const bumpStrengthRange = document.getElementById("bump-strength-range");
 const scaleFrequencyRange = document.getElementById("scale-frequency-range");
 const iridescenceStrengthRange = document.getElementById("iridescence-strength-range");
@@ -158,6 +160,10 @@ let fishRenderer = null;
 function setSpecies(species) {
   previewFish = makePreviewFish(species);
   frameCamera(previewFish.length * BODY_VISUAL_SCALE);
+  // Each model carries its own material tuning now (see MATERIAL_OVERRIDES in
+  // fishMesh.js), so the panel has to follow the selection rather than sit on
+  // whatever was last dragged.
+  syncSlidersFromMaterial();
 }
 
 setSpecies(speciesSelect.value);
@@ -174,31 +180,56 @@ rotateToggle.addEventListener("change", () => {
   controls.autoRotate = rotateToggle.checked;
 });
 
-// Reaches into the material's own uniforms the same way the uCausticsStrength
-// override above does — these are shine-tuning knobs this page wants, not
-// general buildSpeciesRenderer parameters. Safe to call before fishRenderer
-// exists (setSpecies() above runs first); each slider just no-ops until load
-// finishes, then applies once here for the values set before that point.
-function setFishUniform(name, value) {
-  fishRenderer?.mesh.traverse((child) => {
-    if (child.material?.uniforms?.[name]) {
-      child.material.uniforms[name].value = value;
-    }
-  });
-}
-
+// Shine-tuning knobs, wired straight to the selected species' material
+// uniforms — these are things this page wants to poke at, not general
+// buildSpeciesRenderer parameters, so they live here rather than in the
+// renderer's API.
+//
+// `scale` maps slider units to uniform units; `toSlider` is its inverse, used
+// by syncSlidersFromMaterial below. Both directions matter now: the three
+// models no longer share one tuning (see MATERIAL_OVERRIDES in fishMesh.js), so
+// these sliders have to be able to SHOW what a species actually ships with, not
+// just impose a value on it.
 const materialSliders = [
-  { input: shininessRange, uniform: "uShininess", scale: (v) => v },
-  { input: specularStrengthRange, uniform: "uSpecularStrength", scale: (v) => v / 100 },
-  { input: specularFresnelRange, uniform: "uSpecularFresnel", scale: (v) => v / 100 },
-  { input: bumpStrengthRange, uniform: "uBumpStrength", scale: (v) => v / 100 },
-  { input: scaleFrequencyRange, uniform: "uScaleFrequency", scale: (v) => v },
-  { input: iridescenceStrengthRange, uniform: "uIridescenceStrength", scale: (v) => v / 100 },
+  { input: shininessRange, uniform: "uShininess", scale: (v) => v, toSlider: (v) => v },
+  { input: specularStrengthRange, uniform: "uSpecularStrength", scale: (v) => v / 100, toSlider: (v) => v * 100 },
+  { input: specularFresnelRange, uniform: "uSpecularFresnel", scale: (v) => v / 100, toSlider: (v) => v * 100 },
+  { input: specularTintRange, uniform: "uSpecularTint", scale: (v) => v / 100, toSlider: (v) => v * 100 },
+  { input: diffuseFloorRange, uniform: "uDiffuseFloor", scale: (v) => v / 100, toSlider: (v) => v * 100 },
+  { input: diffuseCeilRange, uniform: "uDiffuseCeil", scale: (v) => v / 100, toSlider: (v) => v * 100 },
+  { input: bumpStrengthRange, uniform: "uBumpStrength", scale: (v) => v / 100, toSlider: (v) => v * 100 },
+  { input: scaleFrequencyRange, uniform: "uScaleFrequency", scale: (v) => v, toSlider: (v) => v },
+  { input: iridescenceStrengthRange, uniform: "uIridescenceStrength", scale: (v) => v / 100, toSlider: (v) => v * 100 },
 ];
 
+// The material backing whichever species the select is on. Null until
+// loadFishAssets() resolves, which is why every use below is guarded — the
+// sliders exist and can be dragged before the model has finished loading.
+function activeMaterial() {
+  return fishRenderer?.materialForSpecies(speciesSelect.value) ?? null;
+}
+
+// Pull the selected species' shipped values into the slider positions. Called
+// on load and on every species change, so switching from chinook to shad moves
+// the sliders to shad's own tuning instead of silently applying chinook's.
+function syncSlidersFromMaterial() {
+  const material = activeMaterial();
+  if (!material) return;
+  for (const { input, uniform, toSlider } of materialSliders) {
+    const value = material.uniforms[uniform]?.value;
+    if (value !== undefined) input.value = String(Math.round(toSlider(value)));
+  }
+}
+
+// Writes only the selected species' material, so tuning a chinook leaves the
+// steelhead and the shad on their own values.
 function applyMaterialSliders() {
+  const material = activeMaterial();
+  if (!material) return;
   for (const { input, uniform, scale } of materialSliders) {
-    setFishUniform(uniform, scale(Number(input.value)));
+    if (material.uniforms[uniform]) {
+      material.uniforms[uniform].value = scale(Number(input.value));
+    }
   }
 }
 
@@ -211,6 +242,9 @@ for (const { input } of materialSliders) {
 // ---------------------------------------------------------------------
 let simTime = 0;
 let lastFrameTime = null;
+
+// One frame at 60fps, the unit fishMesh.js's update() expects its dt in.
+const REFERENCE_FRAME_MS = 1000 / 60;
 
 function loop(t) {
   const dt = lastFrameTime === null ? 0 : t - lastFrameTime;
@@ -228,7 +262,18 @@ function loop(t) {
     // cruise would.
     previewFish.smoothSpeed = 1.2 * (Number(speedRange.value) / 100);
     previewFish.swimAmplitude = Number(amplitudeRange.value) / 100;
-    fishRenderer.update([previewFish], simTime, playingToggle.checked);
+    // dt in 60fps-frame units, matching main.js's loop — fishMesh.js's update()
+    // ACCUMULATES the tailbeat per call, so leaving it at the parameter default
+    // of 1 makes the stroke rate a function of refresh rate: 2.4x too fast on a
+    // 144Hz display, half speed at 30fps. Clamped for the same reason main.js
+    // clamps its own: a tab that was backgrounded comes back with one enormous
+    // delta, and the tail should drop that motion rather than snap through it.
+    fishRenderer.update(
+      [previewFish],
+      simTime,
+      playingToggle.checked,
+      Math.min(4, dt / REFERENCE_FRAME_MS),
+    );
   }
 
   renderer.render(scene, camera);
@@ -256,7 +301,9 @@ loadFishAssets()
         child.material.wireframe = true;
       }
     });
-    applyMaterialSliders();
+    // Read, not write. The materials were just built with each model's own
+    // tuning; the panel's job is to show it.
+    syncSlidersFromMaterial();
 
     fishLoadingEl.classList.add("hidden");
     fishLoadingEl.addEventListener(

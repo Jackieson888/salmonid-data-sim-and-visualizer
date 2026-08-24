@@ -97,14 +97,25 @@ export function createWaterSimulation(renderer, size, aspect) {
   // Render targets start with undefined GPU memory, not zeros — clear both
   // explicitly so the first few frames don't refract/ray-march against
   // garbage height/normal data.
+  //
+  // The clear colour is saved and put back. It is renderer-global state, and
+  // leaving it on transparent black leaked out of here into every later
+  // renderer.clear() in the app — including the composer's — for the rest of
+  // the session, purely because this ran at construction.
   {
     const previousTarget = renderer.getRenderTarget();
+    const previousClearColor = new THREE.Color();
+    renderer.getClearColor(previousClearColor);
+    const previousClearAlpha = renderer.getClearAlpha();
+
     renderer.setRenderTarget(targetA);
     renderer.setClearColor(0x000000, 0);
     renderer.clear();
     renderer.setRenderTarget(targetB);
     renderer.clear();
+
     renderer.setRenderTarget(previousTarget);
+    renderer.setClearColor(previousClearColor, previousClearAlpha);
   }
 
   const dropMaterial = new THREE.RawShaderMaterial({

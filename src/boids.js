@@ -208,6 +208,34 @@ export class Fish {
     this.depthTarget = this.depth;
     this.depthCooldown = 60 + Math.random() * 150;
 
+    // Body pitch, in radians, maintained by the renderer (see PITCH_SMOOTHING
+    // in fishMesh.js). Lives here rather than being materialized on the fish
+    // by the renderer for the same reason swimCyclePos above does: every Fish
+    // should have the same shape from birth, so a fish's first rendered frame
+    // isn't also the frame its hidden class changes. Starts level.
+    this.pitch = 0;
+
+    // Scratch written once per frame by the renderer's partition pass
+    // (fishMesh.js) — this fish's squared XZ distance from the camera, shared
+    // between the back-to-front sort, the distance cull and the per-species
+    // depth ranking so none of them recompute it. Declared here for the shape
+    // reason above; the value is meaningless until the renderer has run.
+    this._camDistSq = 0;
+
+    // Index into Flock.fish for the current step, tagged by step()'s overlap
+    // pass so a pair found from both ends is only corrected once. Same shape
+    // reasoning again — this used to be assigned onto the fish mid-step, so
+    // every newly spawned fish took a hidden-class transition on its first
+    // one, which is precisely the population that is largest on a busy day.
+    this.__gridIdx = 0;
+
+    // This step's accumulated overlap correction, summed across every
+    // overlapping neighbour and applied (clamped) at the end of step(). See
+    // the overlap-resolution pass for why it accumulates rather than moving
+    // the fish on the spot.
+    this._corrX = 0;
+    this._corrY = 0;
+
     // Fade in/out lifecycle — see file header. `age` drives the fade-in;
     // `removing`/`removeAge` drive the fade-out once Flock.remove() flags it.
     this.age = 0;
@@ -255,6 +283,7 @@ export class Flock {
 
     // Maintained rather than recounted — see activeCount().
     this._activeCount = 0;
+
 
     this.options = {
       perceptionRadius: options.perceptionRadius ?? 55,
@@ -347,6 +376,7 @@ export class Flock {
   setBounds(bounds) {
     this.bounds = bounds;
   }
+
 
   step(dt = 1) {
     const { perceptionRadius, separationRadius } = this.options;
@@ -548,8 +578,37 @@ export class Flock {
     // only, so a pair found while scanning fish A's cells and again while
     // scanning fish B's is only corrected once (mirrors the old i/j<i+1
     // O(n^2) loop this replaces) instead of twice as hard.
-    const CORRECTION_FRACTION = 0.5;
-    for (let i = 0; i < this.fish.length; i++) this.fish[i].__gridIdx = i;
+    //
+    // Scaled by dt, like every other rate in this function. Without it the
+    // correction moved a fixed fraction of the overlap per rendered FRAME
+    // rather than per unit of simulated time, so its strength — and with it
+    // how hard a crowded school jitters — depended on the display's refresh
+    // rate. Clamped at 1 because this is a fraction of the remaining overlap:
+    // past 1 a long step would overshoot and push the pair apart through each
+    // other rather than merely resolving the overlap.
+    const CORRECTION_FRACTION = Math.min(1, 0.5 * dt);
+
+    // Ceiling on how far this pass may move one fish in a single step, as a
+    // fraction of how far it swims in that step.
+    //
+    // The corrections below are applied to POSITION and not to velocity, so
+    // they are the one thing in the sim that can move a fish in a direction it
+    // isn't facing — the rendered heading comes from atan2(vx, vy), which
+    // doesn't follow. A little of that is invisible and is the point. But a
+    // fish in a dense knot accumulates a push from every overlapping neighbour
+    // within the same step, each using the position the last one just wrote,
+    // and the sum could exceed its actual swimming motion and reverse
+    // direction between frames — which read as fish twitching sideways in
+    // place rather than swimming. Capping the total keeps the correction a
+    // nudge on top of the motion instead of a substitute for it.
+    const maxCorrection = this.options.maxSpeed * dt * 0.5;
+    const maxCorrectionSq = maxCorrection * maxCorrection;
+    for (let i = 0; i < this.fish.length; i++) {
+      const f = this.fish[i];
+      f.__gridIdx = i;
+      f._corrX = 0;
+      f._corrY = 0;
+    }
     const overlapGrid = this.overlapGrid;
     overlapGrid.build(this.fish, OVERLAP_GRID_CELL_SIZE);
 
@@ -583,14 +642,42 @@ export class Flock {
               dy = 0;
               dist = 0.01;
             }
+            // Accumulated rather than applied straight to the position.
+            //
+            // Two reasons, both about jitter. It lets the per-fish total be
+            // capped below (see maxCorrection). And it makes the pass
+            // simultaneous: every pair is now measured against the positions
+            // the flocking step left, instead of each correction being applied
+            // on top of whatever the previous pair just did to the same fish.
+            // The sequential version made a fish's displacement depend on the
+            // arbitrary order its neighbours happened to sit in the grid
+            // buckets, which changes frame to frame — so a stable knot of fish
+            // got a different shove every step for no reason the eye could
+            // attribute to anything.
             const push = ((minDist - dist) / dist) * CORRECTION_FRACTION * 0.5;
-            a.x -= dx * push;
-            a.y -= dy * push;
-            b.x += dx * push;
-            b.y += dy * push;
+            a._corrX -= dx * push;
+            a._corrY -= dy * push;
+            b._corrX += dx * push;
+            b._corrY += dy * push;
           }
         }
       }
+    }
+
+    // Apply the accumulated corrections, each clamped to maxCorrection so a
+    // fish deep in a crowd is nudged rather than thrown.
+    for (const f of this.fish) {
+      let cx = f._corrX;
+      let cy = f._corrY;
+      if (cx === 0 && cy === 0) continue;
+      const magSq = cx * cx + cy * cy;
+      if (magSq > maxCorrectionSq) {
+        const scale = maxCorrection / Math.sqrt(magSq);
+        cx *= scale;
+        cy *= scale;
+      }
+      f.x += cx;
+      f.y += cy;
     }
 
     // River flow-through: fish that cross the right edge have finished

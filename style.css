@@ -69,7 +69,14 @@ body {
 #app {
   position: relative;
   width: 100vw;
+  /* 100vh on mobile is the viewport with the browser chrome RETRACTED, which
+     is taller than what is actually visible when the address bar is showing —
+     so the report bar at the bottom of the HUD sits underneath it until the
+     user scrolls, which this page never does. dvh is the dynamic viewport
+     height and tracks the chrome as it moves. The 100vh line stays first as
+     the fallback for anything that does not know dvh. */
   height: 100vh;
+  height: 100dvh;
 }
 
 #river-canvas {
@@ -662,6 +669,18 @@ body {
   }
 }
 
+/* An indefinite sweeping animation is exactly what this preference exists to
+   suppress. The bar stays — it still marks the page as busy — it just holds a
+   third of the way across instead of running. The scene itself is handled
+   separately: main.js boots it paused (see PREFERS_REDUCED_MOTION there),
+   since no CSS rule can stop a WebGL render loop. */
+@media (prefers-reduced-motion: reduce) {
+  #fish-loading .bar::after {
+    animation: none;
+    transform: translateX(95%);
+  }
+}
+
 /* ---------------------------------------------------------------------
    Fish viewer link (see src/inspect.js)
    --------------------------------------------------------------------- */
@@ -684,6 +703,43 @@ body {
 #fish-viewer-link:hover {
   color: var(--text);
   border-color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------------
+   Failure notice (see showNotice in main.js, and the boot handler in
+   index.html). Top-centre rather than in the report bar: it is not a
+   reading, and it has to be legible in the one case where the report bar
+   itself may never have been populated.
+   --------------------------------------------------------------------- */
+
+#notice {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(46ch, calc(100vw - 36px));
+  padding: 10px 14px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  /* The one saturated colour, used the way the report bar uses it — as a rule
+     marking the thing that matters, not as a fill. */
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+/* An interruption the scene expects to recover from on its own (context loss),
+   as distinct from something the viewer has to act on. Muted rule, since there
+   is nothing to do about it. */
+#notice.warn {
+  border-left-color: var(--text-dim);
+  color: var(--text-dim);
+}
+
+#notice[hidden] {
+  display: none;
 }
 
 /* ---------------------------------------------------------------------
