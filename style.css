@@ -17,6 +17,10 @@
    sitting over open water where its small sizes were barely readable. */
 
 :root {
+  /* Page background, visible only for the instant before the canvas paints
+     its first frame. */
+  --bg: #061a2e;
+
   /* Panel ink. Neutral slate rather than a tint of the scene: the water is
      green (see RIVER_TINT in season.js) and a green-cast panel reads as part
      of the render instead of as chrome laid over it. */
@@ -27,6 +31,9 @@
   --text: #e4e8ea;
   --text-dim: #8d9aa3;
   --text-faint: #5f6b73;
+  /* One step down from --text-faint — the "Also counted" label prefix in the
+     footnote strip needs to sit visibly behind the figures next to it. */
+  --text-dimmer: #47525a;
 
   /* Engineer red. The one saturated color in the interface — reserved for the
      current reading, never used decoratively. */
@@ -44,11 +51,48 @@
      rather than as a fifth species color. */
   --series: #4c6b63;
 
+  /* Counted at the dam but never drawn in the water — sockeye, coho, jack
+     coho, Pacific lamprey (see data.js). Same muted, desaturated register as
+     the four swimming species above, but visually distinct from them and
+     from each other, so the composition plate (Phase 2) can give them real
+     weight without implying they're rendered. */
+  --sockeye: #d98f95;
+  --coho: #7fa383;
+  --jack-coho: #b0cdb2;
+  --lamprey: #746b5c;
+
   --sans: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
 
-  /* Gutter between fields, and the padding either side of each hairline. */
-  --field-gap: 22px;
+  /* Type scale. Every font-size in the HUD maps to one of these six steps —
+     see the comment at each usage for which. Raises the floor from ~7px
+     (0.46rem) to 10px: the smallest labels were sub-legible at native size on
+     anything but a hi-DPI display. */
+  --t-1: 0.625rem; /* 10px — micro: axis ticks, chart legend, footnote */
+  --t-2: 0.6875rem; /* 11px — small: most labels, links, station/reach */
+  --t-3: 0.75rem; /* 12px — base: day-ordinal, debug panel, notice */
+  --t-4: 0.875rem; /* 14px — body numerals: counts, conditions values */
+  --t-5: 1.0625rem; /* 17px — lead: today's total passage count */
+  --t-6: 1.375rem; /* 22px — title: the masthead h1 */
+
+  /* Spacing scale. --s5 is the pre-existing field gutter, kept at its old
+     value so nothing in the bar shifts; --s1-4 and --s6 are new, for the
+     plates drawer (Phase 2) and anything else built after this file's
+     original four fields. --field-gap stays as an alias — it's referenced
+     below and the name still says what it's for. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 22px;
+  --s6: 32px;
+  --field-gap: var(--s5);
+
+  /* Plate apparatus — rule weights shared by the drawer's figures (Phase 2)
+     and the bar's own accent rules, so a "heavy" line is the same weight
+     everywhere it appears. */
+  --rule: 1px;
+  --rule-heavy: 2px;
 }
 
 * {
@@ -61,7 +105,7 @@ html,
 body {
   height: 100%;
   overflow: hidden;
-  background: #061a2e;
+  background: var(--bg);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
 }
@@ -167,13 +211,13 @@ body {
 }
 
 .field-head .label {
-  font-size: 0.55rem;
+  font-size: var(--t-2);
   color: var(--text-faint);
   white-space: nowrap;
 }
 
 .field-head b {
-  font-size: 0.92rem;
+  font-size: var(--t-5);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -192,13 +236,13 @@ body {
      agency device — a rule, not a seal. */
   border-left: 3px solid var(--accent);
   padding-left: 8px;
-  font-size: 0.55rem;
+  font-size: var(--t-2);
   color: var(--text-dim);
 }
 
 #masthead h1 {
   margin-top: 5px;
-  font-size: 1.02rem;
+  font-size: var(--t-6);
   font-weight: 700;
   letter-spacing: 0.015em;
   text-transform: uppercase;
@@ -207,7 +251,7 @@ body {
 
 #masthead .reach {
   margin-top: 4px;
-  font-size: 0.52rem;
+  font-size: var(--t-2);
   color: var(--text-dim);
 }
 
@@ -218,14 +262,14 @@ body {
   margin-top: 8px;
   padding-top: 6px;
   border-top: 1px solid var(--line-soft);
-  font-size: 0.72rem;
+  font-size: var(--t-4);
   letter-spacing: 0.02em;
 }
 
 /* Kept at --text-dim rather than --text-faint: it sits beside the date at a
    smaller size and needs to stay a readable second figure, not a whisper. */
 #masthead #day-ordinal {
-  font-size: 0.6rem;
+  font-size: var(--t-3);
   color: var(--text-dim);
 }
 
@@ -263,7 +307,7 @@ body {
 
 #species-breakdown .key {
   width: 11.5ch;
-  font-size: 0.55rem;
+  font-size: var(--t-2);
   color: var(--text-dim);
   white-space: nowrap;
   padding-right: 6px;
@@ -281,7 +325,7 @@ body {
 
 #species-breakdown .count {
   width: 6.5ch;
-  font-size: 0.72rem;
+  font-size: var(--t-4);
   text-align: right;
   /* Separates this count from the next species' key. The rightmost column has
      nothing after it, so it ends flush with the field. */
@@ -325,13 +369,13 @@ body {
 }
 
 #conditions p:not(.field-head) .label {
-  font-size: 0.55rem;
+  font-size: var(--t-2);
   color: var(--text-faint);
   white-space: nowrap;
 }
 
 #conditions b {
-  font-size: 0.72rem;
+  font-size: var(--t-4);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -364,7 +408,7 @@ body {
   flex-wrap: wrap;
   gap: 2px 12px;
   margin-bottom: 4px;
-  font-size: 0.47rem;
+  font-size: var(--t-1);
   color: var(--text-faint);
 }
 
@@ -435,7 +479,7 @@ body {
   padding: 5px 10px;
   min-width: 62px;
   font-family: var(--sans);
-  font-size: 0.55rem;
+  font-size: var(--t-2);
   cursor: pointer;
 }
 
@@ -526,7 +570,7 @@ body {
   top: 4px;
   left: 0;
   transform: translateX(-50%);
-  font-size: 0.46rem;
+  font-size: var(--t-1);
   font-weight: 500;
   color: var(--text-faint);
   white-space: nowrap;
@@ -566,7 +610,7 @@ body {
   gap: 2px 24px;
   padding: 5px 16px 6px;
   border-top: 1px solid var(--line-soft);
-  font-size: 0.47rem;
+  font-size: var(--t-1);
   color: var(--text-faint);
 }
 
@@ -596,7 +640,7 @@ body {
 }
 
 #secondary-counts > .label {
-  color: #47525a;
+  color: var(--text-dimmer);
 }
 
 #secondary-counts b {
@@ -639,7 +683,7 @@ body {
 }
 
 #fish-loading p {
-  font-size: 0.55rem;
+  font-size: var(--t-2);
   color: var(--text-dim);
 }
 
@@ -682,10 +726,11 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Fish viewer link (see src/inspect.js)
-   --------------------------------------------------------------------- */
-
-#fish-viewer-link {
+   Corner nav link — the river's link to the fish viewer (see src/inspect.js)
+   and the fish viewer's link back. Byte-for-byte the same treatment on both
+   pages, so one rule serves both ids rather than inspect.css repeating it. */
+#fish-viewer-link,
+#back-link {
   position: absolute;
   top: 18px;
   left: 18px;
@@ -693,14 +738,15 @@ body {
   background: var(--ink);
   border: 1px solid var(--line);
   color: var(--text-dim);
-  font-size: 0.6rem;
+  font-size: var(--t-3);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 500;
   text-decoration: none;
 }
 
-#fish-viewer-link:hover {
+#fish-viewer-link:hover,
+#back-link:hover {
   color: var(--text);
   border-color: var(--text-dim);
 }
@@ -725,7 +771,7 @@ body {
      marking the thing that matters, not as a fill. */
   border-left: 3px solid var(--accent);
   color: var(--text);
-  font-size: 0.72rem;
+  font-size: var(--t-4);
   line-height: 1.45;
   pointer-events: auto;
 }
@@ -758,7 +804,7 @@ body {
   padding: 9px 12px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 0.68rem;
+  font-size: var(--t-3);
   line-height: 1.55;
   pointer-events: none;
   white-space: pre;
@@ -800,7 +846,7 @@ body {
   }
 
   #masthead h1 {
-    font-size: 0.92rem;
+    font-size: var(--t-5);
   }
 
   #species-breakdown .count {

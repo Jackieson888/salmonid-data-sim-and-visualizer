@@ -1,0 +1,1104 @@
+
+year,mm-dd,location,parameter,unit,datatype,value
+2015,1-1,LWG,outflow,kcfs,Outflow,25.954
+2015,1-2,LWG,outflow,kcfs,Outflow,23.938
+2015,1-3,LWG,outflow,kcfs,Outflow,24.488
+2015,1-4,LWG,outflow,kcfs,Outflow,28.229
+2015,1-5,LWG,outflow,kcfs,Outflow,27.300
+2015,1-6,LWG,outflow,kcfs,Outflow,31.242
+2015,1-7,LWG,outflow,kcfs,Outflow,37.904
+2015,1-8,LWG,outflow,kcfs,Outflow,38.708
+2015,1-9,LWG,outflow,kcfs,Outflow,36.429
+2015,1-10,LWG,outflow,kcfs,Outflow,33.479
+2015,1-11,LWG,outflow,kcfs,Outflow,33.554
+2015,1-12,LWG,outflow,kcfs,Outflow,30.883
+2015,1-13,LWG,outflow,kcfs,Outflow,27.621
+2015,1-14,LWG,outflow,kcfs,Outflow,31.917
+2015,1-15,LWG,outflow,kcfs,Outflow,30.150
+2015,1-16,LWG,outflow,kcfs,Outflow,30.413
+2015,1-17,LWG,outflow,kcfs,Outflow,30.704
+2015,1-18,LWG,outflow,kcfs,Outflow,32.175
+2015,1-19,LWG,outflow,kcfs,Outflow,38.750
+2015,1-20,LWG,outflow,kcfs,Outflow,43.013
+2015,1-21,LWG,outflow,kcfs,Outflow,41.163
+2015,1-22,LWG,outflow,kcfs,Outflow,35.938
+2015,1-23,LWG,outflow,kcfs,Outflow,33.438
+2015,1-24,LWG,outflow,kcfs,Outflow,36.813
+2015,1-25,LWG,outflow,kcfs,Outflow,34.325
+2015,1-26,LWG,outflow,kcfs,Outflow,37.408
+2015,1-27,LWG,outflow,kcfs,Outflow,36.388
+2015,1-28,LWG,outflow,kcfs,Outflow,38.554
+2015,1-29,LWG,outflow,kcfs,Outflow,41.558
+2015,1-30,LWG,outflow,kcfs,Outflow,36.938
+2015,1-31,LWG,outflow,kcfs,Outflow,39.729
+2015,2-1,LWG,outflow,kcfs,Outflow,38.246
+2015,2-2,LWG,outflow,kcfs,Outflow,36.321
+2015,2-3,LWG,outflow,kcfs,Outflow,39.629
+2015,2-4,LWG,outflow,kcfs,Outflow,38.213
+2015,2-5,LWG,outflow,kcfs,Outflow,39.683
+2015,2-6,LWG,outflow,kcfs,Outflow,41.971
+2015,2-7,LWG,outflow,kcfs,Outflow,46.471
+2015,2-8,LWG,outflow,kcfs,Outflow,56.025
+2015,2-9,LWG,outflow,kcfs,Outflow,69.188
+2015,2-10,LWG,outflow,kcfs,Outflow,87.671
+2015,2-11,LWG,outflow,kcfs,Outflow,84.433
+2015,2-12,LWG,outflow,kcfs,Outflow,77.904
+2015,2-13,LWG,outflow,kcfs,Outflow,70.146
+2015,2-14,LWG,outflow,kcfs,Outflow,69.550
+2015,2-15,LWG,outflow,kcfs,Outflow,69.825
+2015,2-16,LWG,outflow,kcfs,Outflow,66.050
+2015,2-17,LWG,outflow,kcfs,Outflow,62.896
+2015,2-18,LWG,outflow,kcfs,Outflow,57.421
+2015,2-19,LWG,outflow,kcfs,Outflow,53.104
+2015,2-20,LWG,outflow,kcfs,Outflow,53.946
+2015,2-21,LWG,outflow,kcfs,Outflow,48.704
+2015,2-22,LWG,outflow,kcfs,Outflow,47.775
+2015,2-23,LWG,outflow,kcfs,Outflow,48.067
+2015,2-24,LWG,outflow,kcfs,Outflow,44.692
+2015,2-25,LWG,outflow,kcfs,Outflow,37.696
+2015,2-26,LWG,outflow,kcfs,Outflow,43.642
+2015,2-27,LWG,outflow,kcfs,Outflow,39.508
+2015,2-28,LWG,outflow,kcfs,Outflow,39.654
+2015,3-1,LWG,outflow,kcfs,Outflow,38.354
+2015,3-2,LWG,outflow,kcfs,Outflow,36.196
+2015,3-3,LWG,outflow,kcfs,Outflow,33.288
+2015,3-4,LWG,outflow,kcfs,Outflow,38.363
+2015,3-5,LWG,outflow,kcfs,Outflow,30.083
+2015,3-6,LWG,outflow,kcfs,Outflow,31.275
+2015,3-7,LWG,outflow,kcfs,Outflow,26.142
+2015,3-8,LWG,outflow,kcfs,Outflow,26.904
+2015,3-9,LWG,outflow,kcfs,Outflow,25.258
+2015,3-10,LWG,outflow,kcfs,Outflow,27.946
+2015,3-11,LWG,outflow,kcfs,Outflow,28.913
+2015,3-12,LWG,outflow,kcfs,Outflow,29.225
+2015,3-13,LWG,outflow,kcfs,Outflow,26.182
+2015,3-14,LWG,outflow,kcfs,Outflow,29.888
+2015,3-15,LWG,outflow,kcfs,Outflow,29.392
+2015,3-16,LWG,outflow,kcfs,Outflow,41.900
+2015,3-17,LWG,outflow,kcfs,Outflow,46.304
+2015,3-18,LWG,outflow,kcfs,Outflow,49.346
+2015,3-19,LWG,outflow,kcfs,Outflow,53.675
+2015,3-20,LWG,outflow,kcfs,Outflow,52.567
+2015,3-21,LWG,outflow,kcfs,Outflow,48.900
+2015,3-22,LWG,outflow,kcfs,Outflow,47.542
+2015,3-23,LWG,outflow,kcfs,Outflow,46.867
+2015,3-24,LWG,outflow,kcfs,Outflow,47.338
+2015,3-25,LWG,outflow,kcfs,Outflow,55.779
+2015,3-26,LWG,outflow,kcfs,Outflow,63.613
+2015,3-27,LWG,outflow,kcfs,Outflow,60.600
+2015,3-28,LWG,outflow,kcfs,Outflow,59.588
+2015,3-29,LWG,outflow,kcfs,Outflow,62.100
+2015,3-30,LWG,outflow,kcfs,Outflow,64.746
+2015,3-31,LWG,outflow,kcfs,Outflow,60.800
+2015,4-1,LWG,outflow,kcfs,Outflow,59.417
+2015,4-2,LWG,outflow,kcfs,Outflow,70.221
+2015,4-3,LWG,outflow,kcfs,Outflow,59.825
+2015,4-4,LWG,outflow,kcfs,Outflow,56.379
+2015,4-5,LWG,outflow,kcfs,Outflow,54.279
+2015,4-6,LWG,outflow,kcfs,Outflow,50.888
+2015,4-7,LWG,outflow,kcfs,Outflow,50.350
+2015,4-8,LWG,outflow,kcfs,Outflow,48.496
+2015,4-9,LWG,outflow,kcfs,Outflow,45.929
+2015,4-10,LWG,outflow,kcfs,Outflow,46.588
+2015,4-11,LWG,outflow,kcfs,Outflow,45.004
+2015,4-12,LWG,outflow,kcfs,Outflow,44.992
+2015,4-13,LWG,outflow,kcfs,Outflow,43.017
+2015,4-14,LWG,outflow,kcfs,Outflow,43.433
+2015,4-15,LWG,outflow,kcfs,Outflow,43.338
+2015,4-16,LWG,outflow,kcfs,Outflow,41.617
+2015,4-17,LWG,outflow,kcfs,Outflow,42.638
+2015,4-18,LWG,outflow,kcfs,Outflow,45.171
+2015,4-19,LWG,outflow,kcfs,Outflow,43.108
+2015,4-20,LWG,outflow,kcfs,Outflow,47.133
+2015,4-21,LWG,outflow,kcfs,Outflow,47.333
+2015,4-22,LWG,outflow,kcfs,Outflow,50.442
+2015,4-23,LWG,outflow,kcfs,Outflow,56.113
+2015,4-24,LWG,outflow,kcfs,Outflow,53.913
+2015,4-25,LWG,outflow,kcfs,Outflow,56.033
+2015,4-26,LWG,outflow,kcfs,Outflow,53.958
+2015,4-27,LWG,outflow,kcfs,Outflow,50.292
+2015,4-28,LWG,outflow,kcfs,Outflow,50.004
+2015,4-29,LWG,outflow,kcfs,Outflow,47.813
+2015,4-30,LWG,outflow,kcfs,Outflow,50.967
+2015,5-1,LWG,outflow,kcfs,Outflow,52.504
+2015,5-2,LWG,outflow,kcfs,Outflow,54.058
+2015,5-3,LWG,outflow,kcfs,Outflow,54.479
+2015,5-4,LWG,outflow,kcfs,Outflow,55.658
+2015,5-5,LWG,outflow,kcfs,Outflow,62.442
+2015,5-6,LWG,outflow,kcfs,Outflow,67.313
+2015,5-7,LWG,outflow,kcfs,Outflow,65.704
+2015,5-8,LWG,outflow,kcfs,Outflow,65.092
+2015,5-9,LWG,outflow,kcfs,Outflow,57.479
+2015,5-10,LWG,outflow,kcfs,Outflow,53.267
+2015,5-11,LWG,outflow,kcfs,Outflow,51.338
+2015,5-12,LWG,outflow,kcfs,Outflow,52.921
+2015,5-13,LWG,outflow,kcfs,Outflow,51.204
+2015,5-14,LWG,outflow,kcfs,Outflow,57.892
+2015,5-15,LWG,outflow,kcfs,Outflow,56.225
+2015,5-16,LWG,outflow,kcfs,Outflow,59.538
+2015,5-17,LWG,outflow,kcfs,Outflow,71.067
+2015,5-18,LWG,outflow,kcfs,Outflow,71.671
+2015,5-19,LWG,outflow,kcfs,Outflow,63.646
+2015,5-20,LWG,outflow,kcfs,Outflow,64.075
+2015,5-21,LWG,outflow,kcfs,Outflow,64.600
+2015,5-22,LWG,outflow,kcfs,Outflow,64.325
+2015,5-23,LWG,outflow,kcfs,Outflow,64.283
+2015,5-24,LWG,outflow,kcfs,Outflow,67.554
+2015,5-25,LWG,outflow,kcfs,Outflow,66.250
+2015,5-26,LWG,outflow,kcfs,Outflow,63.917
+2015,5-27,LWG,outflow,kcfs,Outflow,64.433
+2015,5-28,LWG,outflow,kcfs,Outflow,67.167
+2015,5-29,LWG,outflow,kcfs,Outflow,63.704
+2015,5-30,LWG,outflow,kcfs,Outflow,60.392
+2015,5-31,LWG,outflow,kcfs,Outflow,60.813
+2015,6-1,LWG,outflow,kcfs,Outflow,63.083
+2015,6-2,LWG,outflow,kcfs,Outflow,63.454
+2015,6-3,LWG,outflow,kcfs,Outflow,65.554
+2015,6-4,LWG,outflow,kcfs,Outflow,66.088
+2015,6-5,LWG,outflow,kcfs,Outflow,56.167
+2015,6-6,LWG,outflow,kcfs,Outflow,50.963
+2015,6-7,LWG,outflow,kcfs,Outflow,51.879
+2015,6-8,LWG,outflow,kcfs,Outflow,53.321
+2015,6-9,LWG,outflow,kcfs,Outflow,54.479
+2015,6-10,LWG,outflow,kcfs,Outflow,49.033
+2015,6-11,LWG,outflow,kcfs,Outflow,46.733
+2015,6-12,LWG,outflow,kcfs,Outflow,44.592
+2015,6-13,LWG,outflow,kcfs,Outflow,43.588
+2015,6-14,LWG,outflow,kcfs,Outflow,38.354
+2015,6-15,LWG,outflow,kcfs,Outflow,34.471
+2015,6-16,LWG,outflow,kcfs,Outflow,35.504
+2015,6-17,LWG,outflow,kcfs,Outflow,33.300
+2015,6-18,LWG,outflow,kcfs,Outflow,34.367
+2015,6-19,LWG,outflow,kcfs,Outflow,33.100
+2015,6-20,LWG,outflow,kcfs,Outflow,33.179
+2015,6-21,LWG,outflow,kcfs,Outflow,30.975
+2015,6-22,LWG,outflow,kcfs,Outflow,30.813
+2015,6-23,LWG,outflow,kcfs,Outflow,30.083
+2015,6-24,LWG,outflow,kcfs,Outflow,31.933
+2015,6-25,LWG,outflow,kcfs,Outflow,31.246
+2015,6-26,LWG,outflow,kcfs,Outflow,30.913
+2015,6-27,LWG,outflow,kcfs,Outflow,32.817
+2015,6-28,LWG,outflow,kcfs,Outflow,36.421
+2015,6-29,LWG,outflow,kcfs,Outflow,34.383
+2015,6-30,LWG,outflow,kcfs,Outflow,30.829
+2015,7-1,LWG,outflow,kcfs,Outflow,30.883
+2015,7-2,LWG,outflow,kcfs,Outflow,28.783
+2015,7-3,LWG,outflow,kcfs,Outflow,24.513
+2015,7-4,LWG,outflow,kcfs,Outflow,22.929
+2015,7-5,LWG,outflow,kcfs,Outflow,22.938
+2015,7-6,LWG,outflow,kcfs,Outflow,24.629
+2015,7-7,LWG,outflow,kcfs,Outflow,24.929
+2015,7-8,LWG,outflow,kcfs,Outflow,27.479
+2015,7-9,LWG,outflow,kcfs,Outflow,27.971
+2015,7-10,LWG,outflow,kcfs,Outflow,31.838
+2015,7-11,LWG,outflow,kcfs,Outflow,30.596
+2015,7-12,LWG,outflow,kcfs,Outflow,29.967
+2015,7-13,LWG,outflow,kcfs,Outflow,33.488
+2015,7-14,LWG,outflow,kcfs,Outflow,26.975
+2015,7-15,LWG,outflow,kcfs,Outflow,25.592
+2015,7-16,LWG,outflow,kcfs,Outflow,26.558
+2015,7-17,LWG,outflow,kcfs,Outflow,30.196
+2015,7-18,LWG,outflow,kcfs,Outflow,30.967
+2015,7-19,LWG,outflow,kcfs,Outflow,31.125
+2015,7-20,LWG,outflow,kcfs,Outflow,29.313
+2015,7-21,LWG,outflow,kcfs,Outflow,29.838
+2015,7-22,LWG,outflow,kcfs,Outflow,32.013
+2015,7-23,LWG,outflow,kcfs,Outflow,31.521
+2015,7-24,LWG,outflow,kcfs,Outflow,30.529
+2015,7-25,LWG,outflow,kcfs,Outflow,27.467
+2015,7-26,LWG,outflow,kcfs,Outflow,25.567
+2015,7-27,LWG,outflow,kcfs,Outflow,28.829
+2015,7-28,LWG,outflow,kcfs,Outflow,27.429
+2015,7-29,LWG,outflow,kcfs,Outflow,29.971
+2015,7-30,LWG,outflow,kcfs,Outflow,28.246
+2015,7-31,LWG,outflow,kcfs,Outflow,31.013
+2015,8-1,LWG,outflow,kcfs,Outflow,31.479
+2015,8-2,LWG,outflow,kcfs,Outflow,31.750
+2015,8-3,LWG,outflow,kcfs,Outflow,31.088
+2015,8-4,LWG,outflow,kcfs,Outflow,25.529
+2015,8-5,LWG,outflow,kcfs,Outflow,26.542
+2015,8-6,LWG,outflow,kcfs,Outflow,24.875
+2015,8-7,LWG,outflow,kcfs,Outflow,23.142
+2015,8-8,LWG,outflow,kcfs,Outflow,19.692
+2015,8-9,LWG,outflow,kcfs,Outflow,20.050
+2015,8-10,LWG,outflow,kcfs,Outflow,18.804
+2015,8-11,LWG,outflow,kcfs,Outflow,17.983
+2015,8-12,LWG,outflow,kcfs,Outflow,20.750
+2015,8-13,LWG,outflow,kcfs,Outflow,22.275
+2015,8-14,LWG,outflow,kcfs,Outflow,21.029
+2015,8-15,LWG,outflow,kcfs,Outflow,24.658
+2015,8-16,LWG,outflow,kcfs,Outflow,20.329
+2015,8-17,LWG,outflow,kcfs,Outflow,19.392
+2015,8-18,LWG,outflow,kcfs,Outflow,19.350
+2015,8-19,LWG,outflow,kcfs,Outflow,19.288
+2015,8-20,LWG,outflow,kcfs,Outflow,19.475
+2015,8-21,LWG,outflow,kcfs,Outflow,18.825
+2015,8-22,LWG,outflow,kcfs,Outflow,17.583
+2015,8-23,LWG,outflow,kcfs,Outflow,18.367
+2015,8-24,LWG,outflow,kcfs,Outflow,20.967
+2015,8-25,LWG,outflow,kcfs,Outflow,16.863
+2015,8-26,LWG,outflow,kcfs,Outflow,17.108
+2015,8-27,LWG,outflow,kcfs,Outflow,19.188
+2015,8-28,LWG,outflow,kcfs,Outflow,20.442
+2015,8-29,LWG,outflow,kcfs,Outflow,19.350
+2015,8-30,LWG,outflow,kcfs,Outflow,18.883
+2015,8-31,LWG,outflow,kcfs,Outflow,18.979
+2015,9-1,LWG,outflow,kcfs,Outflow,18.825
+2015,9-2,LWG,outflow,kcfs,Outflow,17.308
+2015,9-3,LWG,outflow,kcfs,Outflow,15.838
+2015,9-4,LWG,outflow,kcfs,Outflow,18.300
+2015,9-5,LWG,outflow,kcfs,Outflow,20.738
+2015,9-6,LWG,outflow,kcfs,Outflow,24.608
+2015,9-7,LWG,outflow,kcfs,Outflow,18.046
+2015,9-8,LWG,outflow,kcfs,Outflow,21.675
+2015,9-9,LWG,outflow,kcfs,Outflow,21.896
+2015,9-10,LWG,outflow,kcfs,Outflow,18.250
+2015,9-11,LWG,outflow,kcfs,Outflow,20.483
+2015,9-12,LWG,outflow,kcfs,Outflow,19.725
+2015,9-13,LWG,outflow,kcfs,Outflow,16.625
+2015,9-14,LWG,outflow,kcfs,Outflow,22.275
+2015,9-15,LWG,outflow,kcfs,Outflow,21.558
+2015,9-16,LWG,outflow,kcfs,Outflow,23.133
+2015,9-17,LWG,outflow,kcfs,Outflow,17.975
+2015,9-18,LWG,outflow,kcfs,Outflow,21.875
+2015,9-19,LWG,outflow,kcfs,Outflow,19.704
+2015,9-20,LWG,outflow,kcfs,Outflow,17.096
+2015,9-21,LWG,outflow,kcfs,Outflow,19.663
+2015,9-22,LWG,outflow,kcfs,Outflow,18.942
+2015,9-23,LWG,outflow,kcfs,Outflow,19.404
+2015,9-24,LWG,outflow,kcfs,Outflow,19.733
+2015,9-25,LWG,outflow,kcfs,Outflow,16.238
+2015,9-26,LWG,outflow,kcfs,Outflow,16.642
+2015,9-27,LWG,outflow,kcfs,Outflow,18.050
+2015,9-28,LWG,outflow,kcfs,Outflow,18.196
+2015,9-29,LWG,outflow,kcfs,Outflow,17.792
+2015,9-30,LWG,outflow,kcfs,Outflow,16.088
+2015,10-1,LWG,outflow,kcfs,Outflow,16.475
+2015,10-2,LWG,outflow,kcfs,Outflow,14.613
+2015,10-3,LWG,outflow,kcfs,Outflow,13.854
+2015,10-4,LWG,outflow,kcfs,Outflow,15.329
+2015,10-5,LWG,outflow,kcfs,Outflow,16.300
+2015,10-6,LWG,outflow,kcfs,Outflow,16.154
+2015,10-7,LWG,outflow,kcfs,Outflow,18.350
+2015,10-8,LWG,outflow,kcfs,Outflow,19.667
+2015,10-9,LWG,outflow,kcfs,Outflow,18.204
+2015,10-10,LWG,outflow,kcfs,Outflow,14.983
+2015,10-11,LWG,outflow,kcfs,Outflow,16.383
+2015,10-12,LWG,outflow,kcfs,Outflow,15.775
+2015,10-13,LWG,outflow,kcfs,Outflow,15.042
+2015,10-14,LWG,outflow,kcfs,Outflow,22.542
+2015,10-15,LWG,outflow,kcfs,Outflow,14.458
+2015,10-16,LWG,outflow,kcfs,Outflow,14.517
+2015,10-17,LWG,outflow,kcfs,Outflow,15.225
+2015,10-18,LWG,outflow,kcfs,Outflow,12.842
+2015,10-19,LWG,outflow,kcfs,Outflow,13.846
+2015,10-20,LWG,outflow,kcfs,Outflow,18.275
+2015,10-21,LWG,outflow,kcfs,Outflow,17.133
+2015,10-22,LWG,outflow,kcfs,Outflow,15.963
+2015,10-23,LWG,outflow,kcfs,Outflow,17.375
+2015,10-24,LWG,outflow,kcfs,Outflow,18.154
+2015,10-25,LWG,outflow,kcfs,Outflow,16.796
+2015,10-26,LWG,outflow,kcfs,Outflow,17.075
+2015,10-27,LWG,outflow,kcfs,Outflow,18.392
+2015,10-28,LWG,outflow,kcfs,Outflow,17.463
+2015,10-29,LWG,outflow,kcfs,Outflow,13.908
+2015,10-30,LWG,outflow,kcfs,Outflow,16.596
+2015,10-31,LWG,outflow,kcfs,Outflow,16.525
+2015,11-1,LWG,outflow,kcfs,Outflow,18.024
+2015,11-2,LWG,outflow,kcfs,Outflow,26.613
+2015,11-3,LWG,outflow,kcfs,Outflow,21.867
+2015,11-4,LWG,outflow,kcfs,Outflow,21.267
+2015,11-5,LWG,outflow,kcfs,Outflow,20.983
+2015,11-6,LWG,outflow,kcfs,Outflow,20.588
+2015,11-7,LWG,outflow,kcfs,Outflow,19.329
+2015,11-8,LWG,outflow,kcfs,Outflow,13.629
+2015,11-9,LWG,outflow,kcfs,Outflow,20.938
+2015,11-10,LWG,outflow,kcfs,Outflow,18.258
+2015,11-11,LWG,outflow,kcfs,Outflow,19.521
+2015,11-12,LWG,outflow,kcfs,Outflow,19.983
+2015,11-13,LWG,outflow,kcfs,Outflow,15.413
+2015,11-14,LWG,outflow,kcfs,Outflow,23.683
+2015,11-15,LWG,outflow,kcfs,Outflow,17.725
+2015,11-16,LWG,outflow,kcfs,Outflow,18.450
+2015,11-17,LWG,outflow,kcfs,Outflow,14.979
+2015,11-18,LWG,outflow,kcfs,Outflow,18.779
+2015,11-19,LWG,outflow,kcfs,Outflow,19.275
+2015,11-20,LWG,outflow,kcfs,Outflow,19.779
+2015,11-21,LWG,outflow,kcfs,Outflow,21.329
+2015,11-22,LWG,outflow,kcfs,Outflow,15.233
+2015,11-23,LWG,outflow,kcfs,Outflow,18.554
+2015,11-24,LWG,outflow,kcfs,Outflow,17.717
+2015,11-25,LWG,outflow,kcfs,Outflow,19.250
+2015,11-26,LWG,outflow,kcfs,Outflow,15.717
+2015,11-27,LWG,outflow,kcfs,Outflow,15.171
+2015,11-28,LWG,outflow,kcfs,Outflow,18.046
+2015,11-29,LWG,outflow,kcfs,Outflow,18.229
+2015,11-30,LWG,outflow,kcfs,Outflow,14.558
+2015,12-1,LWG,outflow,kcfs,Outflow,13.446
+2015,12-2,LWG,outflow,kcfs,Outflow,14.225
+2015,12-3,LWG,outflow,kcfs,Outflow,12.725
+2015,12-4,LWG,outflow,kcfs,Outflow,15.300
+2015,12-5,LWG,outflow,kcfs,Outflow,18.742
+2015,12-6,LWG,outflow,kcfs,Outflow,18.671
+2015,12-7,LWG,outflow,kcfs,Outflow,18.138
+2015,12-8,LWG,outflow,kcfs,Outflow,21.954
+2015,12-9,LWG,outflow,kcfs,Outflow,28.271
+2015,12-10,LWG,outflow,kcfs,Outflow,28.900
+2015,12-11,LWG,outflow,kcfs,Outflow,32.496
+2015,12-12,LWG,outflow,kcfs,Outflow,32.567
+2015,12-13,LWG,outflow,kcfs,Outflow,22.575
+2015,12-14,LWG,outflow,kcfs,Outflow,28.538
+2015,12-15,LWG,outflow,kcfs,Outflow,29.204
+2015,12-16,LWG,outflow,kcfs,Outflow,24.783
+2015,12-17,LWG,outflow,kcfs,Outflow,24.021
+2015,12-18,LWG,outflow,kcfs,Outflow,24.408
+2015,12-19,LWG,outflow,kcfs,Outflow,21.883
+2015,12-20,LWG,outflow,kcfs,Outflow,22.650
+2015,12-21,LWG,outflow,kcfs,Outflow,28.538
+2015,12-22,LWG,outflow,kcfs,Outflow,25.583
+2015,12-23,LWG,outflow,kcfs,Outflow,23.442
+2015,12-24,LWG,outflow,kcfs,Outflow,23.025
+2015,12-25,LWG,outflow,kcfs,Outflow,23.475
+2015,12-26,LWG,outflow,kcfs,Outflow,21.346
+2015,12-27,LWG,outflow,kcfs,Outflow,21.946
+2015,12-28,LWG,outflow,kcfs,Outflow,24.771
+2015,12-29,LWG,outflow,kcfs,Outflow,19.646
+2015,12-30,LWG,outflow,kcfs,Outflow,24.129
+2015,12-31,LWG,outflow,kcfs,Outflow,21.550
+2015,1-1,LWG,spill,kcfs,Spill,0.000
+2015,1-2,LWG,spill,kcfs,Spill,0.000
+2015,1-3,LWG,spill,kcfs,Spill,0.000
+2015,1-4,LWG,spill,kcfs,Spill,0.000
+2015,1-5,LWG,spill,kcfs,Spill,0.000
+2015,1-6,LWG,spill,kcfs,Spill,0.000
+2015,1-7,LWG,spill,kcfs,Spill,0.000
+2015,1-8,LWG,spill,kcfs,Spill,0.000
+2015,1-9,LWG,spill,kcfs,Spill,0.000
+2015,1-10,LWG,spill,kcfs,Spill,0.000
+2015,1-11,LWG,spill,kcfs,Spill,0.000
+2015,1-12,LWG,spill,kcfs,Spill,0.000
+2015,1-13,LWG,spill,kcfs,Spill,0.000
+2015,1-14,LWG,spill,kcfs,Spill,0.000
+2015,1-15,LWG,spill,kcfs,Spill,0.000
+2015,1-16,LWG,spill,kcfs,Spill,0.000
+2015,1-17,LWG,spill,kcfs,Spill,0.000
+2015,1-18,LWG,spill,kcfs,Spill,0.000
+2015,1-19,LWG,spill,kcfs,Spill,0.000
+2015,1-20,LWG,spill,kcfs,Spill,0.000
+2015,1-21,LWG,spill,kcfs,Spill,0.000
+2015,1-22,LWG,spill,kcfs,Spill,0.000
+2015,1-23,LWG,spill,kcfs,Spill,0.000
+2015,1-24,LWG,spill,kcfs,Spill,0.000
+2015,1-25,LWG,spill,kcfs,Spill,0.000
+2015,1-26,LWG,spill,kcfs,Spill,0.000
+2015,1-27,LWG,spill,kcfs,Spill,0.000
+2015,1-28,LWG,spill,kcfs,Spill,0.000
+2015,1-29,LWG,spill,kcfs,Spill,0.000
+2015,1-30,LWG,spill,kcfs,Spill,0.000
+2015,1-31,LWG,spill,kcfs,Spill,0.000
+2015,2-1,LWG,spill,kcfs,Spill,0.000
+2015,2-2,LWG,spill,kcfs,Spill,0.000
+2015,2-3,LWG,spill,kcfs,Spill,0.000
+2015,2-4,LWG,spill,kcfs,Spill,0.000
+2015,2-5,LWG,spill,kcfs,Spill,0.000
+2015,2-6,LWG,spill,kcfs,Spill,0.000
+2015,2-7,LWG,spill,kcfs,Spill,0.000
+2015,2-8,LWG,spill,kcfs,Spill,0.000
+2015,2-9,LWG,spill,kcfs,Spill,0.000
+2015,2-10,LWG,spill,kcfs,Spill,7.238
+2015,2-11,LWG,spill,kcfs,Spill,0.000
+2015,2-12,LWG,spill,kcfs,Spill,0.000
+2015,2-13,LWG,spill,kcfs,Spill,0.000
+2015,2-14,LWG,spill,kcfs,Spill,0.000
+2015,2-15,LWG,spill,kcfs,Spill,0.000
+2015,2-16,LWG,spill,kcfs,Spill,0.000
+2015,2-17,LWG,spill,kcfs,Spill,0.071
+2015,2-18,LWG,spill,kcfs,Spill,0.000
+2015,2-19,LWG,spill,kcfs,Spill,0.000
+2015,2-20,LWG,spill,kcfs,Spill,0.000
+2015,2-21,LWG,spill,kcfs,Spill,0.000
+2015,2-22,LWG,spill,kcfs,Spill,0.000
+2015,2-23,LWG,spill,kcfs,Spill,0.000
+2015,2-24,LWG,spill,kcfs,Spill,0.000
+2015,2-25,LWG,spill,kcfs,Spill,0.000
+2015,2-26,LWG,spill,kcfs,Spill,0.000
+2015,2-27,LWG,spill,kcfs,Spill,0.000
+2015,2-28,LWG,spill,kcfs,Spill,0.000
+2015,3-1,LWG,spill,kcfs,Spill,0.000
+2015,3-2,LWG,spill,kcfs,Spill,0.000
+2015,3-3,LWG,spill,kcfs,Spill,0.000
+2015,3-4,LWG,spill,kcfs,Spill,0.000
+2015,3-5,LWG,spill,kcfs,Spill,0.000
+2015,3-6,LWG,spill,kcfs,Spill,0.000
+2015,3-7,LWG,spill,kcfs,Spill,0.000
+2015,3-8,LWG,spill,kcfs,Spill,0.000
+2015,3-9,LWG,spill,kcfs,Spill,0.000
+2015,3-10,LWG,spill,kcfs,Spill,0.000
+2015,3-11,LWG,spill,kcfs,Spill,0.000
+2015,3-12,LWG,spill,kcfs,Spill,0.000
+2015,3-13,LWG,spill,kcfs,Spill,0.000
+2015,3-14,LWG,spill,kcfs,Spill,0.000
+2015,3-15,LWG,spill,kcfs,Spill,0.000
+2015,3-16,LWG,spill,kcfs,Spill,0.000
+2015,3-17,LWG,spill,kcfs,Spill,0.000
+2015,3-18,LWG,spill,kcfs,Spill,0.000
+2015,3-19,LWG,spill,kcfs,Spill,0.000
+2015,3-20,LWG,spill,kcfs,Spill,0.000
+2015,3-21,LWG,spill,kcfs,Spill,0.000
+2015,3-22,LWG,spill,kcfs,Spill,0.000
+2015,3-23,LWG,spill,kcfs,Spill,0.000
+2015,3-24,LWG,spill,kcfs,Spill,0.000
+2015,3-25,LWG,spill,kcfs,Spill,0.000
+2015,3-26,LWG,spill,kcfs,Spill,0.000
+2015,3-27,LWG,spill,kcfs,Spill,0.000
+2015,3-28,LWG,spill,kcfs,Spill,0.000
+2015,3-29,LWG,spill,kcfs,Spill,0.000
+2015,3-30,LWG,spill,kcfs,Spill,0.000
+2015,3-31,LWG,spill,kcfs,Spill,0.000
+2015,4-1,LWG,spill,kcfs,Spill,0.000
+2015,4-2,LWG,spill,kcfs,Spill,0.000
+2015,4-3,LWG,spill,kcfs,Spill,19.358
+2015,4-4,LWG,spill,kcfs,Spill,20.183
+2015,4-5,LWG,spill,kcfs,Spill,20.108
+2015,4-6,LWG,spill,kcfs,Spill,20.183
+2015,4-7,LWG,spill,kcfs,Spill,20.196
+2015,4-8,LWG,spill,kcfs,Spill,20.217
+2015,4-9,LWG,spill,kcfs,Spill,20.196
+2015,4-10,LWG,spill,kcfs,Spill,20.167
+2015,4-11,LWG,spill,kcfs,Spill,20.133
+2015,4-12,LWG,spill,kcfs,Spill,20.196
+2015,4-13,LWG,spill,kcfs,Spill,20.171
+2015,4-14,LWG,spill,kcfs,Spill,20.254
+2015,4-15,LWG,spill,kcfs,Spill,20.183
+2015,4-16,LWG,spill,kcfs,Spill,20.188
+2015,4-17,LWG,spill,kcfs,Spill,20.229
+2015,4-18,LWG,spill,kcfs,Spill,20.158
+2015,4-19,LWG,spill,kcfs,Spill,20.179
+2015,4-20,LWG,spill,kcfs,Spill,20.233
+2015,4-21,LWG,spill,kcfs,Spill,20.267
+2015,4-22,LWG,spill,kcfs,Spill,20.296
+2015,4-23,LWG,spill,kcfs,Spill,20.371
+2015,4-24,LWG,spill,kcfs,Spill,20.292
+2015,4-25,LWG,spill,kcfs,Spill,20.446
+2015,4-26,LWG,spill,kcfs,Spill,20.317
+2015,4-27,LWG,spill,kcfs,Spill,20.342
+2015,4-28,LWG,spill,kcfs,Spill,20.258
+2015,4-29,LWG,spill,kcfs,Spill,20.242
+2015,4-30,LWG,spill,kcfs,Spill,20.396
+2015,5-1,LWG,spill,kcfs,Spill,20.250
+2015,5-2,LWG,spill,kcfs,Spill,20.100
+2015,5-3,LWG,spill,kcfs,Spill,20.150
+2015,5-4,LWG,spill,kcfs,Spill,20.275
+2015,5-5,LWG,spill,kcfs,Spill,20.271
+2015,5-6,LWG,spill,kcfs,Spill,20.288
+2015,5-7,LWG,spill,kcfs,Spill,20.246
+2015,5-8,LWG,spill,kcfs,Spill,20.296
+2015,5-9,LWG,spill,kcfs,Spill,20.217
+2015,5-10,LWG,spill,kcfs,Spill,20.204
+2015,5-11,LWG,spill,kcfs,Spill,20.196
+2015,5-12,LWG,spill,kcfs,Spill,20.158
+2015,5-13,LWG,spill,kcfs,Spill,20.396
+2015,5-14,LWG,spill,kcfs,Spill,20.288
+2015,5-15,LWG,spill,kcfs,Spill,20.188
+2015,5-16,LWG,spill,kcfs,Spill,20.317
+2015,5-17,LWG,spill,kcfs,Spill,20.338
+2015,5-18,LWG,spill,kcfs,Spill,20.475
+2015,5-19,LWG,spill,kcfs,Spill,20.513
+2015,5-20,LWG,spill,kcfs,Spill,20.375
+2015,5-21,LWG,spill,kcfs,Spill,20.396
+2015,5-22,LWG,spill,kcfs,Spill,20.321
+2015,5-23,LWG,spill,kcfs,Spill,20.367
+2015,5-24,LWG,spill,kcfs,Spill,20.475
+2015,5-25,LWG,spill,kcfs,Spill,20.417
+2015,5-26,LWG,spill,kcfs,Spill,20.358
+2015,5-27,LWG,spill,kcfs,Spill,20.421
+2015,5-28,LWG,spill,kcfs,Spill,20.354
+2015,5-29,LWG,spill,kcfs,Spill,20.396
+2015,5-30,LWG,spill,kcfs,Spill,20.454
+2015,5-31,LWG,spill,kcfs,Spill,20.358
+2015,6-1,LWG,spill,kcfs,Spill,20.246
+2015,6-2,LWG,spill,kcfs,Spill,20.375
+2015,6-3,LWG,spill,kcfs,Spill,20.383
+2015,6-4,LWG,spill,kcfs,Spill,20.246
+2015,6-5,LWG,spill,kcfs,Spill,20.125
+2015,6-6,LWG,spill,kcfs,Spill,20.275
+2015,6-7,LWG,spill,kcfs,Spill,20.196
+2015,6-8,LWG,spill,kcfs,Spill,20.208
+2015,6-9,LWG,spill,kcfs,Spill,20.188
+2015,6-10,LWG,spill,kcfs,Spill,20.146
+2015,6-11,LWG,spill,kcfs,Spill,20.288
+2015,6-12,LWG,spill,kcfs,Spill,20.204
+2015,6-13,LWG,spill,kcfs,Spill,20.275
+2015,6-14,LWG,spill,kcfs,Spill,20.450
+2015,6-15,LWG,spill,kcfs,Spill,20.425
+2015,6-16,LWG,spill,kcfs,Spill,20.546
+2015,6-17,LWG,spill,kcfs,Spill,20.554
+2015,6-18,LWG,spill,kcfs,Spill,20.429
+2015,6-19,LWG,spill,kcfs,Spill,20.367
+2015,6-20,LWG,spill,kcfs,Spill,20.292
+2015,6-21,LWG,spill,kcfs,Spill,18.333
+2015,6-22,LWG,spill,kcfs,Spill,17.838
+2015,6-23,LWG,spill,kcfs,Spill,17.246
+2015,6-24,LWG,spill,kcfs,Spill,18.158
+2015,6-25,LWG,spill,kcfs,Spill,18.213
+2015,6-26,LWG,spill,kcfs,Spill,18.208
+2015,6-27,LWG,spill,kcfs,Spill,18.125
+2015,6-28,LWG,spill,kcfs,Spill,18.108
+2015,6-29,LWG,spill,kcfs,Spill,18.029
+2015,6-30,LWG,spill,kcfs,Spill,18.004
+2015,7-1,LWG,spill,kcfs,Spill,18.175
+2015,7-2,LWG,spill,kcfs,Spill,16.125
+2015,7-3,LWG,spill,kcfs,Spill,11.900
+2015,7-4,LWG,spill,kcfs,Spill,10.254
+2015,7-5,LWG,spill,kcfs,Spill,10.113
+2015,7-6,LWG,spill,kcfs,Spill,11.867
+2015,7-7,LWG,spill,kcfs,Spill,12.046
+2015,7-8,LWG,spill,kcfs,Spill,14.533
+2015,7-9,LWG,spill,kcfs,Spill,15.046
+2015,7-10,LWG,spill,kcfs,Spill,17.833
+2015,7-11,LWG,spill,kcfs,Spill,17.596
+2015,7-12,LWG,spill,kcfs,Spill,16.917
+2015,7-13,LWG,spill,kcfs,Spill,16.683
+2015,7-14,LWG,spill,kcfs,Spill,8.242
+2015,7-15,LWG,spill,kcfs,Spill,6.829
+2015,7-16,LWG,spill,kcfs,Spill,7.996
+2015,7-17,LWG,spill,kcfs,Spill,11.746
+2015,7-18,LWG,spill,kcfs,Spill,12.308
+2015,7-19,LWG,spill,kcfs,Spill,12.550
+2015,7-20,LWG,spill,kcfs,Spill,10.579
+2015,7-21,LWG,spill,kcfs,Spill,11.146
+2015,7-22,LWG,spill,kcfs,Spill,13.500
+2015,7-23,LWG,spill,kcfs,Spill,12.867
+2015,7-24,LWG,spill,kcfs,Spill,11.679
+2015,7-25,LWG,spill,kcfs,Spill,8.775
+2015,7-26,LWG,spill,kcfs,Spill,6.900
+2015,7-27,LWG,spill,kcfs,Spill,10.092
+2015,7-28,LWG,spill,kcfs,Spill,8.796
+2015,7-29,LWG,spill,kcfs,Spill,11.471
+2015,7-30,LWG,spill,kcfs,Spill,9.592
+2015,7-31,LWG,spill,kcfs,Spill,12.517
+2015,8-1,LWG,spill,kcfs,Spill,12.700
+2015,8-2,LWG,spill,kcfs,Spill,13.113
+2015,8-3,LWG,spill,kcfs,Spill,15.129
+2015,8-4,LWG,spill,kcfs,Spill,12.767
+2015,8-5,LWG,spill,kcfs,Spill,13.900
+2015,8-6,LWG,spill,kcfs,Spill,12.063
+2015,8-7,LWG,spill,kcfs,Spill,10.325
+2015,8-8,LWG,spill,kcfs,Spill,6.738
+2015,8-9,LWG,spill,kcfs,Spill,7.029
+2015,8-10,LWG,spill,kcfs,Spill,9.667
+2015,8-11,LWG,spill,kcfs,Spill,8.733
+2015,8-12,LWG,spill,kcfs,Spill,11.500
+2015,8-13,LWG,spill,kcfs,Spill,13.154
+2015,8-14,LWG,spill,kcfs,Spill,8.450
+2015,8-15,LWG,spill,kcfs,Spill,11.621
+2015,8-16,LWG,spill,kcfs,Spill,7.292
+2015,8-17,LWG,spill,kcfs,Spill,6.125
+2015,8-18,LWG,spill,kcfs,Spill,6.350
+2015,8-19,LWG,spill,kcfs,Spill,6.379
+2015,8-20,LWG,spill,kcfs,Spill,6.392
+2015,8-21,LWG,spill,kcfs,Spill,5.813
+2015,8-22,LWG,spill,kcfs,Spill,4.800
+2015,8-23,LWG,spill,kcfs,Spill,5.613
+2015,8-24,LWG,spill,kcfs,Spill,8.217
+2015,8-25,LWG,spill,kcfs,Spill,4.188
+2015,8-26,LWG,spill,kcfs,Spill,3.888
+2015,8-27,LWG,spill,kcfs,Spill,6.633
+2015,8-28,LWG,spill,kcfs,Spill,7.867
+2015,8-29,LWG,spill,kcfs,Spill,6.783
+2015,8-30,LWG,spill,kcfs,Spill,6.238
+2015,8-31,LWG,spill,kcfs,Spill,6.317
+2015,9-1,LWG,spill,kcfs,Spill,0.267
+2015,9-2,LWG,spill,kcfs,Spill,0.000
+2015,9-3,LWG,spill,kcfs,Spill,0.000
+2015,9-4,LWG,spill,kcfs,Spill,0.000
+2015,9-5,LWG,spill,kcfs,Spill,0.000
+2015,9-6,LWG,spill,kcfs,Spill,0.000
+2015,9-7,LWG,spill,kcfs,Spill,0.000
+2015,9-8,LWG,spill,kcfs,Spill,0.000
+2015,9-9,LWG,spill,kcfs,Spill,0.000
+2015,9-10,LWG,spill,kcfs,Spill,0.000
+2015,9-11,LWG,spill,kcfs,Spill,0.000
+2015,9-12,LWG,spill,kcfs,Spill,0.000
+2015,9-13,LWG,spill,kcfs,Spill,0.000
+2015,9-14,LWG,spill,kcfs,Spill,0.000
+2015,9-15,LWG,spill,kcfs,Spill,0.000
+2015,9-16,LWG,spill,kcfs,Spill,0.000
+2015,9-17,LWG,spill,kcfs,Spill,0.000
+2015,9-18,LWG,spill,kcfs,Spill,0.000
+2015,9-19,LWG,spill,kcfs,Spill,0.000
+2015,9-20,LWG,spill,kcfs,Spill,0.000
+2015,9-21,LWG,spill,kcfs,Spill,0.000
+2015,9-22,LWG,spill,kcfs,Spill,0.000
+2015,9-23,LWG,spill,kcfs,Spill,0.000
+2015,9-24,LWG,spill,kcfs,Spill,0.000
+2015,9-25,LWG,spill,kcfs,Spill,0.000
+2015,9-26,LWG,spill,kcfs,Spill,0.000
+2015,9-27,LWG,spill,kcfs,Spill,0.000
+2015,9-28,LWG,spill,kcfs,Spill,0.000
+2015,9-29,LWG,spill,kcfs,Spill,0.000
+2015,9-30,LWG,spill,kcfs,Spill,0.000
+2015,10-1,LWG,spill,kcfs,Spill,0.000
+2015,10-2,LWG,spill,kcfs,Spill,0.000
+2015,10-3,LWG,spill,kcfs,Spill,0.000
+2015,10-4,LWG,spill,kcfs,Spill,0.000
+2015,10-5,LWG,spill,kcfs,Spill,0.000
+2015,10-6,LWG,spill,kcfs,Spill,0.000
+2015,10-7,LWG,spill,kcfs,Spill,0.000
+2015,10-8,LWG,spill,kcfs,Spill,0.000
+2015,10-9,LWG,spill,kcfs,Spill,0.000
+2015,10-10,LWG,spill,kcfs,Spill,0.000
+2015,10-11,LWG,spill,kcfs,Spill,0.000
+2015,10-12,LWG,spill,kcfs,Spill,0.000
+2015,10-13,LWG,spill,kcfs,Spill,0.008
+2015,10-14,LWG,spill,kcfs,Spill,0.000
+2015,10-15,LWG,spill,kcfs,Spill,0.000
+2015,10-16,LWG,spill,kcfs,Spill,0.000
+2015,10-17,LWG,spill,kcfs,Spill,0.000
+2015,10-18,LWG,spill,kcfs,Spill,0.000
+2015,10-19,LWG,spill,kcfs,Spill,0.000
+2015,10-20,LWG,spill,kcfs,Spill,0.000
+2015,10-21,LWG,spill,kcfs,Spill,0.000
+2015,10-22,LWG,spill,kcfs,Spill,0.104
+2015,10-23,LWG,spill,kcfs,Spill,0.000
+2015,10-24,LWG,spill,kcfs,Spill,0.000
+2015,10-25,LWG,spill,kcfs,Spill,0.000
+2015,10-26,LWG,spill,kcfs,Spill,0.000
+2015,10-27,LWG,spill,kcfs,Spill,0.000
+2015,10-28,LWG,spill,kcfs,Spill,0.000
+2015,10-29,LWG,spill,kcfs,Spill,0.000
+2015,10-30,LWG,spill,kcfs,Spill,0.000
+2015,10-31,LWG,spill,kcfs,Spill,0.000
+2015,11-1,LWG,spill,kcfs,Spill,0.000
+2015,11-2,LWG,spill,kcfs,Spill,0.000
+2015,11-3,LWG,spill,kcfs,Spill,0.000
+2015,11-4,LWG,spill,kcfs,Spill,0.000
+2015,11-5,LWG,spill,kcfs,Spill,0.000
+2015,11-6,LWG,spill,kcfs,Spill,0.000
+2015,11-7,LWG,spill,kcfs,Spill,0.000
+2015,11-8,LWG,spill,kcfs,Spill,0.000
+2015,11-9,LWG,spill,kcfs,Spill,0.000
+2015,11-10,LWG,spill,kcfs,Spill,0.000
+2015,11-11,LWG,spill,kcfs,Spill,0.000
+2015,11-12,LWG,spill,kcfs,Spill,0.000
+2015,11-13,LWG,spill,kcfs,Spill,0.000
+2015,11-14,LWG,spill,kcfs,Spill,0.000
+2015,11-15,LWG,spill,kcfs,Spill,0.000
+2015,11-16,LWG,spill,kcfs,Spill,0.000
+2015,11-17,LWG,spill,kcfs,Spill,0.000
+2015,11-18,LWG,spill,kcfs,Spill,0.000
+2015,11-19,LWG,spill,kcfs,Spill,0.000
+2015,11-20,LWG,spill,kcfs,Spill,0.000
+2015,11-21,LWG,spill,kcfs,Spill,0.000
+2015,11-22,LWG,spill,kcfs,Spill,0.000
+2015,11-23,LWG,spill,kcfs,Spill,0.000
+2015,11-24,LWG,spill,kcfs,Spill,0.000
+2015,11-25,LWG,spill,kcfs,Spill,0.000
+2015,11-26,LWG,spill,kcfs,Spill,0.000
+2015,11-27,LWG,spill,kcfs,Spill,0.000
+2015,11-28,LWG,spill,kcfs,Spill,0.000
+2015,11-29,LWG,spill,kcfs,Spill,0.000
+2015,11-30,LWG,spill,kcfs,Spill,0.000
+2015,12-1,LWG,spill,kcfs,Spill,0.000
+2015,12-2,LWG,spill,kcfs,Spill,0.000
+2015,12-3,LWG,spill,kcfs,Spill,0.000
+2015,12-4,LWG,spill,kcfs,Spill,0.000
+2015,12-5,LWG,spill,kcfs,Spill,0.000
+2015,12-6,LWG,spill,kcfs,Spill,0.000
+2015,12-7,LWG,spill,kcfs,Spill,0.000
+2015,12-8,LWG,spill,kcfs,Spill,0.000
+2015,12-9,LWG,spill,kcfs,Spill,0.000
+2015,12-10,LWG,spill,kcfs,Spill,0.000
+2015,12-11,LWG,spill,kcfs,Spill,0.000
+2015,12-12,LWG,spill,kcfs,Spill,0.000
+2015,12-13,LWG,spill,kcfs,Spill,0.000
+2015,12-14,LWG,spill,kcfs,Spill,0.000
+2015,12-15,LWG,spill,kcfs,Spill,0.000
+2015,12-16,LWG,spill,kcfs,Spill,0.000
+2015,12-17,LWG,spill,kcfs,Spill,0.000
+2015,12-18,LWG,spill,kcfs,Spill,0.000
+2015,12-19,LWG,spill,kcfs,Spill,0.000
+2015,12-20,LWG,spill,kcfs,Spill,0.000
+2015,12-21,LWG,spill,kcfs,Spill,0.000
+2015,12-22,LWG,spill,kcfs,Spill,0.000
+2015,12-23,LWG,spill,kcfs,Spill,0.000
+2015,12-24,LWG,spill,kcfs,Spill,0.000
+2015,12-25,LWG,spill,kcfs,Spill,0.000
+2015,12-26,LWG,spill,kcfs,Spill,0.000
+2015,12-27,LWG,spill,kcfs,Spill,0.000
+2015,12-28,LWG,spill,kcfs,Spill,0.000
+2015,12-29,LWG,spill,kcfs,Spill,0.000
+2015,12-30,LWG,spill,kcfs,Spill,0.000
+2015,12-31,LWG,spill,kcfs,Spill,0.000
+2015,1-1,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-2,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-3,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-4,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-5,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-6,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-7,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-8,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-9,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-10,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-11,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-12,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-13,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-14,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-15,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-16,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-17,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-18,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-19,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-20,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-21,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-22,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-23,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-24,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-25,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-26,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-28,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-29,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-30,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,1-31,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-1,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-2,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-3,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-4,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-5,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-6,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-7,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-8,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-9,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-10,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-11,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-12,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-13,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-14,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-15,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-16,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-17,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-18,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-19,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-20,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-21,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-22,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-23,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-24,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-25,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-26,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,2-28,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-1,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-2,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-3,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-4,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-5,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-6,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-7,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-8,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-9,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-10,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-11,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-12,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-13,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-14,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-15,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-16,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,3-17,LWG,disgas,mmHg,Dissolved Gas,763.300
+2015,3-18,LWG,disgas,mmHg,Dissolved Gas,761.208
+2015,3-19,LWG,disgas,mmHg,Dissolved Gas,753.083
+2015,3-20,LWG,disgas,mmHg,Dissolved Gas,754.167
+2015,3-21,LWG,disgas,mmHg,Dissolved Gas,753.542
+2015,3-22,LWG,disgas,mmHg,Dissolved Gas,757.292
+2015,3-23,LWG,disgas,mmHg,Dissolved Gas,758.708
+2015,3-24,LWG,disgas,mmHg,Dissolved Gas,756.917
+2015,3-25,LWG,disgas,mmHg,Dissolved Gas,753.500
+2015,3-26,LWG,disgas,mmHg,Dissolved Gas,753.292
+2015,3-27,LWG,disgas,mmHg,Dissolved Gas,751.500
+2015,3-28,LWG,disgas,mmHg,Dissolved Gas,754.167
+2015,3-29,LWG,disgas,mmHg,Dissolved Gas,762.458
+2015,3-30,LWG,disgas,mmHg,Dissolved Gas,764.875
+2015,3-31,LWG,disgas,mmHg,Dissolved Gas,760.833
+2015,4-1,LWG,disgas,mmHg,Dissolved Gas,760.417
+2015,4-2,LWG,disgas,mmHg,Dissolved Gas,758.208
+2015,4-3,LWG,disgas,mmHg,Dissolved Gas,751.667
+2015,4-4,LWG,disgas,mmHg,Dissolved Gas,752.042
+2015,4-5,LWG,disgas,mmHg,Dissolved Gas,756.083
+2015,4-6,LWG,disgas,mmHg,Dissolved Gas,759.500
+2015,4-7,LWG,disgas,mmHg,Dissolved Gas,759.542
+2015,4-8,LWG,disgas,mmHg,Dissolved Gas,757.875
+2015,4-9,LWG,disgas,mmHg,Dissolved Gas,755.292
+2015,4-10,LWG,disgas,mmHg,Dissolved Gas,757.583
+2015,4-11,LWG,disgas,mmHg,Dissolved Gas,758.458
+2015,4-12,LWG,disgas,mmHg,Dissolved Gas,757.167
+2015,4-13,LWG,disgas,mmHg,Dissolved Gas,759.583
+2015,4-14,LWG,disgas,mmHg,Dissolved Gas,757.000
+2015,4-15,LWG,disgas,mmHg,Dissolved Gas,751.833
+2015,4-16,LWG,disgas,mmHg,Dissolved Gas,753.125
+2015,4-17,LWG,disgas,mmHg,Dissolved Gas,760.333
+2015,4-18,LWG,disgas,mmHg,Dissolved Gas,758.438
+2015,4-19,LWG,disgas,mmHg,Dissolved Gas,763.542
+2015,4-20,LWG,disgas,mmHg,Dissolved Gas,778.354
+2015,4-21,LWG,disgas,mmHg,Dissolved Gas,777.083
+2015,4-22,LWG,disgas,mmHg,Dissolved Gas,767.000
+2015,4-23,LWG,disgas,mmHg,Dissolved Gas,765.000
+2015,4-24,LWG,disgas,mmHg,Dissolved Gas,758.917
+2015,4-25,LWG,disgas,mmHg,Dissolved Gas,753.292
+2015,4-26,LWG,disgas,mmHg,Dissolved Gas,751.583
+2015,4-27,LWG,disgas,mmHg,Dissolved Gas,753.792
+2015,4-28,LWG,disgas,mmHg,Dissolved Gas,755.250
+2015,4-29,LWG,disgas,mmHg,Dissolved Gas,754.250
+2015,4-30,LWG,disgas,mmHg,Dissolved Gas,761.833
+2015,5-1,LWG,disgas,mmHg,Dissolved Gas,771.042
+2015,5-2,LWG,disgas,mmHg,Dissolved Gas,765.750
+2015,5-3,LWG,disgas,mmHg,Dissolved Gas,761.583
+2015,5-4,LWG,disgas,mmHg,Dissolved Gas,765.917
+2015,5-5,LWG,disgas,mmHg,Dissolved Gas,761.625
+2015,5-6,LWG,disgas,mmHg,Dissolved Gas,760.500
+2015,5-7,LWG,disgas,mmHg,Dissolved Gas,758.583
+2015,5-8,LWG,disgas,mmHg,Dissolved Gas,758.000
+2015,5-9,LWG,disgas,mmHg,Dissolved Gas,759.625
+2015,5-10,LWG,disgas,mmHg,Dissolved Gas,763.708
+2015,5-11,LWG,disgas,mmHg,Dissolved Gas,765.375
+2015,5-12,LWG,disgas,mmHg,Dissolved Gas,766.250
+2015,5-13,LWG,disgas,mmHg,Dissolved Gas,766.917
+2015,5-14,LWG,disgas,mmHg,Dissolved Gas,764.167
+2015,5-15,LWG,disgas,mmHg,Dissolved Gas,755.000
+2015,5-16,LWG,disgas,mmHg,Dissolved Gas,752.917
+2015,5-17,LWG,disgas,mmHg,Dissolved Gas,759.625
+2015,5-18,LWG,disgas,mmHg,Dissolved Gas,758.833
+2015,5-19,LWG,disgas,mmHg,Dissolved Gas,759.833
+2015,5-20,LWG,disgas,mmHg,Dissolved Gas,767.583
+2015,5-21,LWG,disgas,mmHg,Dissolved Gas,771.667
+2015,5-22,LWG,disgas,mmHg,Dissolved Gas,771.375
+2015,5-23,LWG,disgas,mmHg,Dissolved Gas,767.250
+2015,5-24,LWG,disgas,mmHg,Dissolved Gas,763.583
+2015,5-25,LWG,disgas,mmHg,Dissolved Gas,761.708
+2015,5-26,LWG,disgas,mmHg,Dissolved Gas,764.917
+2015,5-27,LWG,disgas,mmHg,Dissolved Gas,763.833
+2015,5-28,LWG,disgas,mmHg,Dissolved Gas,760.500
+2015,5-29,LWG,disgas,mmHg,Dissolved Gas,760.083
+2015,5-30,LWG,disgas,mmHg,Dissolved Gas,761.708
+2015,5-31,LWG,disgas,mmHg,Dissolved Gas,764.208
+2015,6-1,LWG,disgas,mmHg,Dissolved Gas,767.077
+2015,6-2,LWG,disgas,mmHg,Dissolved Gas,761.625
+2015,6-3,LWG,disgas,mmHg,Dissolved Gas,754.708
+2015,6-4,LWG,disgas,mmHg,Dissolved Gas,749.250
+2015,6-5,LWG,disgas,mmHg,Dissolved Gas,744.625
+2015,6-6,LWG,disgas,mmHg,Dissolved Gas,746.792
+2015,6-7,LWG,disgas,mmHg,Dissolved Gas,753.042
+2015,6-8,LWG,disgas,mmHg,Dissolved Gas,764.708
+2015,6-9,LWG,disgas,mmHg,Dissolved Gas,765.273
+2015,6-10,LWG,disgas,mmHg,Dissolved Gas,763.250
+2015,6-11,LWG,disgas,mmHg,Dissolved Gas,764.250
+2015,6-12,LWG,disgas,mmHg,Dissolved Gas,762.875
+2015,6-13,LWG,disgas,mmHg,Dissolved Gas,761.375
+2015,6-14,LWG,disgas,mmHg,Dissolved Gas,758.250
+2015,6-15,LWG,disgas,mmHg,Dissolved Gas,750.125
+2015,6-16,LWG,disgas,mmHg,Dissolved Gas,743.333
+2015,6-17,LWG,disgas,mmHg,Dissolved Gas,741.042
+2015,6-18,LWG,disgas,mmHg,Dissolved Gas,746.083
+2015,6-19,LWG,disgas,mmHg,Dissolved Gas,748.500
+2015,6-20,LWG,disgas,mmHg,Dissolved Gas,750.583
+2015,6-21,LWG,disgas,mmHg,Dissolved Gas,750.750
+2015,6-22,LWG,disgas,mmHg,Dissolved Gas,748.542
+2015,6-23,LWG,disgas,mmHg,Dissolved Gas,748.958
+2015,6-24,LWG,disgas,mmHg,Dissolved Gas,750.250
+2015,6-25,LWG,disgas,mmHg,Dissolved Gas,756.000
+2015,6-26,LWG,disgas,mmHg,Dissolved Gas,764.250
+2015,6-27,LWG,disgas,mmHg,Dissolved Gas,772.250
+2015,6-28,LWG,disgas,mmHg,Dissolved Gas,779.750
+2015,6-29,LWG,disgas,mmHg,Dissolved Gas,786.667
+2015,6-30,LWG,disgas,mmHg,Dissolved Gas,777.196
+2015,7-1,LWG,disgas,mmHg,Dissolved Gas,762.438
+2015,7-2,LWG,disgas,mmHg,Dissolved Gas,764.500
+2015,7-3,LWG,disgas,mmHg,Dissolved Gas,768.250
+2015,7-4,LWG,disgas,mmHg,Dissolved Gas,769.083
+2015,7-5,LWG,disgas,mmHg,Dissolved Gas,769.167
+2015,7-6,LWG,disgas,mmHg,Dissolved Gas,769.292
+2015,7-7,LWG,disgas,mmHg,Dissolved Gas,767.417
+2015,7-8,LWG,disgas,mmHg,Dissolved Gas,764.667
+2015,7-9,LWG,disgas,mmHg,Dissolved Gas,754.625
+2015,7-10,LWG,disgas,mmHg,Dissolved Gas,747.750
+2015,7-11,LWG,disgas,mmHg,Dissolved Gas,747.250
+2015,7-12,LWG,disgas,mmHg,Dissolved Gas,750.417
+2015,7-13,LWG,disgas,mmHg,Dissolved Gas,749.708
+2015,7-14,LWG,disgas,mmHg,Dissolved Gas,747.792
+2015,7-15,LWG,disgas,mmHg,Dissolved Gas,752.208
+2015,7-16,LWG,disgas,mmHg,Dissolved Gas,759.458
+2015,7-17,LWG,disgas,mmHg,Dissolved Gas,753.750
+2015,7-18,LWG,disgas,mmHg,Dissolved Gas,754.208
+2015,7-19,LWG,disgas,mmHg,Dissolved Gas,754.917
+2015,7-20,LWG,disgas,mmHg,Dissolved Gas,748.417
+2015,7-21,LWG,disgas,mmHg,Dissolved Gas,748.750
+2015,7-22,LWG,disgas,mmHg,Dissolved Gas,754.458
+2015,7-23,LWG,disgas,mmHg,Dissolved Gas,761.417
+2015,7-24,LWG,disgas,mmHg,Dissolved Gas,758.667
+2015,7-25,LWG,disgas,mmHg,Dissolved Gas,755.583
+2015,7-26,LWG,disgas,mmHg,Dissolved Gas,754.417
+2015,7-27,LWG,disgas,mmHg,Dissolved Gas,751.563
+2015,7-28,LWG,disgas,mmHg,Dissolved Gas,751.042
+2015,7-29,LWG,disgas,mmHg,Dissolved Gas,746.083
+2015,7-30,LWG,disgas,mmHg,Dissolved Gas,740.792
+2015,7-31,LWG,disgas,mmHg,Dissolved Gas,738.792
+2015,8-1,LWG,disgas,mmHg,Dissolved Gas,740.188
+2015,8-2,LWG,disgas,mmHg,Dissolved Gas,756.708
+2015,8-3,LWG,disgas,mmHg,Dissolved Gas,759.333
+2015,8-4,LWG,disgas,mmHg,Dissolved Gas,755.542
+2015,8-5,LWG,disgas,mmHg,Dissolved Gas,751.917
+2015,8-6,LWG,disgas,mmHg,Dissolved Gas,754.792
+2015,8-7,LWG,disgas,mmHg,Dissolved Gas,757.167
+2015,8-8,LWG,disgas,mmHg,Dissolved Gas,751.625
+2015,8-9,LWG,disgas,mmHg,Dissolved Gas,747.708
+2015,8-10,LWG,disgas,mmHg,Dissolved Gas,742.083
+2015,8-11,LWG,disgas,mmHg,Dissolved Gas,741.042
+2015,8-12,LWG,disgas,mmHg,Dissolved Gas,735.104
+2015,8-13,LWG,disgas,mmHg,Dissolved Gas,732.208
+2015,8-14,LWG,disgas,mmHg,Dissolved Gas,733.083
+2015,8-15,LWG,disgas,mmHg,Dissolved Gas,735.667
+2015,8-16,LWG,disgas,mmHg,Dissolved Gas,735.208
+2015,8-17,LWG,disgas,mmHg,Dissolved Gas,733.292
+2015,8-18,LWG,disgas,mmHg,Dissolved Gas,735.000
+2015,8-19,LWG,disgas,mmHg,Dissolved Gas,734.167
+2015,8-20,LWG,disgas,mmHg,Dissolved Gas,732.000
+2015,8-21,LWG,disgas,mmHg,Dissolved Gas,732.292
+2015,8-22,LWG,disgas,mmHg,Dissolved Gas,733.792
+2015,8-23,LWG,disgas,mmHg,Dissolved Gas,747.958
+2015,8-24,LWG,disgas,mmHg,Dissolved Gas,742.375
+2015,8-25,LWG,disgas,mmHg,Dissolved Gas,726.292
+2015,8-26,LWG,disgas,mmHg,Dissolved Gas,734.000
+2015,8-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,8-28,LWG,disgas,mmHg,Dissolved Gas,727.625
+2015,8-29,LWG,disgas,mmHg,Dissolved Gas,727.375
+2015,8-30,LWG,disgas,mmHg,Dissolved Gas,728.500
+2015,8-31,LWG,disgas,mmHg,Dissolved Gas,727.628
+2015,9-1,LWG,disgas,mmHg,Dissolved Gas,732.101
+2015,9-2,LWG,disgas,mmHg,Dissolved Gas,731.375
+2015,9-3,LWG,disgas,mmHg,Dissolved Gas,727.875
+2015,9-4,LWG,disgas,mmHg,Dissolved Gas,728.917
+2015,9-5,LWG,disgas,mmHg,Dissolved Gas,729.500
+2015,9-6,LWG,disgas,mmHg,Dissolved Gas,738.292
+2015,9-7,LWG,disgas,mmHg,Dissolved Gas,729.375
+2015,9-8,LWG,disgas,mmHg,Dissolved Gas,722.458
+2015,9-9,LWG,disgas,mmHg,Dissolved Gas,718.500
+2015,9-10,LWG,disgas,mmHg,Dissolved Gas,719.417
+2015,9-11,LWG,disgas,mmHg,Dissolved Gas,724.833
+2015,9-12,LWG,disgas,mmHg,Dissolved Gas,725.979
+2015,9-13,LWG,disgas,mmHg,Dissolved Gas,728.083
+2015,9-14,LWG,disgas,mmHg,Dissolved Gas,731.833
+2015,9-15,LWG,disgas,mmHg,Dissolved Gas,737.667
+2015,9-16,LWG,disgas,mmHg,Dissolved Gas,739.708
+2015,9-17,LWG,disgas,mmHg,Dissolved Gas,745.688
+2015,9-18,LWG,disgas,mmHg,Dissolved Gas,743.375
+2015,9-19,LWG,disgas,mmHg,Dissolved Gas,735.188
+2015,9-20,LWG,disgas,mmHg,Dissolved Gas,730.625
+2015,9-21,LWG,disgas,mmHg,Dissolved Gas,725.833
+2015,9-22,LWG,disgas,mmHg,Dissolved Gas,724.400
+2015,9-23,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-24,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-25,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-26,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-28,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-29,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,9-30,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-1,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-2,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-3,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-4,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-5,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-6,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-7,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-8,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-9,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-10,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-11,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-12,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-13,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-14,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-15,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-16,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-17,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-18,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-19,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-20,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-21,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-22,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-23,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-24,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-25,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-26,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-28,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-29,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-30,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,10-31,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-1,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-2,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-3,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-4,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-5,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-6,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-7,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-8,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-9,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-10,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-11,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-12,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-13,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-14,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-15,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-16,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-17,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-18,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-19,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-20,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-21,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-22,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-23,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-24,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-25,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-26,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-28,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-29,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,11-30,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-1,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-2,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-3,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-4,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-5,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-6,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-7,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-8,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-9,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-10,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-11,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-12,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-13,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-14,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-15,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-16,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-17,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-18,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-19,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-20,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-21,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-22,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-23,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-24,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-25,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-26,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-27,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-28,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-29,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-30,LWG,disgas,mmHg,Dissolved Gas,NA
+2015,12-31,LWG,disgas,mmHg,Dissolved Gas,NA
+
+
+Notes:
+Columbia River DART
+Generated 24 Aug 2026 09:12:31 PDT. DART River Environment Graphics & Text www.cbr.washington.edu/dart/query/river_graph_text.
+
+"DART Data Citation. Columbia River DART, Columbia Basin Research, University of Washington. (2026). River Environment Graphics & Text. Available from https://www.cbr.washington.edu/dart/query/river_graph_text."

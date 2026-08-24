@@ -1,4 +1,6 @@
 // data.js
+import { parseAdultDailyCsv } from "./dart/parseAdultDaily.js";
+
 // Real Lower Granite Dam (LWG) daily adult passage counts, read at module load
 // from a snapshot vendored into this repo (public/lwg-adult-daily-2015.csv).
 //
@@ -11,7 +13,12 @@
 // HUD without being simulated: wild steelhead (a subset of the steelhead
 // count), sockeye, coho, jack coho, Pacific lamprey, the water temperature at
 // the project, and which Chinook run the date falls in. None of it reaches
-// the flock — see the note on `count` in parseDartCsv.
+// the flock — see the note on `count` in parseAdultDailyCsv (src/dart/).
+//
+// The parser itself lives in src/dart/parseAdultDaily.js rather than here: it
+// has no fetch and no browser globals, so scripts/fetch-dart.mjs imports the
+// same function under Node to build the multi-year history file below rather
+// than re-implementing the column-mapping logic a second time.
 //
 // DART_YEAR = 2015: picked over more recent years (2023 in particular) after
 // spot-checking a few — 2015 has substantial counts across all four species
@@ -57,136 +64,12 @@ const SNAPSHOT_TIMEOUT_MS = 15000;
 // Third-party host on the boot path, so this one is the real guard.
 const DART_TIMEOUT_MS = 5000;
 
-// DART marks some days with a negative value (e.g. "-1") — a correction/
-// adjustment to a prior count, not a literal negative number of fish — so
-// those are floored to 0 rather than subtracted from the day's total.
-function parseCount(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-// For columns where "not published" has to stay distinguishable from "zero".
-// Temperature is the reason: DART leaves the cell blank on days the gauge was
-// down, and running that through parseCount would report those days as 0 °C —
-// a real reading, and a wrong one. Returns null instead so the HUD can show
-// nothing at all.
-function parseMeasurement(value) {
-  if (value === undefined) return null;
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  const n = Number(trimmed);
-  return Number.isFinite(n) ? n : null;
-}
-
-// DART's abbreviations for the Chinook run a given day falls in. These are
-// run *schedules* set by the Corps per project, not a determination about the
-// individual fish counted — see the "Chinook Run Dates" note in the CSV's own
-// footer.
-const CHINOOK_RUN_NAMES = { Sp: "Spring", Su: "Summer", Fa: "Fall" };
-
-// Parses the DART CSV by header name rather than fixed column indices —
-// which columns DART includes (e.g. lamprey day/night splits) has changed
-// between years, so a hardcoded index for "Shad" in one year's export can
-// silently point at the wrong column in another's. Trailing lines are plain-
-// text footnotes (data citation, species-definition notes), not data rows —
-// filtered out by requiring the project-name prefix every real row has.
-function parseDartCsv(csvText) {
-  const lines = csvText.split("\n");
-  const header = lines[0].split(",").map((name) => name.trim());
-
-  // The four the simulation is actually built on. A missing one here is a
-  // real breakage — the population, spawn mix and swim speed all derive from
-  // them — so this throws rather than quietly reporting a season of zeros.
-  const col = (name) => {
-    const i = header.indexOf(name);
-    if (i === -1) throw new Error(`DART CSV missing expected column "${name}"`);
-    return i;
-  };
-  // Everything else is enrichment for the HUD. DART's column set genuinely
-  // does change between years (the lamprey day/night split is the documented
-  // case), so these resolve to -1 when absent, which reads back as undefined
-  // and parses to 0/null — the readout goes quiet instead of the app failing.
-  const optionalCol = (name) => header.indexOf(name);
-
-  const dateCol = col("Date");
-  const chinookCol = col("Chin");
-  const jackChinookCol = col("JChin");
-  const steelheadCol = col("Stlhd");
-  const shadCol = col("Shad");
-
-  const runCol = optionalCol("Chinook Run");
-  const wildSteelheadCol = optionalCol("WStlhd");
-  const sockeyeCol = optionalCol("Sock");
-  const cohoCol = optionalCol("Coho");
-  const jackCohoCol = optionalCol("JCoho");
-  const lampreyCombinedCol = optionalCol("LmpryCombined");
-  const lampreyDayCol = optionalCol("LmpryDay");
-  const lampreyNightCol = optionalCol("LmpryNight");
-  const tempCol = optionalCol("TempC");
-
-  const data = [];
-  for (const line of lines) {
-    if (!line.startsWith("Lower Granite,")) continue;
-    const fields = line.split(",");
-    const chinook = parseCount(fields[chinookCol]);
-    const jackChinook = parseCount(fields[jackChinookCol]);
-    const steelhead = parseCount(fields[steelheadCol]);
-    const shad = parseCount(fields[shadCol]);
-
-    // DART reports lamprey as a combined figure in recent exports and as
-    // separate day/night columns in older ones; take the combined column when
-    // it is there and reconstruct it otherwise.
-    const lamprey =
-      lampreyCombinedCol !== -1
-        ? parseCount(fields[lampreyCombinedCol])
-        : parseCount(fields[lampreyDayCol]) +
-          parseCount(fields[lampreyNightCol]);
-
-    data.push({
-      date: fields[dateCol],
-
-      // DELIBERATELY still only those four. `count` drives the simulated
-      // population, the spawn ramp and the swim speed (see main.js), and the
-      // renderer has exactly four species to draw with — folding sockeye,
-      // coho and lamprey in here would rebalance the whole run to show fish
-      // that aren't modelled. They are reported in the HUD instead.
-      count: chinook + jackChinook + steelhead + shad,
-      chinook,
-      jackChinook,
-      steelhead,
-      shad,
-
-      // A SUBSET of `steelhead`, not an addition to it — DART's Stlhd column
-      // already includes both hatchery and wild fish, and the CSV's own notes
-      // say so explicitly. Adding it to any total would double-count.
-      wildSteelhead: parseCount(fields[wildSteelheadCol]),
-
-      // Counted at the dam but not modelled in the water. Small numbers next
-      // to the four above (a few hundred each across a whole season) and
-      // worth reporting for exactly that reason: a passage report that showed
-      // only the abundant species would hide the ones anyone is actually
-      // worried about.
-      sockeye: parseCount(fields[sockeyeCol]),
-      coho: parseCount(fields[cohoCol]),
-      jackCoho: parseCount(fields[jackCohoCol]),
-      lamprey,
-
-      // Water temperature at the project, degrees Celsius. Null on days DART
-      // published none — see parseMeasurement.
-      tempC: parseMeasurement(fields[tempCol]),
-
-      // Null outside the runs' scheduled windows, which is most of the winter.
-      chinookRun: CHINOOK_RUN_NAMES[(fields[runCol] ?? "").trim()] ?? null,
-    });
-  }
-  if (data.length === 0) throw new Error("DART CSV had no data rows");
-  return data;
-}
-
 // fetch() has no timeout of its own — a connection that opens and then stalls
 // hangs the promise forever, which is exactly the failure this module used to
-// sit on. AbortController is the only way to bound it.
-async function fetchCsv(url, timeoutMs, label) {
+// sit on. AbortController is the only way to bound it. Returns raw text
+// rather than parsing — every caller below (CSV or JSON) does that itself, so
+// this stays the one place the timeout/error handling lives.
+async function fetchText(url, timeoutMs, label) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -225,15 +108,15 @@ async function loadRunData() {
   // The snapshot first and unconditionally: it is the baseline, and it is also
   // what the live path falls back to, so there is no ordering where we want to
   // be holding a live response and no snapshot.
-  const snapshot = parseDartCsv(
-    await fetchCsv(SNAPSHOT_URL, SNAPSHOT_TIMEOUT_MS, "Run data snapshot"),
+  const snapshot = parseAdultDailyCsv(
+    await fetchText(SNAPSHOT_URL, SNAPSHOT_TIMEOUT_MS, "Run data snapshot"),
   );
 
   if (!liveRefreshRequested()) return snapshot;
 
   try {
-    const live = parseDartCsv(
-      await fetchCsv(
+    const live = parseAdultDailyCsv(
+      await fetchText(
         COLUMBIA_BASIN_RESEARCH_DART_URL,
         DART_TIMEOUT_MS,
         "DART live",
@@ -257,3 +140,84 @@ async function loadRunData() {
 // record. With the data vendored into the bundle there is no offline case left
 // for it to cover, and failing loudly beats lying quietly.
 export const runData = await loadRunData();
+
+// ---------------------------------------------------------------------------
+// River conditions and multi-year history.
+//
+// Both are lazy and memoized, unlike runData above: nothing about the flock,
+// the spawn mix or the timeline depends on either one, so there is no reason
+// to put a second and third network round-trip on the boot path. Each is
+// fetched once, on first call, from a file scripts/fetch-dart.mjs builds
+// ahead of time — see that script for the DART queries and the derivation.
+//
+// A failure here must never take the river down. It degrades one plate in
+// the drawer to "data unavailable" and nothing else.
+
+const RIVER_CONDITIONS_URL = "/lwg-river-2015.csv";
+const RUN_HISTORY_URL = "/lwg-history-2006-2015.json";
+// Same-origin static assets, opened well after boot — generous like
+// SNAPSHOT_TIMEOUT_MS, for the same reason.
+const ENRICHMENT_TIMEOUT_MS = 15000;
+
+function csvNumber(value) {
+  if (value === undefined) return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Wide-format daily river conditions at LWG for 2015 — outflow, spill and
+// dissolved gas, pivoted from DART's long-format river_graph_text export at
+// fetch time (see scripts/fetch-dart.mjs). Any of the three can be null on a
+// day the gauge published nothing, same convention as tempC above.
+function parseRiverConditionsCsv(csvText) {
+  const lines = csvText.split("\n").filter((line) => line.trim() !== "");
+  const header = lines[0].split(",").map((name) => name.trim());
+  const col = (name) => header.indexOf(name);
+  const dateCol = col("Date");
+  const outflowCol = col("OutflowKcfs");
+  const spillCol = col("SpillKcfs");
+  const gasCol = col("DissolvedGasMmHg");
+
+  return lines.slice(1).map((line) => {
+    const fields = line.split(",");
+    return {
+      date: fields[dateCol],
+      outflowKcfs: csvNumber(fields[outflowCol]),
+      spillKcfs: csvNumber(fields[spillCol]),
+      dissolvedGasMmHg: csvNumber(fields[gasCol]),
+    };
+  });
+}
+
+let riverConditionsPromise = null;
+
+export function loadRiverConditions() {
+  if (!riverConditionsPromise) {
+    riverConditionsPromise = fetchText(
+      RIVER_CONDITIONS_URL,
+      ENRICHMENT_TIMEOUT_MS,
+      "River conditions",
+    ).then(parseRiverConditionsCsv);
+  }
+  return riverConditionsPromise;
+}
+
+let runHistoryPromise = null;
+
+// Per-year season totals by species and a day-of-year min/mean/max envelope
+// across 2006-2015, precomputed by scripts/fetch-dart.mjs so the browser
+// never parses ten years of CSV itself. Shape:
+//   { years, seasonTotals: [{year, chinook, ..., count}],
+//     dailyEnvelope: [{doy, n, min, mean, max}] }
+export function loadRunHistory() {
+  if (!runHistoryPromise) {
+    runHistoryPromise = fetchText(
+      RUN_HISTORY_URL,
+      ENRICHMENT_TIMEOUT_MS,
+      "Run history",
+    ).then((text) => JSON.parse(text));
+  }
+  return runHistoryPromise;
+}
