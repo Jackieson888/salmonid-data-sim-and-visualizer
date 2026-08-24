@@ -360,6 +360,57 @@
   color: var(--text-dim);
 }
 
+/* The bulleted facts under the intro line — each chosen to explain something
+   visible elsewhere in this panel or the plates drawer (a stat row above, a
+   figure in the drawer), not biology trivia with nothing to connect to. A
+   hairline-ruled tick instead of a bullet glyph, matching the anatomy
+   overlay's own tick marks rather than a browser default disc. */
+.fg-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fg-list li {
+  position: relative;
+  margin-top: 8px;
+  padding-left: 14px;
+  font-size: var(--t-2);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.fg-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 1px;
+  background: var(--accent);
+}
+
+.fg-source {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--text-faint);
+  font-size: var(--t-1);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.fg-source:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.fg-source:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ---------------------------------------------------------------------
    Anatomy overlay — leader lines projected from the fish's actual animated
    vertices each frame (see scene/fishAnatomy.js and renderAnatomyOverlay in

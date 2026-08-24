@@ -223,12 +223,61 @@ const COMMON_NAMES = {
   shad: "American Shad",
   lamprey: "Pacific Lamprey",
 };
-const SPECIES_NOTES = {
-  chinook: "The largest Pacific salmon, and the species this counting season is named for.",
-  jackChinook: "A “jack” is a precocious male Chinook that returns to spawn a year early, at a much smaller size than a typical adult.",
-  steelhead: "A sea-run form of rainbow trout. Unlike Pacific salmon, some steelhead survive spawning and return to the ocean to spawn again.",
-  shad: "Not native to the Columbia Basin — introduced from the Atlantic coast in the 1870s.",
-  lamprey: "A jawless fish, not a true fish in the bony-fish sense at all — closer kin to hagfish than to salmon. Parasitic on other fish at sea, then dies after its one spawning run, like Pacific salmon.",
+// Field notes for the panel's "Field notes" section. `intro` is the one-line
+// summary the panel led with before this was added; `facts` are drawn from
+// the full write-ups vendored under public/*-field-notes.md (see `source`),
+// chosen specifically for facts that explain a pattern visible ELSEWHERE in
+// this panel or the plates drawer — the run-timing split above, FIG. 6's
+// day/night lamprey chart, the wild-steelhead percentage — rather than
+// biology trivia with nothing to connect to. jackChinook has no write-up of
+// its own; it's a life-history variant covered inside the Chinook piece.
+const SPECIES_FIELD_NOTES = {
+  chinook: {
+    intro: "The largest Pacific salmon, and the species this counting season is named for.",
+    facts: [
+      "Adults stop feeding entirely once they re-enter fresh water, running the whole migration on stored reserves — condition visibly deteriorates the longer a run takes, which is part of why late fish in a run tend to look rougher than early ones.",
+      "A run can include fish maturing anywhere from age 2 to age 7, so a four-pound jack and a fifty-pound adult can turn up in the same week — that spread is what keeps a single day's size distribution so wide.",
+      "The Sp / Su / Fa split reported above isn't one run stretched thin — it's three genetically and behaviorally distinct runs, built from different freshwater life histories, passing the same dam months apart.",
+    ],
+    source: "/chinook-salmon-field-notes.md",
+  },
+  jackChinook: {
+    intro: "A “jack” is a precocious male Chinook that returns to spawn a year early, at a much smaller size than a typical adult.",
+    facts: [
+      "Jacks are counted separately here because they return after just one winter at sea instead of two to five — same run, same brood, just an early ticket home.",
+      "Because jacks are the fastest-maturing fish from a given brood year, fishery managers sometimes read a strong jack count as an early signal for a strong adult return two years later.",
+    ],
+    source: "/chinook-salmon-field-notes.md",
+  },
+  steelhead: {
+    intro: "A sea-run form of rainbow trout. Unlike Pacific salmon, some steelhead survive spawning and return to the ocean to spawn again.",
+    facts: [
+      "Steelhead and resident rainbow trout are the same species and the same gene pool — going migratory isn't fixed by lineage, so two steelhead parents can raise offspring that never leave the river.",
+      "Unlike every other species counted here, steelhead are iteroparous: a fish passing the dam this year can pass again in a later season, so one individual can count toward more than one year's total.",
+      "The wild share reported above (an intact adipose fin) is a floor, not an exact split — some unmarked hatchery fish get counted as wild too.",
+      "Both freshwater rearing and ocean residence are loosely timed and vary fish to fish, which is part of why the steelhead run spreads across so much of the season instead of arriving as one clean pulse.",
+    ],
+    source: "/steelhead-trout-field-notes.md",
+  },
+  shad: {
+    intro: "Not native to the Columbia Basin — introduced from the Atlantic coast in the 1870s.",
+    facts: [
+      "Shad are broadcast spawners — several males and one female release eggs and milt straight into open water at dusk, no redd, no gravel — and the whole event is keyed to water hitting about 65°F, not a calendar date.",
+      "A single female can lay up to 600,000 eggs in a season. That's part of why the shad band in the composition plate can swing so much wider than the salmonids' even though shad are the smaller fish.",
+      "Feeding stops entirely once shad turn upriver, the same all-in strategy Chinook use — by the time a shad reaches Lower Granite it's running on reserves alone.",
+    ],
+    source: "/american-shad-field-notes.md",
+  },
+  lamprey: {
+    intro: "A jawless fish, not a true fish in the bony-fish sense at all — closer kin to hagfish than to salmon. Parasitic on other fish at sea, then dies after its one spawning run, like Pacific salmon.",
+    facts: [
+      "Almost all lamprey migration happens at night — exactly what FIG. 6 in the data plates shows, with day and night counts typically split by close to an order of magnitude.",
+      "There's no solid evidence lamprey home to their natal stream the way salmon do, so the run passing Lower Granite isn't necessarily returning to where it hatched.",
+      "Their oral disc grips like a suction cup on smooth surfaces, but fish ladders built for salmon — sharp corners, diffuser gratings, thin bar screens — often trap or block lamprey instead. That mismatch is a leading reason lamprey counts have fallen harder than the salmon sharing this river.",
+      "Larvae spend 3 to 8 years burrowed in river-bottom silt before growing eyes or teeth — several times longer than a salmon juvenile spends in fresh water — so a strong adult count today reflects river conditions from most of a decade ago, not this year's.",
+    ],
+    source: "/pacific-lamprey-field-notes.md",
+  },
 };
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -631,7 +680,18 @@ function updateFieldGuide(species) {
   head.appendChild(el("span", "label", "Field notes"));
   fieldGuideEl.appendChild(head);
 
-  fieldGuideEl.appendChild(el("p", "fg-note", SPECIES_NOTES[species]));
+  const notes = SPECIES_FIELD_NOTES[species];
+  fieldGuideEl.appendChild(el("p", "fg-note", notes.intro));
+
+  const list = el("ul", "fg-list");
+  for (const fact of notes.facts) list.appendChild(el("li", null, fact));
+  fieldGuideEl.appendChild(list);
+
+  const link = el("a", "fg-source", "Full field notes ↗");
+  link.href = notes.source;
+  link.target = "_blank";
+  link.rel = "noopener";
+  fieldGuideEl.appendChild(link);
 }
 
 function setSpecies(species) {
