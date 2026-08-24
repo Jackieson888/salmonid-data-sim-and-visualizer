@@ -164,24 +164,12 @@
           </div>
         </div>
 
-        <!-- Footnote register: counted but not modelled, and provenance. -->
+        <!-- Provenance. The species counted at the dam but not modelled used
+             to live here as a row of footnote figures ("Also counted") — they
+             moved to FIG. 2 in the plates drawer below, where sockeye, coho,
+             jack coho and lamprey get a real chart instead of an 8px aside,
+             and wild/hatchery steelhead gets FIG. 3 to itself. -->
         <div class="report-foot">
-          <!-- Each figure is hidden by its own row when the day's value is
-               zero, so a winter day doesn't show a wall of zeroes. -->
-          <p id="secondary-counts">
-            <span class="label">Also counted</span
-            ><span data-field="wildSteelhead"
-              ><span class="label">Steelhead, wild</span><b>0</b></span
-            ><span data-field="sockeye"
-              ><span class="label">Sockeye</span><b>0</b></span
-            ><span data-field="coho"
-              ><span class="label">Coho</span><b>0</b></span
-            ><span data-field="jackCoho"
-              ><span class="label">Jack Coho</span><b>0</b></span
-            ><span data-field="lamprey"
-              ><span class="label">Lamprey</span><b>0</b></span
-            >
-          </p>
           <p class="source">
             Columbia Basin Research DART &middot; adult passage daily counts
             &middot; data courtesy of the U.S. Army Corps of Engineers
@@ -196,6 +184,23 @@
          see src/inspect.js. Useful both as a mesh/texture debugging view and
          as a way for a viewer to just look at the model. -->
     <a id="fish-viewer-link" href="/inspect.html">Fish viewer &rarr;</a>
+
+    <!-- The plates drawer — everything from the DART record the bar itself
+         has no room for. Closed by default and built lazily on first open
+         (see src/plates.js); slides in over the canvas rather than resizing
+         it, since the underwater vignette in scene/sceneSetup.js is tuned to
+         the canvas's current on-screen size. -->
+    <button
+      id="plates-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="plates"
+    >
+      Plates
+    </button>
+    <aside id="plates" aria-label="Data plates">
+      <div id="plates-scroll"></div>
+    </aside>
 
     <div id="fish-loading">
       <div class="bar"></div>

@@ -599,7 +599,10 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Footnote strip — counted but not modelled, and provenance
+   Footnote strip — provenance. Used to also carry the species counted but
+   not simulated ("Also counted") as a row of footnote figures; that moved to
+   FIG. 2/3 in the plates drawer (see src/plates.js), where it gets a real
+   chart instead of an 8px aside.
    --------------------------------------------------------------------- */
 
 .report-foot {
@@ -612,40 +615,6 @@ body {
   border-top: 1px solid var(--line-soft);
   font-size: var(--t-1);
   color: var(--text-faint);
-}
-
-/* Species counted at the dam but not simulated (see data.js). Set apart from
-   the table above — smaller, unkeyed, run together on one line — because they
-   are a different kind of figure: reported for completeness, not the subject
-   of the picture behind them. Rows hide themselves on a zero day, so this
-   line grows and shrinks through the season. */
-#secondary-counts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 14px;
-}
-
-#secondary-counts [data-field] {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-/* Explicit, because the rule above beats the user-agent's own
-   `[hidden] { display: none }` on specificity — setting el.hidden in JS looks
-   like it works and silently does nothing without this. */
-#secondary-counts [data-field][hidden] {
-  display: none;
-}
-
-#secondary-counts > .label {
-  color: var(--text-dimmer);
-}
-
-#secondary-counts b {
-  font-weight: 400;
-  color: var(--text-dim);
 }
 
 .source {
@@ -794,7 +763,10 @@ body {
 
 #debug-panel {
   position: absolute;
-  top: 18px;
+  /* Shifted down from the corner to clear #plates-toggle, which took the
+     primary top-right spot — this is a hidden-by-default dev readout, the
+     toggle is a real control. */
+  top: 56px;
   right: 18px;
   margin: 0;
   color: var(--text-dim);
@@ -808,6 +780,379 @@ body {
   line-height: 1.55;
   pointer-events: none;
   white-space: pre;
+}
+
+/* ---------------------------------------------------------------------
+   Plates drawer (see src/plates.js) — a slide-in rail of figures the bar
+   itself has no room for. Overlays the canvas rather than resizing it: the
+   underwater vignette in scene/sceneSetup.js is tuned to the canvas's
+   current on-screen size, so shrinking it to make room would need a shader
+   retune this pass doesn't do.
+   --------------------------------------------------------------------- */
+
+#plates-toggle {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 6px 10px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: var(--t-3);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#plates-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+#plates-toggle[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+#plates {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(400px, 100vw);
+  background: var(--ink);
+  border-left: 1px solid var(--line);
+  border-top: var(--rule-heavy) solid var(--accent);
+  color: var(--text);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  pointer-events: auto;
+}
+
+#plates.open {
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #plates {
+    transition: none;
+  }
+}
+
+#plates-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--s4);
+}
+
+.plate {
+  padding-bottom: var(--s4);
+  margin-bottom: var(--s4);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.plate:last-of-type {
+  border-bottom: none;
+}
+
+.plate-caption {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+
+.plate-num {
+  color: var(--text-faint);
+  font-size: var(--t-1);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.plate-title {
+  font-size: var(--t-2);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.plate-toggle {
+  margin-left: auto;
+  background: transparent;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+  font-family: var(--sans);
+  font-size: var(--t-1);
+  cursor: pointer;
+}
+
+.plate-toggle.active {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.plate-svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.plate-today-bar {
+  height: 22px;
+  margin-top: var(--s2);
+  border-bottom: none;
+}
+
+.plate-history-bars {
+  height: 120px;
+}
+
+.plate-svg-compact {
+  height: 68px;
+}
+
+.plate-scatter {
+  width: 200px;
+  height: 100px;
+  margin-top: var(--s2);
+  border-bottom: none;
+}
+
+.plate-scatter-dot {
+  fill: var(--chinook);
+  opacity: 0.55;
+}
+
+.plate-note {
+  margin-top: var(--s2);
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+.plate-fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--s3);
+  margin-top: var(--s2);
+  font-size: var(--t-2);
+}
+
+.plate-fact .label {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.plate-fact b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  margin-right: var(--s3);
+}
+
+/* Cursors, areas and lines. vector-effect keeps stroke width constant even
+   though every plate's viewBox is stretched to its box (preserveAspectRatio
+   is "none" throughout, same as #season-chart in the bar). */
+.plate-cursor {
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.plate-line {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.plate-line-ghost {
+  stroke: var(--text-faint);
+  stroke-dasharray: 3 3;
+}
+
+.plate-envelope-band {
+  fill: var(--line);
+  opacity: 0.5;
+  stroke: none;
+}
+
+.plate-envelope-trace {
+  stroke: var(--accent);
+}
+
+.plate-lamprey-day {
+  stroke: var(--lamprey);
+}
+
+.plate-lamprey-night {
+  stroke: var(--text);
+}
+
+.plate-line[data-field="outflow"] {
+  stroke: var(--series);
+}
+
+.plate-line[data-field="spill"] {
+  stroke: var(--accent);
+}
+
+.plate-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s3);
+  margin-top: var(--s2);
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.plate-chart-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 0;
+  margin-right: 5px;
+  border-top: 1px solid currentColor;
+  vertical-align: middle;
+}
+
+.plate-chart-legend .key-outflow {
+  color: var(--series);
+}
+
+.plate-chart-legend .key-spill {
+  color: var(--accent);
+}
+
+/* Per-species colors, shared by the composition areas, the today bar, the
+   history columns and the legend swatches below — set once here rather than
+   on each consuming rule. */
+#plates [data-species="chinook"] {
+  --species-color: var(--chinook);
+}
+#plates [data-species="jackChinook"] {
+  --species-color: var(--jack-chinook);
+}
+#plates [data-species="steelhead"] {
+  --species-color: var(--steelhead);
+}
+#plates [data-species="shad"] {
+  --species-color: var(--shad);
+}
+#plates [data-species="sockeye"] {
+  --species-color: var(--sockeye);
+}
+#plates [data-species="coho"] {
+  --species-color: var(--coho);
+}
+#plates [data-species="jackCoho"] {
+  --species-color: var(--jack-coho);
+}
+#plates [data-species="lamprey"] {
+  --species-color: var(--lamprey);
+}
+
+.plate-area[data-species],
+.plate-today-bar rect[data-species],
+.plate-history-bars rect[data-species] {
+  fill: var(--species-color);
+  stroke: none;
+}
+
+.plate-area[data-series="passage"] {
+  fill: var(--series);
+  stroke: none;
+}
+
+/* 2015's own column in the run-history plate — the one place among ten
+   years of the same chart the accent marks the current reading, same rule
+   the report bar's cursor and playing state follow. */
+.plate-history-current {
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.plate-history-year {
+  fill: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.plate-history-year-current {
+  fill: var(--accent);
+}
+
+.plate-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s3);
+  margin-top: var(--s2);
+}
+
+.plate-legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: var(--t-1);
+}
+
+.plate-legend li i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--species-color);
+  align-self: center;
+}
+
+.plate-legend-label {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.plate-legend b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+#plates-titleblock {
+  padding-top: var(--s3);
+  border-top: var(--rule-heavy) solid var(--accent);
+}
+
+#plates-titleblock p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 2px 0;
+}
+
+#plates-titleblock .label {
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+#plates-titleblock b {
+  font-size: var(--t-2);
+  font-weight: 500;
+  color: var(--text);
+  text-align: right;
 }
 
 /* ---------------------------------------------------------------------

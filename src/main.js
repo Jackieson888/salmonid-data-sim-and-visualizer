@@ -1,5 +1,7 @@
 import { Flock, REMOVE_FADE_FRAMES } from "./boids.js";
 import { runData } from "./data.js";
+import { seasonFraction } from "./seasonScale.js";
+import { initPlates, setPlatesDay, updatePlatesToday } from "./plates.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
 import {
   buildTerrainMesh,
@@ -78,18 +80,6 @@ function dismissLoadingOverlay() {
   setTimeout(remove, 1200);
 }
 
-// Reported but not simulated (see data.js). Keyed by the same field names the
-// parser writes, so the loop below is a straight lookup.
-// The row's <b> is resolved once here rather than by a querySelector inside
-// updateFishCountDisplay's loop — that ran five times per HUD update, on a
-// path that is already the most allocation-heavy thing in the frame, to
-// re-answer a question fixed when the markup was parsed.
-const secondaryCountEls = new Map(
-  [...document.querySelectorAll("#secondary-counts [data-field]")].map((el) => [
-    el.dataset.field,
-    { row: el, value: el.querySelector("b") },
-  ]),
-);
 const waterTempLabel = document.getElementById("water-temp");
 const chinookRunLabel = document.getElementById("chinook-run");
 const seasonTotalLabel = document.getElementById("season-total");
@@ -147,15 +137,11 @@ function updateFishCountDisplay(idx, progress = 0) {
   // is headed once rather than repeating its unit on every row.
   setReadout(fishCountLabel, today.chinook === undefined ? at("count") : total);
 
-  // Species counted at the dam but not in the water (see data.js). Each row
-  // hides itself on a day with none, rather than showing a zero: over a full
-  // season most of these are zero most of the time, and five permanent zeroes
-  // would read as broken instrumentation instead of as an absent species.
-  for (const [field, els] of secondaryCountEls) {
-    const value = at(field);
-    els.row.hidden = value === 0;
-    if (value !== 0) setReadout(els.value, value);
-  }
+  // Species counted at the dam but not in the water, plus the wild/hatchery
+  // steelhead split (see data.js) — reported in the plates drawer rather than
+  // the bar itself now (see plates.js). No-ops until the drawer has actually
+  // been opened once and built its figures.
+  updatePlatesToday(at);
 
   // Conditions. Temperature interpolates like the counts do — it is a real
   // continuous quantity, so a day-to-day ramp is honest — but only when both
@@ -236,7 +222,7 @@ function buildSeasonChart() {
   const last = runData.length - 1;
   if (last <= 0) return;
 
-  const x = (i) => ((i / last) * 1000).toFixed(2);
+  const x = (i) => (seasonFraction(i, last) * 1000).toFixed(2);
 
   const peak = Math.max(...runData.map((d) => d.count ?? 0), 1);
   const passageY = (value) => (100 - Math.sqrt(value / peak) * 100).toFixed(2);
@@ -294,7 +280,7 @@ function buildTimelineAxis() {
     const month = Number(runData[i].date.slice(5, 7)) - 1;
     if (month === previousMonth || !MONTH_ABBREVIATIONS[month]) continue;
     previousMonth = month;
-    const percent = ((i / last) * 100).toFixed(3);
+    const percent = (seasonFraction(i, last) * 100).toFixed(3);
     marks.push(
       `<i style="left:${percent}%"><b>${MONTH_ABBREVIATIONS[month]}</b></i>`,
     );
@@ -1141,6 +1127,7 @@ function jumpToDay(idx) {
   updateFishCountDisplay(idx);
   timelineInput.value = String(idx);
   applySeason(runData[idx].date);
+  setPlatesDay(idx);
 }
 
 // One place that writes the play state, so the button's label and its
@@ -1509,6 +1496,7 @@ function loop(t) {
       updateFishCountDisplay(dayIndex);
       timelineInput.value = String(dayIndex);
       applySeason(runData[dayIndex].date);
+      setPlatesDay(dayIndex);
     }
   }
 
@@ -1590,6 +1578,7 @@ sceneSetup.renderer.domElement.addEventListener(
 // it: build the bounds-shaped world, seed the timeline at day 0, start the
 // loop, and let the fish models finish loading in the background.
 // ---------------------------------------------------------------------
+initPlates();
 createWorld();
 jumpToDay(0);
 frameHandle = requestAnimationFrame(loop);
