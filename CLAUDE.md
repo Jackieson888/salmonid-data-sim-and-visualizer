@@ -1,4 +1,4 @@
-# Salmon Population Visualizer — agent guide
+# Salmonid Data Sim & Visualizer — agent guide
 
 A Three.js boids flocking simulation styled as a salmon run past Lower
 Granite Dam on the Snake River, driven by real daily passage counts from

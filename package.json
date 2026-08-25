@@ -1,5 +1,5 @@
 {
-  "name": "salmon-population-visualizer",
+  "name": "salmonid-data-sim-and-visualizer",
   "version": "1.0.0",
   "description": "A Three.js flocking simulation (Reynolds boids: separation, alignment, cohesion) styled as a salmon run past Lower Granite Dam on the Snake River, with a timeline scrubber driven by real daily passage counts.",
   "type": "module",
@@ -11,6 +11,8 @@
   },
   "keywords": [],
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "three": "^0.185.1"
   },
   "devDependencies": {

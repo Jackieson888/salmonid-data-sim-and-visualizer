@@ -1,7 +1,12 @@
 // inspect.js — standalone single-fish viewer: species picker, turntable, anatomy-label overlay.
 // Design rationale, invariants, gotchas: .claude/context/inspect.md
 
+import { inject as injectAnalytics } from "@vercel/analytics";
+import { injectSpeedInsights } from "@vercel/speed-insights";
 import { QUALITY } from "./quality.js";
+
+injectAnalytics();
+injectSpeedInsights();
 
 // Only one instance is ever drawn here, so (unlike the river) this always
 // renders at the richest settings. realCaustics is forced off because this

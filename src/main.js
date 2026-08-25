@@ -1,4 +1,9 @@
+import { inject as injectAnalytics } from "@vercel/analytics";
+import { injectSpeedInsights } from "@vercel/speed-insights";
 import { Flock, REMOVE_FADE_FRAMES } from "./boids.js";
+
+injectAnalytics();
+injectSpeedInsights();
 import {
   runData,
   runYear,

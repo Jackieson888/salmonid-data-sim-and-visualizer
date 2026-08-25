@@ -1,9 +1,12 @@
-# Snake River Salmon Run — Boids Visualization
+# Salmonid Data Sim & Visualizer
 
 A Three.js flocking simulation (Reynolds boids: separation, alignment,
-cohesion) styled as a salmon run past Lower Granite Dam on the Snake River,
-with a timeline scrubber driven by real daily passage counts published by
-Columbia Basin Research DART.
+cohesion) of real fish passage data from the Snake River at Lower Granite
+Dam, with a timeline scrubber driven by real daily passage counts published
+by Columbia Basin Research DART. Eight species are tracked — Chinook, Jack
+Chinook, steelhead, shad, Pacific lamprey, sockeye, coho, and jack coho —
+five of which drive the flocking simulation itself, styled as the run
+passing the dam.
 
 The shot is a fixed underwater camera in the water column: the school sweeps
 left-to-right past it, the lit surface sits overhead, and the riverbed falls
