@@ -42,6 +42,14 @@
   left: 0;
   right: 0;
   bottom: 0;
+  /* Height safety net: stacked fields on a narrow phone can produce a bar
+     taller than a short viewport. Unconditional (no breakpoint) — on desktop
+     the bar's one-row height never approaches 70vh, so this never binds
+     there. resize()'s ResizeObserver in inspect.js writes --bar-h off the
+     capped rendered box, so #inspect-panel's bottom anchor and #fish-canvas's
+     recentering translateY both stay correct automatically. */
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 /* display:flex reasserted (not just flex-wrap): style.css's own narrow
@@ -71,6 +79,25 @@
 #season-field {
   flex: 0 0 auto;
   width: 320px;
+}
+
+/* #species-field/#view-field already wrap safely via #inspect-bar
+   .report-body's flex-wrap above and don't need touching (ui.md is explicit
+   the river page's grid approach is wrong for this page's four differently
+   sized fields — don't reuse it here). #length-field/#season-field are the
+   real bug: a hard-pinned 320px min-width/width each overflows any phone
+   viewport with no scrollbar to reach it (overflow:hidden on html,body). */
+@media (max-width: 700px) {
+  #length-field {
+    flex: 1 1 100%;
+    min-width: 0; /* was 320px — same flex-basis-vs-min-width class of bug
+      ui.md documents for the river's own .field fix */
+  }
+
+  #season-field {
+    flex: 1 1 100%;
+    width: auto; /* was a fixed 320px */
+  }
 }
 
 #inspect-panel .field-head {
@@ -668,4 +695,31 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   dominant-baseline: middle;
+}
+
+/* Touch-target growth, mirroring style.css's approach for the river page:
+   (pointer: coarse), not a width breakpoint. Real padding growth on the
+   buttons; the slider keeps its thin instrument-look track and only grows
+   its draggable hit area. */
+@media (pointer: coarse) {
+  .toggle-btn,
+  #reset-view,
+  .species-option {
+    padding-block: 10px;
+  }
+
+  .range-field input[type="range"] {
+    height: 32px;
+  }
+
+  .range-field input[type="range"]::-webkit-slider-thumb {
+    width: 18px;
+    height: 18px;
+    margin-top: -7.5px;
+  }
+
+  .range-field input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+  }
 }

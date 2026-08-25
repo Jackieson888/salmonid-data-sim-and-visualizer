@@ -87,7 +87,7 @@ scene.background = new THREE.Color(BACKDROP_COLOR);
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 5000);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio));
 // Matches sceneSetup.js's grading so the model reads the same as in the river.
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;

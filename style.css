@@ -162,6 +162,18 @@ body {
   color: var(--text);
 }
 
+/* Height safety net, mirroring #inspect-bar's identical rule (inspect.css):
+   on a landscape phone the compact HUD's stacked fields (#masthead/#passage/
+   #controls each span the full grid row even in 2-column mode) can still add
+   up to more than the viewport's own height. Without this, #hud's inset:0 +
+   flex layout lets #report overflow past the top edge with no way to reach
+   the clipped content. Unconditional — on desktop #report is a single row,
+   well under 70vh of any reasonable window, so this never binds there. */
+#report {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
 .report-body {
   display: flex;
   align-items: stretch;
@@ -951,31 +963,43 @@ body {
   padding: 52px var(--s4) var(--s4); /* clears #plates-toggle floating above */
 }
 
-/* Scrollbars, shared between this drawer and #inspect-panel (inspect.css). */
+/* Scrollbars, shared between this drawer and #inspect-panel/#inspect-bar
+   (inspect.css) and this file's own #report (both bottom bars can now
+   scroll internally on a short viewport — see the max-height rules above). */
 #plates-scroll,
-#inspect-panel {
+#inspect-panel,
+#inspect-bar,
+#report {
   scrollbar-width: thin;
   scrollbar-color: var(--line) var(--ink);
 }
 
 #plates-scroll::-webkit-scrollbar,
-#inspect-panel::-webkit-scrollbar {
+#inspect-panel::-webkit-scrollbar,
+#inspect-bar::-webkit-scrollbar,
+#report::-webkit-scrollbar {
   width: 8px;
 }
 
 #plates-scroll::-webkit-scrollbar-track,
-#inspect-panel::-webkit-scrollbar-track {
+#inspect-panel::-webkit-scrollbar-track,
+#inspect-bar::-webkit-scrollbar-track,
+#report::-webkit-scrollbar-track {
   background: var(--ink);
 }
 
 #plates-scroll::-webkit-scrollbar-thumb,
-#inspect-panel::-webkit-scrollbar-thumb {
+#inspect-panel::-webkit-scrollbar-thumb,
+#inspect-bar::-webkit-scrollbar-thumb,
+#report::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 0;
 }
 
 #plates-scroll::-webkit-scrollbar-thumb:hover,
-#inspect-panel::-webkit-scrollbar-thumb:hover {
+#inspect-panel::-webkit-scrollbar-thumb:hover,
+#inspect-bar::-webkit-scrollbar-thumb:hover,
+#report::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
 }
 
@@ -1325,8 +1349,11 @@ body {
 
 /* Below this the fields can only stack (744px of an 812px phone screen), so
    the narrow layout is a two-column grid instead — see ui.md for the fixed-
-   width-table/grid-track overflow bug this ran into. */
-@media (max-width: 640px) {
+   width-table/grid-track overflow bug this ran into. Also matched on short
+   viewport height (not just narrow width) so a landscape phone (e.g.
+   667x375, which falls between this breakpoint and the 900px one on width
+   alone) gets the same compact treatment — one system, not two. */
+@media (max-width: 640px), (max-height: 500px) {
   #hud {
     padding: 10px;
   }
@@ -1378,5 +1405,44 @@ body {
 
   #speed {
     margin-left: 0;
+  }
+}
+
+/* Touch-target growth. (pointer: coarse), not a width breakpoint — a touch
+   tablet at desktop width gets these, a narrow desktop browser window does
+   not (same signal quality.js already uses for tier detection). Real
+   padding growth, not an invisible expanded hit-region: .speed-btn/#transport
+   controls sit only 4-8px apart, so a bigger-than-visible catch-area risks
+   stealing a neighbor's tap. #year-select is deliberately excluded — it
+   lives in #masthead .reach's plain-inline-flow wrapped-text layout (see
+   ui.md), and padding it risks reintroducing the wrapping bug that layout
+   was built to avoid. */
+@media (pointer: coarse) {
+  .transport-btn,
+  .speed-btn,
+  #play-pause,
+  #plates-toggle,
+  #fish-viewer-link,
+  #back-link,
+  #timeline-axis button,
+  .plate-toggle {
+    padding-block: 10px;
+  }
+
+  /* The visual gauge cursor stays a thin hairline bar (see rule above) —
+     only the draggable hit area grows, keeping the instrument look. */
+  #timeline {
+    height: 32px;
+  }
+
+  #timeline::-webkit-slider-thumb {
+    width: 10px;
+    height: 26px;
+    margin-top: -12.5px;
+  }
+
+  #timeline::-moz-range-thumb {
+    width: 10px;
+    height: 26px;
   }
 }

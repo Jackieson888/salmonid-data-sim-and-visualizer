@@ -43,6 +43,24 @@ const GRAIN_AMOUNT = 0.03;
 const FOV = 90;
 const NEAR = 1;
 
+// Portrait-only correction: FOV above is a *vertical* value tuned for a
+// landscape composition ("broadside... fish spread across the frame so the
+// count reads directly" — see context doc). At aspect >= 1 that's untouched.
+// Below aspect 1, holding the vertical FOV constant would keep collapsing
+// the *horizontal* FOV as phones get taller, cropping the school into a
+// narrow column. Instead grow the vertical FOV so horizontal FOV holds near
+// its aspect=1 value (90deg), clamped so very narrow aspects (foldables,
+// split-screen) can't run into fisheye territory.
+const PORTRAIT_FOV_CAP = 105; // tune by eye
+
+function verticalFovForAspect(aspect) {
+  if (aspect >= 1) return FOV;
+  const halfFovRad = (FOV * Math.PI) / 360;
+  const correctedDeg =
+    (2 * Math.atan(Math.tan(halfFovRad) / aspect) * 180) / Math.PI;
+  return Math.min(correctedDeg, PORTRAIT_FOV_CAP);
+}
+
 // Spliced into OutputPass's shader (see VignetteOutputPass below) rather than
 // run as its own pass. Reads/writes `texel`, sampled by the line it replaces.
 const VIGNETTE_GLSL = /* glsl */ `
@@ -313,6 +331,7 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     );
     renderer.setSize(pixelBounds.width, pixelBounds.height);
     camera.aspect = pixelBounds.width / pixelBounds.height;
+    camera.fov = verticalFovForAspect(camera.aspect);
     camera.far = Math.max(worldBounds.width, worldBounds.height) * 5;
     applyFraming(worldBounds);
     camera.updateProjectionMatrix();
