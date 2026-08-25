@@ -10,25 +10,13 @@
              Granite Dam on the Snake River, driven by real daily adult
              passage counts from Columbia Basin Research DART."
   />
-  <!-- An explicit icon, not only for the tab: without one the browser
-       requests /favicon.ico on every load and the 404 lands in the console,
-       which scripts/screenshot.mjs treats as a failure (it has no other way
-       to catch a GLSL compile error — see its header). -->
+  <!-- Explicit icon: without one, a 404 for /favicon.ico trips
+       scripts/screenshot.mjs's failure detection. See .claude/context/ui.md -->
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <!-- Matches the report bar's ink so mobile browser chrome doesn't frame a
-       dark scene in white. -->
   <meta name="theme-color" content="#0a0f12" />
 
-  <!-- Social card. Without these a shared link unfurls as a bare URL, which
-       for a page that is entirely one image is the worst possible preview.
-       og-image.png is a real capture of the running scene at day 118 (peak
-       shad), generated with scripts/screenshot.mjs — regenerate it from there
-       rather than hand-making one, so the preview cannot drift from what the
-       page actually looks like.
-
-       og:image:alt and twitter:image:alt are not decorative: they are what a
-       screen reader announces in a timeline, where the image is the only
-       content the card has. -->
+  <!-- Social card — regenerate og-image.png via scripts/screenshot.mjs
+       rather than hand-making one. See .claude/context/ui.md -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Salmon Run — A Boids Simulation" />
   <meta
@@ -54,67 +42,30 @@
   <main id="app">
     <canvas id="river-canvas"></canvas>
 
-    <!-- The HUD is deliberately styled as a fish-passage report rather than a
-         consumer overlay: the numbers in it are real daily counts off the
-         Columbia Basin Research DART feed for a Corps of Engineers project
-         (see data.js), and reading them in the register they are actually
-         published in is truer to the data than friendly rounded chips were.
-         Hence the uppercase Helvetica labels, hairline rules, tabular
-         numerals, and hard corners throughout — see style.css.
-
-         It is one bar rather than a masthead plus a panel. Everything is on
-         the same dark ink instead of half of it floating over open water,
-         which is what the small identity type needed to be readable, and
-         laying the fields out in columns rather than stacked leaves the
-         frame — the actual subject — almost entirely clear. -->
+    <!-- The HUD's report styling: .claude/context/ui.md -->
     <div id="hud">
       <section id="report">
         <div class="report-body">
-          <!-- 1. Identity and the current reading.
-
-               The season is a control rather than a printed line: all ten
-               counting seasons DART publishes for this project are vendored
-               (see AVAILABLE_YEARS in data.js), and picking one swaps the
-               whole record in place — bar, chart, month axis and every plate
-               in the drawer. -->
+          <!-- 1. Identity and the current reading. -->
           <header class="field" id="masthead">
             <p class="station">Project LWG &middot; Lower Granite Lock &amp; Dam</p>
             <h1>Adult Fish Passage</h1>
             <p class="reach">
               <span>Snake River &middot; Counting Season</span>
-              <!-- Options and the initial value are written from
-                   AVAILABLE_YEARS in main.js, so the vendored range is
-                   declared in exactly one place. -->
+              <!-- Options/initial value written from AVAILABLE_YEARS in main.js. -->
               <select id="year-select" aria-label="Counting season"></select>
             </p>
-            <!-- The date stays a printed reading rather than a picker. The
-                 season select above, the clickable month ticks under the
-                 timeline, the slider and the arrow keys already reach any day,
-                 month or year between them; a date field on top of that was a
-                 second way to do what the axis already does, and a form
-                 control in the middle of a reading. -->
+            <!-- Stays a printed reading, not a picker — the season select,
+                 month ticks, slider and arrow keys already reach any date. -->
             <p class="readout">
               <span id="date-label">Loading run data…</span>
               <span id="day-ordinal"></span>
             </p>
           </header>
 
-          <!-- 2. The day's counts. Real per-day DART numbers, not the
-               simulated boid count (which is capped well below them — see
-               MAX_POPULATION in main.js). Key colors match each species'
-               InstancedMesh tint in scene/fishMesh.js's SPECIES_COLORS.
-
-               All EIGHT species DART counts at this project, not just the five
-               the flock draws. Sockeye, coho and jack coho are small numbers
-               next to the others — a few hundred each across a season — and
-               that is exactly why they belong here: a passage report showing
-               only the abundant species hides the ones anyone is actually
-               worried about. They carry a dagger and the footnote below says
-               what it means, so the table never implies they are in the water.
-
-               Bull trout, chum and pink are parsed too (see data.js) but stay
-               out: they are structurally zero at Lower Granite, and three rows
-               of "0" is not information. -->
+          <!-- 2. The day's counts — all eight DART species at this project,
+               not just the five the flock draws (see .claude/context/data.md
+               and .claude/context/main.md for the simulated/reported split). -->
           <div class="field" id="passage">
             <p class="field-head">
               <span class="label">Daily adult passage</span>
@@ -150,12 +101,9 @@
             </table>
           </div>
 
-          <!-- 3. Conditions at the project, straight off the same feed.
-               Temperature rides in on the adult-passage CSV; outflow, spill
-               and dissolved gas come from a separate river-environment export
-               fetched AFTER boot (see loadConditionsForYear in main.js), so
-               these three read "—" for the first moment and stay that way for
-               a season with no vendored river file. -->
+          <!-- 3. Conditions — temperature rides the passage CSV; outflow,
+               spill, dissolved gas load after boot (loadConditionsForYear,
+               main.js) and read "—" for a season with no vendored river file. -->
           <div class="field" id="conditions">
             <p class="field-head"><span class="label">Conditions</span></p>
             <p><span class="label">Water</span><b id="water-temp">—</b></p>
@@ -165,12 +113,8 @@
             <p><span class="label">Chinook run</span><b id="chinook-run">—</b></p>
           </div>
 
-          <!-- 4. Where this season stands. A cumulative count on its own says
-               nothing about whether a run is large or small — the ten-year
-               daily mean is what turns it into a reading. Both figures count
-               the same five species (see the note on `count` in
-               dart/parseAdultDaily.js and the envelope in
-               scripts/fetch-dart.mjs), so the comparison is like for like. -->
+          <!-- 4. Where this season stands vs. the ten-year daily mean —
+               both figures count the same five species (data.md). -->
           <div class="field" id="run-status">
             <p class="field-head"><span class="label">Run to date</span></p>
             <p><span class="label">Season</span><b id="season-total">0</b></p>
@@ -178,41 +122,24 @@
             <p><span class="label">Vs. avg</span><b id="season-delta">—</b></p>
           </div>
 
-          <!-- 4. The season, and the controls that move through it.
-
-               Laid out as a column — transport row, then the chart/slider/axis
-               stack — rather than [button | stack]. The stack's three parts
-               have to be the same width and start at the same x, because the
-               red cursor reads against the curve above it and indenting one
-               but not the others quietly breaks that. A control column beside
-               them would do exactly that; a row above them cannot. -->
+          <!-- 5. The season and its controls — column layout, see ui.md. -->
           <div class="field" id="controls">
-            <!-- Deliberately short. Day-to-day stepping lives on the arrow
-                 keys and the slider, and the ends of the season on Home/End —
-                 a row of glyph buttons duplicating all of that was more
-                 apparatus than this interface wants.
-
-                 What stays are the two things with nowhere else to live: the
-                 run/hold state, and the pace. -->
+            <!-- Deliberately short: day-to-day stepping is the arrow keys
+                 and slider, season ends are Home/End. Just run/hold + pace. -->
             <div id="transport">
-              <!-- No aria-label: it would override the visible text, which is
-                   the actual state. aria-pressed is set from setPlaying() in
-                   main.js. Space toggles this from anywhere on the page. -->
+              <!-- No aria-label — it would override the visible text (the
+                   actual state). aria-pressed set from setPlaying(), main.js. -->
               <button id="play-pause" aria-pressed="false">Pause</button>
               <button class="transport-btn" id="to-peak" type="button">Peak</button>
 
-              <!-- A counting season is ~300 days; at 1x that is a twenty-minute
-                   watch, which is too long to ever see the shape of a run. The
-                   buttons are written from SPEEDS in main.js so the labels and
-                   the divisors cannot disagree. -->
+              <!-- Written from SPEEDS in main.js so labels/divisors agree. -->
               <div id="speed" role="group" aria-label="Playback speed">
                 <span class="label">Speed</span>
               </div>
             </div>
             <div id="timeline-block">
-              <!-- The whole season at a glance: daily passage as an area,
-                   water temperature as a line. Drawn at boot from runData
-                   (see buildSeasonChart in main.js). -->
+              <!-- Daily passage as an area, water temp as a line — drawn at
+                   boot from runData (buildSeasonChart, main.js). -->
               <figure id="season-chart">
                 <figcaption>
                   <span class="key-passage">Daily passage</span>
@@ -236,20 +163,15 @@
                 value="0"
                 aria-label="Date in the counting season"
               />
-              <!-- Month ticks, positioned from runData at boot (see
-                   buildTimelineAxis in main.js) rather than spaced evenly: the
-                   record only covers the dam's counting season, so the months
-                   are not equal fractions of the track. -->
+              <!-- Month ticks, positioned from runData (buildTimelineAxis,
+                   main.js) — not spaced evenly, since months aren't equal
+                   fractions of a counting-season track. -->
               <div id="timeline-axis" aria-hidden="true"></div>
             </div>
           </div>
         </div>
 
-        <!-- Provenance. The species counted at the dam but not modelled used
-             to live here as a row of footnote figures ("Also counted") — they
-             moved to FIG. 2 in the plates drawer below, where sockeye, coho
-             and jack coho get a real chart instead of an 8px aside, and
-             wild/hatchery steelhead gets FIG. 3 to itself. -->
+        <!-- Provenance. -->
         <div class="report-foot">
           <p class="footnote">
             &dagger; counted at the dam, not drawn in the water &middot;
@@ -265,16 +187,11 @@
 
     <pre id="debug-panel" hidden></pre>
 
-    <!-- A single fish, up close, running the same swim clip in isolation —
-         see src/inspect.js. Useful both as a mesh/texture debugging view and
-         as a way for a viewer to just look at the model. -->
+    <!-- A single fish up close, running the swim clip in isolation — src/inspect.js -->
     <a id="fish-viewer-link" href="/inspect.html">Fish viewer &rarr;</a>
 
-    <!-- The plates drawer — everything from the DART record the bar itself
-         has no room for. Closed by default and built lazily on first open
-         (see src/plates.js); slides in over the canvas rather than resizing
-         it, since the underwater vignette in scene/sceneSetup.js is tuned to
-         the canvas's current on-screen size. -->
+    <!-- The plates drawer — closed by default, built lazily on first open.
+         See .claude/context/plates.md -->
     <button
       id="plates-toggle"
       type="button"
@@ -292,24 +209,17 @@
       <p>Loading fish assets</p>
     </div>
 
-    <!-- Real failures the viewer should know about, rather than console-only.
-         role="status" so a screen reader announces it without stealing focus;
-         written by showNotice() in main.js and by the boot handler below. -->
+    <!-- role="status" announces failures without stealing focus; written by
+         showNotice() in main.js and the boot handler below. -->
     <div id="notice" role="status" hidden></div>
   </main>
 
-  <!-- main.js is a module, so if it — or anything it imports, data.js
-       especially — throws while evaluating, NOTHING in it runs, including its
-       own error handling. A classic script is the only thing that can still
-       report that, because it has already executed by then. Without this the
-       failure is a permanently dimmed canvas under "Loading fish assets" and
-       one line in a console the viewer will never open. -->
+  <!-- Catches a module-eval throw in main.js/data.js, which would otherwise
+       skip main.js's own error handling entirely. See .claude/context/ui.md -->
   <script>
     (function () {
       function onBootFailure(event) {
-        // main.js sets this once it has finished evaluating. After that point
-        // errors are runtime problems it can report itself, and are not
-        // necessarily fatal — so this handler stops claiming them.
+        // main.js sets this once booted; after that, errors aren't necessarily fatal.
         if (window.__riverBooted) return;
 
         var loading = document.getElementById("fish-loading");

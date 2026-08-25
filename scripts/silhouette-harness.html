@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<!-- Dev-only harness for scripts/render-fish-silhouettes.mjs. Not part of the
+     shipped app — loads one GLB at a time (via window.renderSilhouette,
+     called from Playwright) and rasterizes its bind-pose mesh from a true
+     orthographic side view to a transparent PNG, which is what the fish
+     viewer's length-scale silhouettes are traced from instead of a hand-drawn
+     approximation. See src/scene/fishMesh.js for the GLBs this loads and
+     src/inspect.js for where the output PNGs end up used. -->
+<head><meta charset="UTF-8" /></head>
+<body>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
+const AXIS_VEC = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 1, 0),
+  z: new THREE.Vector3(0, 0, 1),
+};
+
+// Renders one GLB's bind-pose mesh (no animation applied — see the header
+// comment on fishMesh.js: these are a single skinned mesh + a spine-bone swim
+// clip, and an untouched skeleton renders in its bind pose, which is the
+// clean "resting" shape a silhouette wants) from directly along whichever
+// world axis is the model's thinnest — that's the true broadside view
+// regardless of how each GLB happened to be oriented in Blender, so this
+// works unchanged across all four models without hand-tuned per-species
+// camera setup. flipX/flipY correct for the sign ambiguity that axis-picking
+// leaves (nose could land on either side, dorsal could land up or down) —
+// see CORRECTIONS in render-fish-silhouettes.mjs, filled in after eyeballing
+// an unflipped preview of each.
+window.renderSilhouette = async function (url, opts = {}) {
+  const { targetHeight = 480, margin = 0.06, flipX = false, flipY = false } = opts;
+
+  const scene = new THREE.Scene();
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(url);
+  const root = gltf.scene;
+
+  // Flat, unlit, double-sided: this is a coverage mask, not a rendered fish —
+  // DoubleSide guarantees no gaps from a fin sheet or the inside of the
+  // mouth happening to face away from this particular camera angle.
+  root.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.material = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+    }
+  });
+  scene.add(root);
+  root.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+
+  const extents = [
+    { axis: "x", value: size.x },
+    { axis: "y", value: size.y },
+    { axis: "z", value: size.z },
+  ].sort((a, b) => a.value - b.value);
+  const viewAxis = extents[0].axis; // thinnest — look along this
+  const heightAxis = extents[1].axis; // dorsal/ventral — vertical in the image
+  const lengthAxis = extents[2].axis; // nose/tail — horizontal in the image
+
+  const lengthExtent = extents[2].value;
+  const heightExtent = extents[1].value;
+  const viewDist = Math.max(size.x, size.y, size.z) * 3 + 10;
+
+  const halfW = (lengthExtent / 2) * (1 + margin);
+  const halfH = (heightExtent / 2) * (1 + margin);
+  const camera = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.01, viewDist * 2);
+  camera.position.copy(center).addScaledVector(AXIS_VEC[viewAxis], viewDist);
+  camera.up.copy(AXIS_VEC[heightAxis]);
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+
+  const height = targetHeight;
+  const width = Math.max(1, Math.round(height * (halfW / halfH)));
+
+  const canvas = document.createElement("canvas");
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setSize(width, height, false);
+  renderer.setClearColor(0x000000, 0);
+  renderer.render(scene, camera);
+
+  let outCanvas = canvas;
+  if (flipX || flipY) {
+    outCanvas = document.createElement("canvas");
+    outCanvas.width = width;
+    outCanvas.height = height;
+    const ctx = outCanvas.getContext("2d");
+    ctx.translate(flipX ? width : 0, flipY ? height : 0);
+    ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+    ctx.drawImage(canvas, 0, 0);
+  }
+
+  const dataUrl = outCanvas.toDataURL("image/png");
+  renderer.dispose();
+  return {
+    dataUrl,
+    width,
+    height,
+    axes: { viewAxis, heightAxis, lengthAxis },
+    size: { x: size.x, y: size.y, z: size.z },
+  };
+};
+window.__harnessReady = true;
+</script>
+</body>
+</html>

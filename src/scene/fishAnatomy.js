@@ -1,32 +1,13 @@
 // fishAnatomy.js
-// Anatomy anchors for the fish viewer's labeled plate (src/inspect.js). The
-// GLBs carry no anatomical structure to key off — every model is one mesh,
-// one material, a bare 16-bone spine (see the NOTE at the top of
-// fishMesh.js) — so each part below is a hand-placed target point in the
-// model's own local space, snapped to the nearest real vertex rather than
-// left floating. That keeps a label glued to the actual surface without
-// pretending the mesh has geometry it doesn't.
+// Hand-placed anatomy anchors for the fish viewer's labeled plate (src/inspect.js), snapped to the nearest real vertex per species/model.
+// Design rationale, invariants, gotchas: .claude/context/scene/fishAnatomy.md
 //
-// Coordinates are fractions of the model's own extent, in the local space
-// loadSpeciesModel leaves geometry in (fishMesh.js): body along Z with the
-// nose at +Z, lateral axis X, vertical axis Y, everything recentered on the
-// bounding-box center.
-//   t — nose (0) to tail (1) fraction along Z.
-//   x — fraction of half-width along X. Positive picks the +X flank; since
-//       the model is bilaterally symmetric, this is "a side", not "the
-//       correct side" — whichever way the turntable currently has the fish
-//       facing decides whether that flank is toward the camera or not (see
-//       the facing-normal cull in inspect.js), so paired features are
-//       expected to appear and disappear as the fish rotates.
-//   y — fraction of half-height along Y. Positive is dorsal, negative
-//       ventral.
+// Part coordinates are fractions of the model's local-space extent (body along Z, nose at +Z; x lateral, y vertical):
+// t = nose(0)..tail(1), x = fraction of half-width, y = fraction of half-height.
 import * as THREE from "three";
 import { SPECIES_MODEL_URL, PHASE_TO_CYCLE } from "./fishMesh.js";
 
-// Salmonids: chinook, jack chinook (same mesh as chinook), steelhead. Real
-// fins and a real adipose fin — the small, rayless fin unique to this family,
-// and the one a hatchery clips before release (see FIG. 3 in the plates
-// drawer).
+// Salmonids: chinook, jack chinook (same mesh as chinook), steelhead — has an adipose fin, unlike shad/lamprey below.
 const SALMONID_PARTS = [
   { id: "snout", label: "Snout", t: 0.02, x: 0, y: 0.05, note: "The pointed front of the head." },
   { id: "eye", label: "Eye", t: 0.1, x: 0.85, y: 0.35, note: "Set high and to the side for a wide field of view." },
@@ -34,13 +15,6 @@ const SALMONID_PARTS = [
   { id: "pectoralFin", label: "Pectoral Fin", t: 0.24, x: 0.9, y: -0.5, note: "Paired fin just behind the gills. Steers and brakes." },
   { id: "dorsalFin", label: "Dorsal Fin", t: 0.45, x: 0, y: 1, note: "The fin along the back. Keeps the fish from rolling." },
   { id: "pelvicFin", label: "Pelvic Fin", t: 0.55, x: 0.6, y: -0.9, note: "Paired fin on the belly. Fine steering and stability." },
-  // t was 0.68, which is barely past the midpoint between the dorsal fin
-  // (~0.46) and the caudal peduncle (~0.91) — forward of where a salmonid's
-  // adipose fin actually sits, and forward enough on these meshes that the
-  // authored y of 0.9 had no vertex anywhere near it: the point snapped down
-  // to ~0.26 of half-height, onto the upper flank rather than the dorsal
-  // ridge, and the label pointed at bare side. 0.79 puts it just ahead of the
-  // peduncle where the fin belongs, and y stays at the ridge.
   { id: "adiposeFin", label: "Adipose Fin", t: 0.79, x: 0, y: 1, note: "A small, rayless fin found only on salmon and trout. Hatchery fish usually have it clipped before release — that clip is how wild and hatchery fish are told apart at the dam (see FIG. 3, Wild vs. Hatchery Steelhead)." },
   { id: "analFin", label: "Anal Fin", t: 0.74, x: 0, y: -0.9, note: "Behind the vent. Stabilizes against side-to-side yaw." },
   { id: "lateralLine", label: "Lateral Line", t: 0.5, x: 0.95, y: 0, note: "A row of sensory pores along the flank, sensing vibration and pressure change in the water." },
@@ -48,10 +22,7 @@ const SALMONID_PARTS = [
   { id: "caudalFin", label: "Caudal Fin", t: 0.98, x: 0, y: 0.55, note: "The tail fin — the main source of forward thrust." },
 ];
 
-// Shad: a clupeid, not a salmonid — no adipose fin, a deeply forked tail,
-// and a keel of ventral scutes (modified, sharp-edged scales) along the
-// belly that salmon and trout don't have. Sharing the salmonid list here
-// would put a fin label on a fish that doesn't have that fin.
+// Shad: a clupeid, not a salmonid — no adipose fin, forked tail, ventral scutes salmonids lack.
 const SHAD_PARTS = [
   { id: "snout", label: "Snout", t: 0.03, x: 0, y: 0.1, note: "The front of the head — blunter than a salmonid's." },
   { id: "eye", label: "Eye", t: 0.12, x: 0.85, y: 0.4, note: "Large relative to the head, typical of a fish that feeds on plankton by sight." },
@@ -65,12 +36,7 @@ const SHAD_PARTS = [
   { id: "caudalFin", label: "Caudal Fin", t: 0.98, x: 0, y: 0.5, note: "Deeply forked — more so than any salmonid's — typical of an open-water schooling fish." },
 ];
 
-// Pacific lamprey: not a bony fish at all — a jawless fish (Agnatha), the
-// most anatomically distinct thing in the run by far. No jaws (an oral sucker
-// disc instead), no paired fins (no pectorals, no pelvics — the dorsal fin(s)
-// and tail finfold are all it has), no scales, no gill cover, no adipose fin.
-// Reusing either list above would put labels on parts a lamprey doesn't have
-// at all, so it gets its own.
+// Pacific lamprey: a jawless fish (Agnatha), the most anatomically distinct thing in the run — its own list entirely.
 const LAMPREY_PARTS = [
   { id: "oralDisc", label: "Oral Disc", t: 0.01, x: 0, y: -0.05, note: "A jawless, cartilage-ringed sucker mouth lined with keratinized teeth — used to latch onto a host fish and rasp through skin to feed on blood and tissue, not to bite." },
   { id: "nostril", label: "Nostril", t: 0.05, x: 0, y: 0.35, note: "A single nasohypophyseal opening on top of the head. Bony fish have paired nostrils; a lamprey has only this one, shared with the pineal (light-sensing) organ beneath it." },
@@ -100,10 +66,7 @@ function computeHalfExtents(positions) {
   return { halfWidth, halfHeight };
 }
 
-// Nearest actual vertex to a target point, weighting the nose-tail axis
-// heavier than the other two — `t` is the primary thing each part's author
-// reasoned about, so it should stay authoritative even where the surface
-// curves away in x/y near a target that sits just off the mesh.
+// Nearest actual vertex to a target point, weighting the nose-tail axis heavier than x/y.
 function nearestVertex(positions, target) {
   let best = -1;
   let bestDist = Infinity;
@@ -122,11 +85,7 @@ function nearestVertex(positions, target) {
 
 const resolvedCache = new Map();
 
-// Resolves this species' part list to real vertex indices in `assets`
-// (one entry of the assetsByUrl Map loadFishAssets() resolves to — see
-// SPECIES_MODEL_URL). Cached per species: the geometry never changes after
-// load, so this only has to run once per species per page load, not once per
-// species change.
+// Resolves this species' part list to real vertex indices in `assets`; cached per species.
 export function resolveAnatomy(species, assetsByUrl) {
   if (resolvedCache.has(species)) return resolvedCache.get(species);
 
@@ -148,11 +107,7 @@ export function resolveAnatomy(species, assetsByUrl) {
       id: part.id,
       label: part.label,
       note: part.note,
-      // The authored x fraction, kept on the resolved anchor so the overlay
-      // (inspect.js) can tell a genuinely paired lateral feature (|side|
-      // large — eye, pectoral fin, ...) from a midline one (side ≈ 0 — the
-      // dorsal fin, ...) and only run the near/far-side facing test on the
-      // former. See the note by that test for why.
+      // Authored x fraction — lets inspect.js tell paired features (|side| large) from midline ones.
       side: part.x,
       vertexIndex,
       restPosition: new THREE.Vector3(
@@ -174,12 +129,7 @@ export function resolveAnatomy(species, assetsByUrl) {
   return resolved;
 }
 
-// Replicates VERTEX_SHADER's swim-bend sampling on the CPU for one vertex,
-// so a label can track the exact same animated surface the shader draws —
-// see sampleVatOffset/`bent` in fishMesh.js. NearestFilter + texel-center UVs
-// mean the shader never interpolates spatially, so reading the raw baked
-// array directly (rather than going through a real texture sample) gives an
-// identical result.
+// Replicates the vertex shader's swim-bend sampling on the CPU for one vertex, so a label tracks the same animated surface.
 export function animatedLocalPosition(assets, part, cyclePos, wobblePhase, out) {
   const { vat } = assets;
   const data = vat.texture.image.data;
@@ -200,6 +150,30 @@ export function animatedLocalPosition(assets, part, cyclePos, wobblePhase, out) 
     part.restPosition.x + (data[o0] + (data[o1] - data[o0]) * t),
     part.restPosition.y + (data[o0 + 1] + (data[o1 + 1] - data[o0 + 1]) * t),
     part.restPosition.z + (data[o0 + 2] + (data[o1 + 2] - data[o0 + 2]) * t),
+  );
+  return out;
+}
+
+// Same idea as animatedLocalPosition, for one bone of the GLB's real armature — stored as absolute positions, not offsets.
+export function animatedBonePosition(assets, boneIndex, cyclePos, wobblePhase, out) {
+  const { vat } = assets;
+  const { positions, count } = vat.bones;
+  const frameCount = vat.frameCount;
+
+  const cycles = cyclePos + wobblePhase * PHASE_TO_CYCLE;
+  const frameF = (((cycles % 1) + 1) % 1) * frameCount;
+  const frame0 = Math.floor(frameF);
+  const t = frameF - frame0;
+
+  const row0 = frame0 % frameCount;
+  const row1 = (frame0 + 1) % frameCount;
+  const o0 = (row0 * count + boneIndex) * 3;
+  const o1 = (row1 * count + boneIndex) * 3;
+
+  out.set(
+    positions[o0] + (positions[o1] - positions[o0]) * t,
+    positions[o0 + 1] + (positions[o1 + 1] - positions[o0 + 1]) * t,
+    positions[o0 + 2] + (positions[o1 + 2] - positions[o0 + 2]) * t,
   );
   return out;
 }

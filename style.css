@@ -1,29 +1,10 @@
-/* The HUD reads as a fish-passage report rather than a consumer overlay — see
-   the note in index.html for why. Four rules carry that look, and everything
-   below is an application of one of them:
-
-     1. Hard corners. No border-radius anywhere except the species keys, which
-        are squares too.
-     2. Hairline rules and 1px borders instead of shadows, glows or blur.
-     3. Uppercase Helvetica/Arial at small sizes with wide letter-spacing for
-        every label; tabular monospace for every number, so digits hold their
-        column as the counts change each day.
-     4. One accent color, used only to mark the current reading — the timeline
-        cursor and the playing state. Everything else is neutral ink.
-
-   The whole thing is one bar across the bottom of the frame, divided into
-   fields by vertical hairlines. It was a floating masthead plus a tall panel,
-   which cost roughly a third of the frame's height and left the identity type
-   sitting over open water where its small sizes were barely readable. */
+/* Design rationale, invariants, gotchas: .claude/context/ui.md */
 
 :root {
-  /* Page background, visible only for the instant before the canvas paints
-     its first frame. */
+  /* Page background, seen only before the canvas paints its first frame. */
   --bg: #061a2e;
 
-  /* Panel ink. Neutral slate rather than a tint of the scene: the water is
-     green (see RIVER_TINT in season.js) and a green-cast panel reads as part
-     of the render instead of as chrome laid over it. */
+  /* Panel ink — neutral slate, not a tint of the (green) water. */
   --ink: rgba(10, 15, 18, 0.88);
   --line: #2c3841;
   --line-soft: #1b242a;
@@ -31,40 +12,21 @@
   --text: #e4e8ea;
   --text-dim: #8d9aa3;
   --text-faint: #5f6b73;
-  /* One step down from --text-faint — the "Also counted" label prefix in the
-     footnote strip needs to sit visibly behind the figures next to it. */
   --text-dimmer: #47525a;
 
-  /* Engineer red. The one saturated color in the interface — reserved for the
-     current reading, never used decoratively. */
+  /* Engineer red — the one saturated, non-decorative accent color. */
   --accent: #c1272d;
 
-  /* Per-species keys, matching SPECIES_COLORS in scene/fishMesh.js so the
-     table key and the fish in the water are the same color. lamprey's own
-     key color lives down in the "counted at the dam" block below rather than
-     here, purely for history — it was picked back when lamprey was only
-     reported, not swum, and its muted brown still reads as the right color
-     for a jawless, unscaled fish now that it is. */
+  /* Per-species keys, matching SPECIES_COLORS in scene/fishMesh.js. */
   --chinook: #ff6b6b;
   --jack-chinook: #ffb066;
   --steelhead: #b9c9c2;
   --shad: #c98bf0;
 
-  /* The passage area in the season chart. Not a palette accent — it is the
-     water's own green, so the chart reads as belonging to the scene above it
-     rather than as a sixth species color. */
+  /* Season chart passage area — the water's own green, not a species color. */
   --series: #4c6b63;
 
-  /* Counted at the dam but never drawn in the water — sockeye, coho and jack
-     coho (see data.js). Same muted, desaturated register as the swimming
-     species above, but visually distinct from them and from each other, so
-     the composition plate (Phase 2) can give them real weight without
-     implying they're rendered.
-
-     --lamprey lives here too, despite lamprey now being a swum species (see
-     --chinook's note above) — this is still the var its key color and the
-     composition/history plates read from, just no longer literally
-     "never drawn." */
+  /* Counted at the dam but not all drawn in the water — see data.js. */
   --sockeye: #d98f95;
   --coho: #7fa383;
   --jack-coho: #b0cdb2;
@@ -73,10 +35,7 @@
   --sans: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
 
-  /* Type scale. Every font-size in the HUD maps to one of these six steps —
-     see the comment at each usage for which. Raises the floor from ~7px
-     (0.46rem) to 10px: the smallest labels were sub-legible at native size on
-     anything but a hi-DPI display. */
+  /* Type scale — every HUD font-size maps to one of these six steps. */
   --t-1: 0.625rem; /* 10px — micro: axis ticks, chart legend, footnote */
   --t-2: 0.6875rem; /* 11px — small: most labels, links, station/reach */
   --t-3: 0.75rem; /* 12px — base: day-ordinal, debug panel, notice */
@@ -84,11 +43,7 @@
   --t-5: 1.0625rem; /* 17px — lead: today's total passage count */
   --t-6: 1.375rem; /* 22px — title: the masthead h1 */
 
-  /* Spacing scale. --s5 is the pre-existing field gutter, kept at its old
-     value so nothing in the bar shifts; --s1-4 and --s6 are new, for the
-     plates drawer (Phase 2) and anything else built after this file's
-     original four fields. --field-gap stays as an alias — it's referenced
-     below and the name still says what it's for. */
+  /* Spacing scale — --field-gap is an alias for --s5, the field gutter. */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -97,9 +52,7 @@
   --s6: 32px;
   --field-gap: var(--s5);
 
-  /* Plate apparatus — rule weights shared by the drawer's figures (Phase 2)
-     and the bar's own accent rules, so a "heavy" line is the same weight
-     everywhere it appears. */
+  /* Rule weights, shared by the plates drawer and the bar's accent rules. */
   --rule: 1px;
   --rule-heavy: 2px;
 }
@@ -122,12 +75,7 @@ body {
 #app {
   position: relative;
   width: 100vw;
-  /* 100vh on mobile is the viewport with the browser chrome RETRACTED, which
-     is taller than what is actually visible when the address bar is showing —
-     so the report bar at the bottom of the HUD sits underneath it until the
-     user scrolls, which this page never does. dvh is the dynamic viewport
-     height and tracks the chrome as it moves. The 100vh line stays first as
-     the fallback for anything that does not know dvh. */
+  /* dvh tracks mobile browser chrome; 100vh stays first as its fallback. */
   height: 100vh;
   height: 100dvh;
 }
@@ -148,9 +96,7 @@ body {
   padding: 18px;
 }
 
-/* Shared label treatment. Every piece of non-numeric text in the HUD is one
-   of these, which is most of what makes the whole thing read as one document
-   rather than a set of widgets. */
+/* Every piece of non-numeric HUD text. */
 .label,
 .station,
 .reach,
@@ -165,8 +111,7 @@ body {
   font-weight: 500;
 }
 
-/* Every number in the interface. Tabular so digits hold their column as the
-   counts tick between days (see updateFishCountDisplay in main.js). */
+/* Every number in the interface — tabular so digits hold their column. */
 #fish-loading p,
 .readout,
 #species-breakdown .count,
@@ -181,13 +126,14 @@ body {
    The bar
    --------------------------------------------------------------------- */
 
-#report {
+/* Shared with #inspect-bar (the fish viewer's bottom bar) rather than
+   duplicated in inspect.css. */
+#report,
+#inspect-bar {
   pointer-events: auto;
   width: 100%;
   background: var(--ink);
   border: 1px solid var(--line);
-  /* Reads as the top edge of a form field, and is one of only two places the
-     accent appears. */
   border-top: 2px solid var(--accent);
   color: var(--text);
 }
@@ -199,16 +145,13 @@ body {
   padding: 11px 16px 10px;
 }
 
-/* Fields are divided by hairlines rather than boxes — a rule between two
-   columns of a form, not four separate panels. The first has nothing to its
-   left to divide it from. */
+/* Fields are divided by hairlines, not boxes. */
 .field + .field {
   padding-left: var(--field-gap);
   border-left: 1px solid var(--line-soft);
 }
 
-/* Each field is headed once, the way a report column is, so the rows beneath
-   don't have to repeat their unit. */
+/* Each field is headed once, so rows beneath don't repeat their unit. */
 .field-head {
   display: flex;
   align-items: baseline;
@@ -237,15 +180,11 @@ body {
 
 #masthead {
   flex: 0 0 auto;
-  /* Was 30ch, which fit the reach line exactly until the season became a
-     control at the end of it — at 30ch "2015" wrapped alone onto a second
-     line as an orphan under "Counting Season". */
-  max-width: 34ch;
+  max-width: 34ch; /* was 30ch — "2015" orphaned once the season select joined the reach line */
 }
 
 #masthead .station {
-  /* The accent bar is the only mark in the interface standing in for an
-     agency device — a rule, not a seal. */
+  /* The only mark standing in for an agency device — a rule, not a seal. */
   border-left: 3px solid var(--accent);
   padding-left: 8px;
   font-size: var(--t-2);
@@ -261,29 +200,18 @@ body {
   line-height: 1.05;
 }
 
-/* Deliberately NOT a flex row. The reach text wraps to two lines in this
-   30ch field, and as a flex container the select is a sibling item of the
-   whole wrapped block — so it sat baseline-aligned to the FIRST line while
-   the text's second line ran on underneath it ("Snake River · Counting
-   [2015]" / "Season"). Left as normal inline flow, the select is just another
-   word in the sentence and wraps with it. */
+/* Deliberately not a flex row — see .claude/context/ui.md for why. */
 #masthead .reach {
   margin-top: 4px;
   font-size: var(--t-2);
   color: var(--text-dim);
 }
 
-/* The season select. Deliberately quiet — it sits in the identity block, where
-   a full-weight control would read as the loudest thing in the masthead
-   despite being the least-used. So: no background, no chevron of its own
-   beyond the platform's, and a hairline that only resolves on hover/focus.
-   It reads as printed type until you go for it. */
+/* Deliberately quiet: no background, no chevron, hairline only on hover/focus. */
 #year-select {
   appearance: none;
   -webkit-appearance: none;
-  /* Inline, so it flows as a word in the reach line rather than as a block
-     the text has to get around. */
-  display: inline-block;
+  display: inline-block; /* flows as a word in the reach line */
   vertical-align: baseline;
   margin-left: 4px;
   background: transparent;
@@ -329,8 +257,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* Kept at --text-dim rather than --text-faint: it sits beside the date at a
-   smaller size and needs to stay a readable second figure, not a whisper. */
 #masthead #day-ordinal {
   font-size: var(--t-3);
   color: var(--text-dim);
@@ -344,22 +270,10 @@ body {
   flex: 0 0 auto;
 }
 
-/* Two species per row as key/value pairs. A table rather than a flex row of
-   chips so the counts sit in fixed columns and stop shifting sideways as they
-   gain and lose digits over the season — which matters more now that they
-   tick continuously between days rather than changing once. */
+/* Table, not a flex row, so counts sit in fixed columns as digits change. */
 #species-breakdown {
   border-collapse: collapse;
-  /* Fixed, so the four columns are set by the cell widths below and not by
-     whichever species happens to have the longest name or the most digits
-     today.
-
-     Width stays `auto` deliberately. Under table-layout: fixed the used width
-     is the sum of the column widths, which is exactly what's wanted — whereas
-     `width: 100%` inside a shrink-to-fit flex item is circular, and Chromium
-     resolves it to a literal million pixels, which silently shoves every
-     field to the right of this one off the side of the screen. */
-  width: auto;
+  width: auto; /* deliberate — see .claude/context/ui.md for the Chromium gotcha */
   table-layout: fixed;
 }
 
@@ -390,21 +304,15 @@ body {
   width: 6.5ch;
   font-size: var(--t-4);
   text-align: right;
-  /* Separates this count from the next species' key. The rightmost column has
-     nothing after it, so it ends flush with the field. */
-  padding-right: 16px;
+  padding-right: 16px; /* separates from the next species' key */
 }
 
 #species-breakdown .count:last-child {
   padding-right: 0;
 }
 
-/* Key colours, one rule per species, keyed off the cell's own data-species
-   rather than its position in the row. They used to be positional
-   (`[data-species=chinook] .key:nth-child(3)` meaning "steelhead"), which
-   worked only as long as nothing was ever added to or reordered in the table —
-   and adding the three reported species broke every one of them. The name is
-   on the cell that carries the colour now, so the two cannot disagree. */
+/* Key colours keyed off data-species, not row position (see ui.md — a past
+   positional version broke when species were added/reordered). */
 #species-breakdown .key[data-species="chinook"] { color: var(--chinook); }
 #species-breakdown .key[data-species="jackChinook"] { color: var(--jack-chinook); }
 #species-breakdown .key[data-species="steelhead"] { color: var(--steelhead); }
@@ -414,21 +322,13 @@ body {
 #species-breakdown .key[data-species="coho"] { color: var(--coho); }
 #species-breakdown .key[data-species="jackCoho"] { color: var(--jack-coho); }
 
-/* Counted at the dam but never drawn in the water. The square key still
-   carries the species colour — these have real colours in FIG. 2 and the
-   table should agree with it — but the row as a whole is stepped back: the
-   count is dimmed, and the dagger points at the footnote that says why. The
-   distinction has to be visible without reading the footnote, or the table
-   quietly implies eight species are swimming past. */
+/* Reported-but-unswum species: dimmed label, but the key square keeps its
+   real species color (re-stated below, not currentColor, or it'd be lost). */
 #species-breakdown .key.reported {
-  /* Applies to the label text only; the `i` key square below re-asserts the
-     species colour. */
   color: var(--text-faint);
 }
 
 #species-breakdown .key.reported i {
-  /* currentColor would take the faint text colour above, which would lose the
-     species key entirely — so these re-state their own. */
   background: var(--species-key, var(--text-faint));
 }
 
@@ -442,11 +342,6 @@ body {
 
 /* ---------------------------------------------------------------------
    Fields 3 and 4 — conditions, and where the run stands
-
-   Two fields, one treatment: both are label/value pairs off the same feed,
-   and making them look like two different instruments would say they were
-   different kinds of reading. They are not — one is measured at the project,
-   the other is counted at it.
    --------------------------------------------------------------------- */
 
 #conditions,
@@ -460,10 +355,7 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  /* Tighter than the old 2px: conditions went from three rows to five when
-     outflow, spill and dissolved gas came in from FIG. 4, and the field has to
-     stay level with the four-row species table beside it. */
-  padding: 1px 0;
+  padding: 1px 0; /* tighter than the old 2px — keeps 5 rows level with the species table */
 }
 
 #conditions p:not(.field-head) .label,
@@ -481,11 +373,8 @@ body {
   white-space: nowrap;
 }
 
-/* The one reading in the bar that is a judgement rather than a measurement,
-   and the only place besides the timeline cursor and the speed selector where
-   the accent appears. Running BEHIND the ten-year average is the neutral case
-   — dimmed, not alarmed — because a below-average run is the ordinary state of
-   affairs, not an error. */
+/* The one judgement (not measurement) reading in the bar — below-average is
+   the neutral case (dimmed, not alarmed), not an error. */
 #season-delta.above {
   color: var(--accent);
 }
@@ -498,14 +387,9 @@ body {
    Field 5 — the season chart and the controls
    --------------------------------------------------------------------- */
 
-/* The only field that grows: it holds the chart, so every pixel the bar has
-   spare is worth more here than as trailing space.
-
-   A COLUMN — transport row, then the chart/slider/axis stack — not the old
-   [button | stack] row. The stack's three parts have to be the same width and
-   start at the same x, because the red cursor reads against the curve above
-   it; a control column beside them indents one and not the others, which
-   quietly breaks that. A row above them cannot. */
+/* The only field that grows. A column (transport row, then chart/slider/axis
+   stack), not [button | stack] — see ui.md for why that layout breaks the
+   cursor/curve alignment. */
 #controls {
   flex: 1 1 auto;
   min-width: 240px;
@@ -525,9 +409,7 @@ body {
   gap: var(--s2);
 }
 
-/* Speed pushed to the far end of the row, so the two groups read as what they
-   are — state on the left, pace on the right — rather than as one undivided
-   strip of five buttons. */
+/* Pushed to the far end: state on the left, pace on the right. */
 #speed {
   display: flex;
   align-items: center;
@@ -541,8 +423,7 @@ body {
   color: var(--text-faint);
 }
 
-/* Narrower than #play-pause and without its min-width: these are secondary,
-   and a row of controls all the same size has no hierarchy in it. */
+/* Narrower than #play-pause, without its min-width — these are secondary. */
 .transport-btn,
 .speed-btn {
   flex: none;
@@ -560,8 +441,7 @@ body {
 }
 
 .speed-btn {
-  /* Tabular, so ½× and 8× occupy the same width and the group does not
-     reflow as the selection moves. */
+  /* Tabular, so ½× and 8× occupy the same width. */
   font-family: var(--mono);
   letter-spacing: 0.02em;
   padding: 4px 6px;
@@ -581,8 +461,7 @@ body {
   outline-offset: 2px;
 }
 
-/* The current pace is a current reading, which is the one thing the accent is
-   for — same justification as the timeline cursor. */
+/* The current pace is a current reading — same accent use as the cursor. */
 .speed-btn[aria-pressed="true"] {
   color: var(--text);
   border-color: var(--accent);
@@ -597,10 +476,8 @@ body {
   color: var(--text-faint);
 }
 
-/* Keys drawn as the marks themselves rather than as swatches: the area series
-   gets a filled block, the line series a rule. With only two series that is
-   quicker to read than a legend, and it needs no color the palette would
-   otherwise have to invent. */
+/* Keys drawn as the marks themselves (block for area, rule for line) rather
+   than as swatches — quicker to read with only two series. */
 #season-chart figcaption span::before {
   content: "";
   display: inline-block;
@@ -627,23 +504,11 @@ body {
   display: none;
 }
 
-/* Trimmed from 38px when the transport row was added above it — the bar had to
-   absorb that row's height somewhere, and six pixels off the chart costs less
-   than six pixels of the frame. */
 #season-chart svg {
   display: block;
   width: 100%;
-  /* Explicit, because a viewBox gives an SVG an intrinsic aspect ratio — 10:1
-     here — and left to itself the chart sets its own height from whatever
-     width the field happens to have, which then drives the height of the
-     whole bar. On a wide window that was 74px of chart and a bar half again
-     as tall as it needed to be. */
-  height: 32px;
-  /* The viewBox is stretched to the field's width (preserveAspectRatio="none"),
-     which is what keeps the chart's x-axis identical to the slider's below it.
-     Stroke widths would be stretched with it, hence non-scaling-stroke on the
-     temperature path. */
-  border-bottom: 1px solid var(--line-soft);
+  height: 32px; /* explicit — an unset height lets the 10:1 viewBox drive the whole bar's height */
+  border-bottom: 1px solid var(--line-soft); /* stretched viewBox keeps x-axis aligned with the slider; see non-scaling-stroke below */
 }
 
 #chart-passage {
@@ -685,9 +550,8 @@ body {
   outline-offset: 2px;
 }
 
-/* Fully custom, because the default control is the single most consumer-
-   looking element on the page: a pill track with a round thumb. What replaces
-   it is a gauge — a hairline track with a red cursor bar standing on it. */
+/* Fully custom — a gauge (hairline track, red cursor bar) instead of the
+   default pill-track control. */
 #timeline {
   -webkit-appearance: none;
   appearance: none;
@@ -736,9 +600,8 @@ body {
   box-shadow: 0 0 0 1px var(--text);
 }
 
-/* Month ticks. Positioned absolutely from percentages written by
-   buildTimelineAxis() in main.js. The inset that lines a tick up with the
-   cursor is shared with the chart — see the rule further down. */
+/* Month ticks, positioned from percentages written by buildTimelineAxis()
+   in main.js. */
 #timeline-axis {
   position: relative;
   height: 13px;
@@ -753,12 +616,8 @@ body {
   background: var(--line);
 }
 
-/* The month label is a button now — clicking it jumps to the first counted day
-   of that month (see the delegated handler in main.js). Styled as the label it
-   already was rather than as a control: no border, no background, and the only
-   affordance is that it lights to full ink on hover. The tick it hangs from is
-   1px wide and no kind of click target, which is why the label carries this
-   and not the <i>. */
+/* Clicking a month label jumps to its first counted day (delegated handler
+   in main.js). Styled as the label it already was, not as a control. */
 #timeline-axis button {
   position: absolute;
   top: 4px;
@@ -788,8 +647,7 @@ body {
   color: var(--text);
 }
 
-/* The end labels sit on ticks at 0% and 100%, so centering them would hang
-   half of each off the field. Anchor those two to the inside instead. */
+/* End labels anchor inside rather than centering, or they'd hang off the field. */
 #timeline-axis i:first-child button {
   transform: none;
 }
@@ -798,9 +656,8 @@ body {
   transform: translateX(-100%);
 }
 
-/* The chart and the month axis are both inset by half the slider cursor's
-   width. The cursor's travel is inset by that much from the input's own box,
-   so this is what puts a given date at the same x in all three. */
+/* Inset by half the cursor's width, so a given date lands at the same x in
+   the chart, the slider cursor, and the axis. */
 #season-chart,
 #timeline-axis {
   margin: 0 1.5px;
@@ -811,10 +668,7 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Footnote strip — provenance. Used to also carry the species counted but
-   not simulated ("Also counted") as a row of footnote figures; that moved to
-   FIG. 2/3 in the plates drawer (see src/plates.js), where it gets a real
-   chart instead of an 8px aside.
+   Footnote strip — provenance
    --------------------------------------------------------------------- */
 
 .report-foot {
@@ -833,10 +687,6 @@ body {
   margin-left: auto;
 }
 
-/* What the dagger in the species table means, and what the ten-year average is
-   measured against. Both belong here rather than beside the figures they
-   qualify: a footnote is how a report carries a caveat without spending a
-   readable line on it. */
 .footnote {
   color: var(--text-dimmer);
 }
@@ -845,13 +695,8 @@ body {
    Loading overlay
    --------------------------------------------------------------------- */
 
-/* Shown while loadFishAssets() (main.js) loads+bakes the per-species GLBs —
-   real async work the canvas otherwise gives no sign of (just empty water),
-   since the fish InstancedMesh doesn't exist yet to draw anything. Faded out
-   (not removed) once fishRenderer is ready — see main.js.
-
-   A determinate-looking bar rather than a spinner: a rotating circle is the
-   one shape this interface has otherwise ruled out. */
+/* Shown while loadFishAssets() (main.js) loads+bakes the per-species GLBs;
+   faded out, not removed, once the fish renderer is ready. */
 #fish-loading {
   position: absolute;
   inset: 0;
@@ -902,11 +747,8 @@ body {
   }
 }
 
-/* An indefinite sweeping animation is exactly what this preference exists to
-   suppress. The bar stays — it still marks the page as busy — it just holds a
-   third of the way across instead of running. The scene itself is handled
-   separately: main.js boots it paused (see PREFERS_REDUCED_MOTION there),
-   since no CSS rule can stop a WebGL render loop. */
+/* The bar holds a third of the way across instead of sweeping; the 3D scene
+   itself is paused separately in main.js (PREFERS_REDUCED_MOTION). */
 @media (prefers-reduced-motion: reduce) {
   #fish-loading .bar::after {
     animation: none;
@@ -915,9 +757,8 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Corner nav link — the river's link to the fish viewer (see src/inspect.js)
-   and the fish viewer's link back. Byte-for-byte the same treatment on both
-   pages, so one rule serves both ids rather than inspect.css repeating it. */
+   Corner nav link — shared between the river and fish-viewer pages
+   --------------------------------------------------------------------- */
 #fish-viewer-link,
 #back-link {
   position: absolute;
@@ -941,10 +782,8 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Failure notice (see showNotice in main.js, and the boot handler in
-   index.html). Top-centre rather than in the report bar: it is not a
-   reading, and it has to be legible in the one case where the report bar
-   itself may never have been populated.
+   Failure notice (see showNotice in main.js) — top-centre, not in the
+   report bar, so it's legible even if the bar itself never populated.
    --------------------------------------------------------------------- */
 
 #notice {
@@ -956,8 +795,6 @@ body {
   padding: 10px 14px;
   background: var(--ink);
   border: 1px solid var(--line);
-  /* The one saturated colour, used the way the report bar uses it — as a rule
-     marking the thing that matters, not as a fill. */
   border-left: 3px solid var(--accent);
   color: var(--text);
   font-size: var(--t-4);
@@ -965,9 +802,7 @@ body {
   pointer-events: auto;
 }
 
-/* An interruption the scene expects to recover from on its own (context loss),
-   as distinct from something the viewer has to act on. Muted rule, since there
-   is nothing to do about it. */
+/* A recoverable interruption (WebGL context loss), not something to act on. */
 #notice.warn {
   border-left-color: var(--text-dim);
   color: var(--text-dim);
@@ -983,10 +818,7 @@ body {
 
 #debug-panel {
   position: absolute;
-  /* Shifted down from the corner to clear #plates-toggle, which took the
-     primary top-right spot — this is a hidden-by-default dev readout, the
-     toggle is a real control. */
-  top: 56px;
+  top: 56px; /* shifted down from the corner to clear #plates-toggle */
   right: 18px;
   margin: 0;
   color: var(--text-dim);
@@ -1003,23 +835,14 @@ body {
 }
 
 /* ---------------------------------------------------------------------
-   Plates drawer (see src/plates.js) — a slide-in rail of figures the bar
-   itself has no room for. Overlays the canvas rather than resizing it: the
-   underwater vignette in scene/sceneSetup.js is tuned to the canvas's
-   current on-screen size, so shrinking it to make room would need a shader
-   retune this pass doesn't do.
+   Plates drawer (see src/plates.js) — overlays the canvas, doesn't resize it
    --------------------------------------------------------------------- */
 
 #plates-toggle {
   position: absolute;
   top: 18px;
   right: 18px;
-  /* Above the drawer, which is the whole point: this button is also the
-     drawer's CLOSE control (it becomes "Plates ✕" — see setOpen in
-     plates.js), and #plates comes after it in the DOM, so without a stacking
-     order of its own the open drawer painted straight over the only way to
-     shut it. */
-  z-index: 2;
+  z-index: 2; /* also the drawer's close control — must paint above #plates */
   padding: 6px 10px;
   background: var(--ink);
   border: 1px solid var(--line);
@@ -1069,10 +892,35 @@ body {
 #plates-scroll {
   height: 100%;
   overflow-y: auto;
-  /* The extra top padding clears #plates-toggle, which now floats above this
-     panel as its close control — without it the first figure's caption scrolls
-     under the button. */
-  padding: 52px var(--s4) var(--s4);
+  padding: 52px var(--s4) var(--s4); /* clears #plates-toggle floating above */
+}
+
+/* Scrollbars, shared between this drawer and #inspect-panel (inspect.css). */
+#plates-scroll,
+#inspect-panel {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) var(--ink);
+}
+
+#plates-scroll::-webkit-scrollbar,
+#inspect-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+#plates-scroll::-webkit-scrollbar-track,
+#inspect-panel::-webkit-scrollbar-track {
+  background: var(--ink);
+}
+
+#plates-scroll::-webkit-scrollbar-thumb,
+#inspect-panel::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 0;
+}
+
+#plates-scroll::-webkit-scrollbar-thumb:hover,
+#inspect-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }
 
 .plate {
@@ -1187,9 +1035,8 @@ body {
   margin-right: var(--s3);
 }
 
-/* Cursors, areas and lines. vector-effect keeps stroke width constant even
-   though every plate's viewBox is stretched to its box (preserveAspectRatio
-   is "none" throughout, same as #season-chart in the bar). */
+/* vector-effect keeps stroke width constant despite each plate's stretched
+   viewBox (preserveAspectRatio: none throughout, same as #season-chart). */
 .plate-cursor {
   stroke: var(--accent);
   stroke-width: 1;
@@ -1264,9 +1111,7 @@ body {
   color: var(--accent);
 }
 
-/* Per-species colors, shared by the composition areas, the today bar, the
-   history columns and the legend swatches below — set once here rather than
-   on each consuming rule. */
+/* Per-species colors, set once and shared by every consuming rule below. */
 #plates [data-species="chinook"] {
   --species-color: var(--chinook);
 }
@@ -1304,9 +1149,7 @@ body {
   stroke: none;
 }
 
-/* 2015's own column in the run-history plate — the one place among ten
-   years of the same chart the accent marks the current reading, same rule
-   the report bar's cursor and playing state follow. */
+/* 2015's own column in the run-history plate — the accent marks the current reading. */
 .plate-history-current {
   stroke: var(--accent);
   stroke-width: 1;
@@ -1389,18 +1232,14 @@ body {
    Narrower viewports
    --------------------------------------------------------------------- */
 
-/* One row of five fields needs real width — and it is genuinely five now that
-   the run-to-date comparison has its own, so this moved up from 1100px. Below
-   it the bar wraps to two rows rather than crushing the chart, which is the
-   field that degrades worst when squeezed. */
+/* One row of five fields needs real width; below it the bar wraps to two
+   rows rather than crushing the chart. */
 @media (max-width: 1280px) {
   .report-body {
     flex-wrap: wrap;
   }
 
-  /* The four text fields stay side by side and keep the rules between them;
-     only the chart drops to its own row, so it is the only field whose
-     divider has to move from its left edge to its top. */
+  /* The four text fields stay side by side; only the chart drops to its own row. */
   #masthead,
   #passage,
   #conditions,
@@ -1418,21 +1257,16 @@ body {
 }
 
 @media (max-width: 900px) {
-  /* Four text fields in one row is too many at this width — the species table
-     alone is ~36ch. Conditions and the run comparison drop to their own row
-     together, which keeps the two label/value fields paired rather than
-     stranding one of them. */
+  /* Four text fields in one row is too many here; conditions and run-status pair up. */
   #conditions,
   #run-status {
     flex: 1 1 40%;
   }
 }
 
-/* Below this the five fields can only stack, and stacked they ate 744px of an
-   812px phone screen — the bar became the page and the river was a strip
-   above it. So the narrow layout is a two-column grid rather than a column:
-   the fields pair up, which roughly halves the height, and the chart keeps
-   the full width it needs. */
+/* Below this the fields can only stack (744px of an 812px phone screen), so
+   the narrow layout is a two-column grid instead — see ui.md for the fixed-
+   width-table/grid-track overflow bug this ran into. */
 @media (max-width: 640px) {
   #hud {
     padding: 10px;
@@ -1445,28 +1279,17 @@ body {
     padding: 9px 12px 8px;
   }
 
-  /* Grid items are min-width:auto by default, so a field whose content has a
-     fixed width — the species table is `table-layout: fixed` with ch-sized
-     cells — refuses to shrink and pushes its track wider than the 1fr says.
-     That blew both columns past the viewport: conditions ran off the right
-     edge and took the season chart with it. */
   .report-body > .field {
     min-width: 0;
   }
 
-  /* The vertical hairlines divided fields in a row; in a grid they would draw
-     down the middle of the left column only. The grid's own gaps do the
-     dividing here. */
+  /* Vertical hairlines would draw down the left column only in a grid; the
+     grid's own gaps do the dividing instead. */
   .field + .field {
     border-left: none;
     padding-left: 0;
   }
 
-  /* Full-width: the masthead because its identity type wraps badly in half a
-     phone screen, the counts because they are the point of the thing and
-     already two columns of their own, the chart because the cursor has to
-     read against it. That leaves conditions and the run comparison to share
-     the one paired row. */
   #masthead,
   #passage,
   #controls {
@@ -1477,9 +1300,6 @@ body {
     font-size: var(--t-5);
   }
 
-  /* The station and reach lines are provenance, and provenance is what a
-     phone screen has least room for. The footnote strip below still carries
-     the source. */
   #masthead .station,
   #masthead .reach {
     font-size: var(--t-1);
@@ -1489,13 +1309,9 @@ body {
     padding-right: 8px;
   }
 
-  /* Month labels are thinned by measurement (see thinMonthLabels in main.js),
-     which handles this width along with every other. There used to be a rule
-     here hiding every other one, and it fought that pass: a display:none
-     label has a zero-width rect, which the measurement could not reason
-     about. */
+  /* Month labels are thinned by measurement (thinMonthLabels in main.js), not
+     display:none — a hidden label has a zero-width rect the measurement can't use. */
 
-  /* The speed group wraps under the transport rather than squeezing it. */
   #transport {
     flex-wrap: wrap;
     row-gap: 6px;

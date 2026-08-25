@@ -1,23 +1,9 @@
 // particles.js
-// Suspended silt drifting in the water column — the single strongest depth cue
-// this scene can have.
-//
-// A shallow inland river is turbid (it is why the fog is tuned as heavily as it
-// is, see fog.js), and what actually tells a viewer they are looking *through*
-// water rather than at a blue-tinted void is the debris hanging in it: near
-// specks sliding past quickly and legibly, far ones dissolving into the murk.
-// The fog alone gives distance but no texture, so the water column between the
-// camera and the school reads as empty.
-//
-// Entirely GPU-driven. Each mote's start position is uploaded once as an
-// instance attribute and never touched again; drift and wrap-around happen in
-// the vertex shader from uTime, so the per-frame CPU cost is one uniform write
-// no matter how many motes there are. That was the whole point of doing it this
-// way — there is no per-particle JavaScript to get expensive.
-//
-// Motes are billboarded quads rather than THREE.Points: gl_PointSize is capped
-// by the driver and is specified in pixels, so points cannot hold a consistent
-// *world* size as they recede, which is exactly the cue this is here to give.
+// Design rationale, invariants, gotchas: .claude/context/scene/environment.md
+// Suspended silt drifting in the water column — the strongest depth cue this
+// scene has. Entirely GPU-driven (drift/wrap in the vertex shader from
+// uTime); billboarded quads rather than THREE.Points, so they hold a
+// consistent world size as they recede.
 
 import * as THREE from "three";
 import { causticGlowChunk, glslFloat as f } from "./glsl.js";
@@ -26,55 +12,31 @@ import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
 import { QUALITY } from "../quality.js";
 
-// The mote count is no longer a constant here — it comes from QUALITY.
-// particleCount (see quality.js), read at build time below. Every mote is a
-// transparent, blended, camera-facing quad that also does a caustics lookup in
-// its vertex shader, so this is a fill-rate number rather than a geometry one,
-// which is exactly the budget a phone has least of. At the low tier it is zero
-// and buildParticles returns an inert stub rather than an empty mesh.
+// Mote count comes from QUALITY.particleCount (quality.js), read at build
+// time — a fill-rate number, not a geometry one (see environment.md). Zero
+// at the low tier, where buildParticles returns an inert stub.
 
 // The drift volume, as a fraction of the world's largest dimension. Sized so
-// density lands where motes are actually resolvable — fog has anything beyond
-// this regardless, so a bigger box would just be spending instances on
-// invisible specks.
+// density lands where motes are actually resolvable.
 const VOLUME_FRAC = 0.62;
 
-// Mote size range in world units. A fish renders 72-84 units nose-to-tail (see
-// boids.js), so these are on the order of a centimetre of real silt against a
-// three-foot Chinook. Small enough to read as suspended matter rather than
-// snow, which is the failure mode this effect always has — MAX_SIZE came down
-// from 9.0 because the largest near-field motes were crossing into it, and
-// again from 7.2 (MIN_SIZE from 2.6) once the river itself shrank to 55% of
-// its former size (see WORLD_SCALE in main.js): the drift volume shrank
-// along with it — VOLUME_FRAC below is a fraction of bounds, and depth a
-// fraction of bounds.height, so volume scales with WORLD_SCALE^3 — but
-// PARTICLE_COUNT didn't, so the same motes are now packed roughly 6x denser
-// per unit volume. That reads as more field to look at, at the same size
-// each, rather than as more silt in the same water; sizing back down doesn't
-// undo the density but does stop the field competing with the fish for
-// attention at any one point in frame.
+// Mote size range in world units, small enough to read as suspended matter
+// rather than snow. See environment.md for the sizing history tied to
+// WORLD_SCALE (main.js).
 const MIN_SIZE = 2.0;
 const MAX_SIZE = 5.5;
 
-// Overall visibility of the field, split across the three dials that set it.
-//
-// Silt is meant to be noticed as texture in the water, not counted as
-// individual objects. Kept as named constants because they trade off against
-// each other — dropping opacity while raising brightness gets you back where
-// you started — and because this is the first thing to reach for when the
-// effect is over- or under-stated. Was 0.62, brought down alongside the size
-// cut above for the same reason.
+// Overall visibility of the field, split across three dials that trade off
+// against each other (see environment.md).
 const OPACITY = 0.46;
-// Motes catch light from every direction rather than presenting one shaded
-// face, so they sit brighter than the riverbed color they're derived from.
+// Motes catch light from every direction, so they sit brighter than the
+// riverbed color they're derived from.
 const BRIGHTNESS = 1.85;
 // How much of a caustic highlight a mote picks up when it drifts through one.
 const GLOW_GAIN = 0.35;
 
-// World units per second of downstream drift. The run flows +x (see boids.js),
-// so the silt goes with it — but far slower than the fish, since it is being
-// carried by the water rather than swimming through it. Reading a mote drift
-// past while a salmon powers by is a big part of what sells the fish as fast.
+// World units per second of downstream drift (run flows +x, see boids.js) —
+// far slower than the fish, since it's carried by water, not swimming.
 const DRIFT_X = 7;
 
 // Gentle vertical churn, so the field isn't a rigid sheet sliding sideways.
@@ -105,10 +67,8 @@ const vertexShader = () => /* glsl */ `
   void main() {
     vec3 drifted = aOrigin;
 
-    // Drift and wrap inside the volume. mod() is what makes the field endless
-    // without any CPU bookkeeping: a mote leaving the downstream face
-    // reappears at the upstream one, and since every mote has a different
-    // start position they don't wrap in unison.
+    // Drift and wrap inside the volume with mod() — endless with no CPU
+    // bookkeeping, and motes don't wrap in unison since each starts differently.
     drifted.x += uTime * ${f(DRIFT_X)};
     drifted.y += sin(uTime * ${f(BOB_SPEED)} + aPhase) * ${f(BOB_AMPLITUDE)};
     drifted = mod(drifted - uVolumeMin, uVolumeSize) + uVolumeMin;
@@ -123,9 +83,7 @@ const vertexShader = () => /* glsl */ `
     vWorldPos = worldPos;
     vQuad = position.xy;
 
-    // Motes catch the same light net as everything else, so one drifting
-    // through a bright patch flares briefly. Sampled per vertex — a mote is a
-    // few pixels across, so this is already far finer than it needs to be.
+    // Sampled per vertex — a mote is a few pixels across, already finer than needed.
     vec2 waterUv = (worldPos.xz + uMargin) / uWorldSize;
     vGlow = causticGlowAt(uCaustics, waterUv, vec2(0.0), worldPos.xz, uTime);
 
@@ -153,12 +111,7 @@ const FRAGMENT_SHADER = /* glsl */ `
     float r = length(vQuad) * 2.0;
     float alpha = (1.0 - smoothstep(0.35, 1.0, r)) * uOpacity;
 
-    // Distance fade, applied to ALPHA rather than by blending toward the fog
-    // color. Tinting a mote to fog color makes it vanish against the
-    // background but still lays a visible speck over any fish in front of it;
-    // fading it out removes it from the frame entirely, which is what a mote
-    // too far away to resolve should do. fogAmount() is applyFog's own
-    // falloff (see fog.js), taken here for its factor instead of its result.
+    // Fades ALPHA, not a blend toward fog color — see environment.md for why.
     alpha *= 1.0 - fogAmount(vWorldPos);
     if (alpha < 0.004) discard;
 
@@ -170,11 +123,9 @@ const FRAGMENT_SHADER = /* glsl */ `
 export function buildParticles(bounds, cameraPosition, cameraTarget) {
   const PARTICLE_COUNT = QUALITY.particleCount;
 
-  // Nothing to draw at the low tier. Returns a stub with the same shape as the
-  // real thing — an empty Group so createWorld's scene.add() and destroyWorld's
-  // scene.remove() still have an Object3D to work with, and no-op methods so
-  // every caller stays unconditional. Cheaper and much less error-prone than
-  // sprinkling `particles?.` through the render loop.
+  // Nothing to draw at the low tier — a stub with the same shape as the real
+  // thing, so every caller stays unconditional (no `particles?.` sprinkled
+  // through the render loop).
   if (PARTICLE_COUNT === 0) {
     return {
       mesh: new THREE.Group(),
@@ -189,14 +140,8 @@ export function buildParticles(bounds, cameraPosition, cameraTarget) {
   const span = Math.max(bounds.width, bounds.height);
   const depth = riverDepth(bounds);
 
-  // The volume spans the whole water column, and is centered midway between
-  // the eye and what it is looking at rather than on the eye itself.
-  //
-  // Centering on the camera is the obvious thing and it is wrong for a
-  // broadside shot (see EYE_FRAC in sceneSetup.js): the eye sits at the edge
-  // of the channel, so half the box would hang off the bank behind it, and the
-  // far half of the water actually in frame would have no silt in it at all.
-  // The midpoint puts the density in the volume being looked through.
+  // Centered midway between the eye and what it's looking at, not on the eye
+  // itself — see environment.md for why (EYE_FRAC in sceneSetup.js).
   const half = span * VOLUME_FRAC * 0.5;
   const centerX = (cameraPosition.x + cameraTarget.x) * 0.5;
   const centerZ = (cameraPosition.z + cameraTarget.z) * 0.5;
@@ -250,16 +195,14 @@ export function buildParticles(bounds, cameraPosition, cameraTarget) {
     vertexShader: vertexShader(),
     fragmentShader: FRAGMENT_SHADER,
     transparent: true,
-    // Motes are unlit specks in suspension, not solid objects — they should
-    // never occlude a fish behind them, and with thousands of overlapping
-    // quads the sorting to do that correctly isn't worth paying for.
+    // Unlit specks in suspension — never occlude a fish, and sorting
+    // thousands of overlapping quads correctly isn't worth paying for.
     depthWrite: false,
   });
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "particles";
-  // The volume is bigger than any single frustum test would usefully cull, and
-  // instances are placed in the vertex shader where three's bounding sphere
+  // Instances are placed in the vertex shader, where three's bounding sphere
   // can't see them.
   mesh.frustumCulled = false;
 
@@ -271,11 +214,8 @@ export function buildParticles(bounds, cameraPosition, cameraTarget) {
     uniforms.uCaustics.value = texture;
   }
 
-  // `coverage` is the CAUSTICS pass's world coverage, not the water sim's —
-  // the only thing this shader samples is the caustic net (see the vertex
-  // shader's vGlow), so it maps world XZ through that pass's own extent. Those
-  // two used to be the same value; they are not any more (see
-  // causticsWorldSize in water.js).
+  // `coverage` is the caustics pass's world coverage, not the water sim's —
+  // see causticsWorldSize in water.js.
   function setWorldSize(coverage, bounds) {
     uniforms.uWorldSize.value.set(coverage.width, coverage.height);
     uniforms.uMargin.value.set(coverage.marginX, coverage.marginZ);
@@ -291,9 +231,8 @@ export function buildParticles(bounds, cameraPosition, cameraTarget) {
   }
 
   function dispose() {
-    // Only `geometry` — it shares `quad`'s attribute objects rather than
-    // copying them, so disposing both would try to release the same buffers
-    // twice.
+    // Only `geometry` — it shares `quad`'s attribute objects, so disposing
+    // both would double-release the same buffers.
     geometry.dispose();
     material.dispose();
   }

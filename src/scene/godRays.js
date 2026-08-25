@@ -1,22 +1,10 @@
 // godRays.js
-// Shafts of sunlight coming down through the surface.
-//
-// The scene already computes where light concentrates when it refracts through
-// the waves — that is the caustics texture (see causticsGenerator.js), a
-// top-down map of how much light reaches each point of the bed. Until now it
-// was only ever read at the two ends of that journey: on the surface, and on
-// whatever the light landed on. The shafts are the middle of it, the light
-// scattering off silt on the way down, and they come from the same texture —
-// so a bright knot in the net overhead has a shaft beneath it, and both move
-// together as the water moves. That coherence is the reason to derive them
-// from the caustics rather than from independent noise, which is the usual way
-// this effect is faked and always drifts out of step with the surface.
-//
-// Implementation is a set of vertical quads standing in the water column,
-// turned to face the camera about the Y axis, drawn additively. Each fragment
-// traces from its own position back up along the sun direction to find where
-// its light entered the surface, and samples the net there — so the shafts
-// lean the way the season's sun leans, and lean further the deeper you look.
+// Design rationale, invariants, gotchas: .claude/context/scene/environment.md
+// Shafts of sunlight coming down through the surface, derived from the
+// caustics texture rather than independent noise — see environment.md for
+// why. Vertical quads facing the camera about Y, drawn additively; each
+// fragment traces back up the sun direction to its surface entry point and
+// samples the net there.
 
 import * as THREE from "three";
 import { causticGlowChunk, glslFloat as f } from "./glsl.js";
@@ -25,53 +13,35 @@ import { riverDepth } from "./terrain.js";
 import { seasonForDay } from "./season.js";
 import { QUALITY } from "../quality.js";
 
-// The shaft count comes from QUALITY.shaftCount (see quality.js), read at
-// build time below. Each plane is large and additively blended, so this is
-// bounded by overdraw, not by vertex count — every extra plane is close to a
-// full-screen pass of blending in the worst case, which makes it one of the
-// most expensive things in the frame on a phone and one of the first to cut.
-// A dozen is enough to read as a volume because they are semi-transparent and
-// overlap; eight still does at the medium tier. At the low tier it is zero and
-// buildGodRays returns an inert stub.
+// Shaft count comes from QUALITY.shaftCount (quality.js), read at build
+// time. Bounded by overdraw, not vertex count — see environment.md. Zero at
+// the low tier, where buildGodRays returns an inert stub.
 
-// Where the shafts stand, as fractions of the world's largest dimension. The
-// near bound keeps a plane from sitting on top of the lens; the far one stops
-// before the fog has fully saturated, since a shaft out there adds nothing but
-// blend cost.
+// Where the shafts stand, as fractions of the world's largest dimension.
 const NEAR_FRAC = 0.34;
 const FAR_FRAC = 0.82;
 
 // Half-angle of the arc in front of the camera the shafts are spread across.
 const SPREAD_HALF_ANGLE = 1.15;
 
-// Shaft width range in world units, and how far above the surface the quad
-// starts. Starting slightly above y=0 means the top edge is hidden behind the
-// water surface plane rather than ending in a visible horizontal cut.
+// Shaft width range in world units. ABOVE_SURFACE hides the quad's top edge
+// behind the water surface plane instead of a visible horizontal cut.
 const MIN_WIDTH = 38;
 const MAX_WIDTH = 125;
 const ABOVE_SURFACE = 30;
 
-// How quickly a shaft dies out with depth. Light scattering down through
-// turbid water loses intensity fast — much faster than the distance fog does
-// — which is what keeps the shafts as a feature of the upper water column
-// instead of a glow filling the whole frame.
+// How quickly a shaft dies out with depth — much faster than distance fog.
 const DEPTH_FALLOFF = 3.1;
 
-// Overall brightness. Deliberately low: these are additive AND sit under a
-// bloom pass (see sceneSetup.js), so they compound twice — a value that looks
-// reasonable on its own turns the near planes into flat glowing slabs once
-// several overlap and the bloom picks them up.
+// Overall brightness, deliberately low: additive AND under a bloom pass
+// (sceneSetup.js), so they compound twice — see environment.md.
 const INTENSITY = 1.1;
 
-// Scales the raw caustics sample before the saturation and contrast below. The
-// net is a dim, broad signal at source (see causticsGenerator.js) — the surface
-// reads it at 8 and the fish at 18 — and it has to be lifted well up the
-// saturation curve first, or the power curve below crushes the whole range to
-// nothing rather than separating bright from dim.
+// Scales the raw caustics sample before saturation/contrast — see
+// environment.md for why (the net is dim; surface reads it at 8, fish at 18).
 const BEAM_STRENGTH = 30;
 
-// Exponent on the saturated sample. Higher is a harder separation between beam
-// and dark water; below about 1.5 the shafts smear back into a general glow.
+// Exponent on the saturated sample; below ~1.5 shafts smear into a general glow.
 const BEAM_CONTRAST = 3.0;
 
 const VERTEX_SHADER = /* glsl */ `
@@ -87,10 +57,8 @@ const VERTEX_SHADER = /* glsl */ `
   varying float vPhase;
 
   void main() {
-    // Turn each plane about the vertical axis to face the camera. Only about
-    // Y: a shaft is a column of light with a real, fixed vertical extent, and
-    // letting it pitch toward the camera the way a particle billboard does
-    // would tilt it out of the water column.
+    // Face the camera about Y only — pitching, like a particle billboard,
+    // would tilt the shaft out of the water column.
     vec3 toCamera = cameraPosition - aBase;
     vec3 right = normalize(vec3(-toCamera.z, 0.0, toCamera.x));
 
@@ -117,9 +85,8 @@ const fragmentShader = () => /* glsl */ `
   uniform sampler2D uCaustics;
   uniform vec2 uWorldSize;
   uniform vec2 uMargin;
-  // Also declared in the vertex shader above; three shares one uniform block
-  // across both stages, so this is the same value, not a second one. Needed
-  // here for the procedural caustics path (see quality.js).
+  // Same value as the vertex shader's uTime (shared uniform block); needed
+  // here for the procedural caustics path.
   uniform float uTime;
   uniform float uCausticsStrength;
   uniform vec3 uSunDir;
@@ -134,18 +101,14 @@ const fragmentShader = () => /* glsl */ `
   void main() {
     float below = max(0.0, -vWorldPos.y);
 
-    // Trace back up the sun direction to where this light crossed the surface,
-    // and read the net there. uSunDir points toward the sun, so going up along
-    // it by (depth / sunDir.y) lands on y = 0. The max() keeps a low winter
-    // sun from smearing the sample halfway across the river.
+    // Trace back up the sun direction to where this light crossed the
+    // surface, and read the net there. The max() keeps a low winter sun
+    // from smearing the sample halfway across the river.
     vec2 entry = vWorldPos.xz + uSunDir.xz * (below / max(uSunDir.y, 0.3));
     vec2 uv = (entry + uMargin) / uWorldSize;
 
-    // Saturate, then apply a hard contrast curve. This is what separates
-    // beams from a wash: the raw net is a broad, mostly-dim field, and
-    // scattering it evenly down the column just fogs the whole frame. The
-    // power curve keeps the bright knots and crushes everything else, so what
-    // comes down are discrete shafts with dark water between them.
+    // Saturate, then a hard contrast curve — separates beams from a wash
+    // (see environment.md).
     float lit = causticGlowAt(uCaustics, uv, vec2(0.0), entry, uTime) * uCausticsStrength;
     lit = lit / (1.0 + lit);
     float glow = pow(lit, ${f(BEAM_CONTRAST)});
@@ -154,27 +117,21 @@ const fragmentShader = () => /* glsl */ `
     // with depth so the shaft dissolves rather than ending.
     float acrossFade = 1.0 - smoothstep(0.05, 0.5, abs(vQuad.x));
 
-    // Two vertical fades. The exponential is the physical one — light
-    // scattering down through turbid water dies fast. The smoothstep on top
-    // forces it to exactly zero at the quad's bottom edge, which the
-    // exponential alone never reaches, and a shaft that stops at 4% of full
-    // brightness leaves a visible horizontal seam across the frame.
+    // Exponential (physical) fade plus a smoothstep forcing exact zero at
+    // the quad's bottom edge, which the exponential alone never reaches.
     float t = below / uRiverDepth;
     float depthFade =
       exp(-t * ${f(DEPTH_FALLOFF)}) * (1.0 - smoothstep(0.72, 1.0, t));
 
-    // Ramp in below the surface over a real distance rather than a token one.
-    // These planes can sit close to the camera, where a short ramp in world
-    // units is a hard bright line across a large part of the screen.
+    // Ramps in over a real world distance — these planes can sit close to
+    // the camera, where a short ramp is a hard bright line on screen.
     float surfaceFade = smoothstep(0.0, 0.3, t);
 
     float strength = glow * acrossFade * depthFade * surfaceFade * uIntensity;
 
-    // Distance fog applies to shafts too, but additively: a shaft far enough
-    // away is scattering light that itself has to travel back through the
-    // murk, so it arrives dimmer rather than fog-colored. Blending toward
-    // uFogColor here would brighten the fog instead of fading the shaft, so
-    // this takes fogAmount()'s factor (see fog.js) and not applyFog itself.
+    // Additive fog, not a blend toward uFogColor: a distant shaft is
+    // scattering light that itself travels back through the murk, so it
+    // arrives dimmer, not fog-colored.
     strength *= 1.0 - fogAmount(vWorldPos);
 
     if (strength < 0.002) discard;
@@ -255,9 +212,8 @@ export function buildGodRays(bounds, cameraPosition, cameraTarget) {
     vertexShader: VERTEX_SHADER,
     fragmentShader: fragmentShader(),
     transparent: true,
-    // Additive: shafts are light being added to the scene, not a surface
-    // covering it. Overlapping planes therefore accumulate into a brighter
-    // core, which is what gives the effect volume from flat geometry.
+    // Additive: overlapping planes accumulate into a brighter core, which is
+    // what gives the effect volume from flat geometry.
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     // Visible from either face — the camera can end up on either side of a
@@ -280,21 +236,16 @@ export function buildGodRays(bounds, cameraPosition, cameraTarget) {
     uniforms.uCaustics.value = texture;
   }
 
-  // `coverage` is the CAUSTICS pass's world coverage, not the water sim's —
-  // a shaft's only texture read is the net at its surface entry point (see the
-  // fragment shader), so it maps world XZ through that pass's own extent. Those
-  // two used to be the same value; they are not any more (see
-  // causticsWorldSize in water.js).
+  // `coverage` is the caustics pass's world coverage, not the water sim's —
+  // see causticsWorldSize in water.js.
   function setWorldSize(coverage, bounds) {
     uniforms.uWorldSize.value.set(coverage.width, coverage.height);
     uniforms.uMargin.value.set(coverage.marginX, coverage.marginZ);
     uniforms.uFogDensity.value = fogDensity(bounds);
   }
 
-  // The direction each fragment traces back up to find its surface entry
-  // point. Pushed every frame alongside the caustics generator's own copy
-  // (see season.js's sweptSunDirection) — the two have to be the same sun or
-  // the shafts would lean one way while the net they sample slid the other.
+  // Pushed every frame alongside the caustics generator's own copy — must
+  // stay the same sun or the shafts lean out of step with the net.
   function setSunDirection(direction) {
     uniforms.uSunDir.value.copy(direction);
   }

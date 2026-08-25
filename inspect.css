@@ -1,9 +1,5 @@
-/* inspect.css
-   The fish viewer's own chrome — a floating control panel — layered on top of
-   style.css's shared tokens/reset (--ink, --line, --accent, --sans, --mono,
-   the #fish-loading overlay, and #back-link, which shares its rule with
-   #fish-viewer-link there) rather than redefining them, so this page reads as
-   the same interface as the river view. */
+/* inspect.css — layered on top of style.css's shared tokens/reset.
+   Design rationale, invariants, gotchas: .claude/context/ui.md */
 
 #fish-canvas {
   display: block;
@@ -11,21 +7,70 @@
   height: 100%;
 }
 
+/* Shifts the rendered image up to recenter the fish in the space actually
+   visible above #inspect-bar (see ui.md — frameCamera() centers in the full
+   canvas). #anatomy-overlay deliberately does NOT get this transform; its
+   leader-line endpoint is shifted in inspect.js's own pixel math instead. */
+#fish-canvas,
+#fish-loading {
+  transform: translateY(calc(var(--bar-h, 170px) * -0.5));
+}
+
 #inspect-panel {
   position: absolute;
   top: 18px;
   right: 18px;
-  /* Was 240px. The panel carries a species roster with scientific names, a
-     length scale and a season card now — at 240 the sparkline was too narrow
-     to show a run's shape and every stat row wrapped. */
   width: 300px;
-  max-height: calc(100vh - 36px);
+  /* Anchored above #inspect-bar via --bar-h (written in resize(), inspect.js)
+     rather than a fixed distance, so it tracks the bar's own reflow. */
+  bottom: calc(var(--bar-h, 170px) + 14px);
   overflow-y: auto;
   padding: 10px 14px 12px;
   background: var(--ink);
   border: 1px solid var(--line);
   border-top: 2px solid var(--accent);
   color: var(--text);
+}
+
+/* ---------------------------------------------------------------------
+   The bottom bar — positioned directly, no #hud wrapper (nothing else is
+   edge-anchored on this page)
+   --------------------------------------------------------------------- */
+
+#inspect-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* display:flex reasserted (not just flex-wrap): style.css's own narrow
+   breakpoint switches .report-body to a 2-column grid tuned for the river's
+   five fields, which this page would otherwise inherit — see ui.md. */
+#inspect-bar .report-body {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+#species-field {
+  flex: 0 0 auto;
+  width: 260px;
+}
+
+#view-field {
+  flex: 0 0 auto;
+  width: 232px;
+}
+
+/* The one field that grows — a silhouette benefits most from extra width. */
+#length-field {
+  flex: 1 1 320px;
+  min-width: 320px;
+}
+
+#season-field {
+  flex: 0 0 auto;
+  width: 320px;
 }
 
 #inspect-panel .field-head {
@@ -39,17 +84,6 @@
   color: var(--text-faint);
 }
 
-/* Each block of the panel is one section with its own head, divided by a
-   hairline — the same way the report bar divides its fields. */
-.panel-section {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-soft);
-}
-
-#inspect-panel input[type="checkbox"] {
-  accent-color: var(--accent);
-}
 
 /* ---------------------------------------------------------------------
    Species picker — a list, not a <select>. The whole roster is readable at
@@ -69,9 +103,7 @@
   padding: 5px 6px 5px 5px;
   background: transparent;
   border: none;
-  /* The selected marker. Reserved on every row so selecting one does not
-     shift the text of all five sideways. */
-  border-left: 2px solid transparent;
+  border-left: 2px solid transparent; /* selected marker, reserved on every row so selecting doesn't shift text */
   border-radius: 0;
   text-align: left;
   cursor: pointer;
@@ -134,20 +166,65 @@
    View controls
    --------------------------------------------------------------------- */
 
-#inspect-panel .toggles {
+#inspect-bar .toggles {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 4px;
 }
 
-#inspect-panel .toggles label {
+/* Styled after .transport-btn/.speed-btn in style.css, not a native checkbox. */
+.toggle-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--t-3);
+  gap: 8px;
+  width: 100%;
+  background: transparent;
   color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 5px 10px;
+  font-family: var(--sans);
+  font-size: var(--t-2);
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 500;
   cursor: pointer;
+}
+
+.toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.toggle-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Same square device as .species-key, neutral until pressed. */
+.toggle-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--text-faint);
+}
+
+.toggle-btn[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.toggle-btn[aria-pressed="true"] .toggle-mark {
+  background: var(--accent);
+}
+
+/* Live stage name while Construction loops (tickConstruction, inspect.js);
+   empty and invisible when it's off. */
+#construction-toggle b {
+  margin-left: auto;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 #reset-view {
@@ -177,8 +254,98 @@
 }
 
 /* ---------------------------------------------------------------------
-   Adult length — all five species on one scale, so the comparison is the
-   thing you see rather than something you work out from two numbers.
+   Turbidity — a range slider. Generic class name (.range-field, not
+   #turbidity-field): Construction used this same treatment before it
+   became a toggle button. See ui.md for the cross-browser fill approach.
+   --------------------------------------------------------------------- */
+
+.range-field {
+  margin-top: 10px;
+}
+
+.range-field label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 5px;
+}
+
+.range-field label b {
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.range-field input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* --fill is written per-input by inspect.js on every input event, as a percentage. */
+.range-field input[type="range"] {
+  --fill: 0%;
+}
+
+.range-field input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--fill),
+    var(--line) var(--fill),
+    var(--line) 100%
+  );
+}
+
+.range-field input[type="range"]::-moz-range-track {
+  height: 3px;
+  background: var(--line);
+}
+
+.range-field input[type="range"]::-moz-range-progress {
+  height: 3px;
+  background: var(--accent);
+}
+
+.range-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  background: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 0;
+}
+
+.range-field input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  background: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 0;
+}
+
+.range-field input[type="range"]:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------
+   Adult length — all five species on one scale. Each row's indicator is a
+   real fish silhouette (traced from the GLB models via
+   scripts/render-fish-silhouettes.mjs), applied as a CSS mask so it can
+   recolor. See ui.md for the sizing details.
    --------------------------------------------------------------------- */
 
 .len-row {
@@ -188,10 +355,7 @@
   padding: 2px 0;
 }
 
-/* Wide enough for "Steelhead" set in uppercase with letter-spacing — `ch` is
-   the width of a "0" in the current font, which under-measures spaced capitals
-   badly, and at 8.5ch every row but "Shad" and "Jack" ellipsised into
-   "CHINO…"/"LAMP…", which names nothing. */
+/* Wide enough for "Steelhead" uppercase — see ui.md for the ch-unit gotcha. */
 .len-name {
   flex: none;
   width: 11ch;
@@ -205,24 +369,56 @@
 .len-track {
   position: relative;
   flex: 1;
-  height: 7px;
-  /* The scale itself, so a bar's position on it is readable without a grid. */
+  min-height: 8px; /* floor for the thinnest species (lamprey) — see ui.md */
+  display: flex;
+  align-items: flex-end; /* rests short fish on the hairline instead of floating them at the top */
   border-bottom: 1px solid var(--line-soft);
 }
 
-.len-bar {
-  position: absolute;
-  top: 0;
-  height: 6px;
-  background: var(--line);
+.len-fish {
+  /* Normal flow, not position:absolute, so it sizes .len-track — see ui.md. */
+  display: block;
+  height: auto;
+  background-color: var(--line);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  /* Safe to stretch-to-fill: the box's aspect-ratio (below) is locked to the
+     source PNG's real one, so stretch and preserve-proportions coincide. */
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+/* aspect-ratio is each PNG's real pixel size (logged by
+   render-fish-silhouettes.mjs) — update if that script's numbers change.
+   jackChinook has no model of its own; buildFishSilhouette gives it
+   data-species="chinook" outright rather than a second selector here. */
+.len-fish[data-species="chinook"] {
+  -webkit-mask-image: url(/silhouettes/chinook.png);
+  mask-image: url(/silhouettes/chinook.png);
+  aspect-ratio: 1388 / 480;
+}
+.len-fish[data-species="steelhead"] {
+  -webkit-mask-image: url(/silhouettes/steelhead.png);
+  mask-image: url(/silhouettes/steelhead.png);
+  aspect-ratio: 1286 / 480;
+}
+.len-fish[data-species="shad"] {
+  -webkit-mask-image: url(/silhouettes/shad.png);
+  mask-image: url(/silhouettes/shad.png);
+  aspect-ratio: 1309 / 480;
+}
+.len-fish[data-species="lamprey"] {
+  -webkit-mask-image: url(/silhouettes/lamprey.png);
+  mask-image: url(/silhouettes/lamprey.png);
+  aspect-ratio: 5101 / 480;
 }
 
 .len-row.current .len-name {
   color: var(--text-dim);
 }
 
-.len-row.current .len-bar {
-  background: var(--accent);
+.len-row.current .len-fish {
+  background-color: var(--accent);
 }
 
 .len-row.current .len-figure {
@@ -310,10 +506,8 @@
   vector-effect: non-scaling-stroke;
 }
 
-/* Absolutely positioned from the same seasonFraction the rules above are drawn
-   at (see buildSparkAxis), not spaced evenly — the counting season starts
-   partway through March, so the months are not equal fractions of the track.
-   Same arrangement the river's own month axis uses. */
+/* Positioned from seasonFraction (buildSparkAxis), not spaced evenly —
+   months aren't equal fractions of the track. Same as the river's month axis. */
 .spark-axis {
   position: relative;
   height: 12px;
@@ -360,13 +554,25 @@
   color: var(--text-dim);
 }
 
-/* The bulleted facts under the intro line — each chosen to explain something
-   visible elsewhere in this panel or the plates drawer (a stat row above, a
-   figure in the drawer), not biology trivia with nothing to connect to. A
-   hairline-ruled tick instead of a bullet glyph, matching the anatomy
-   overlay's own tick marks rather than a browser default disc. */
+/* Grouped under category labels (Migration, Life history, ... — see
+   SPECIES_FIELD_NOTES in src/inspect.js) rather than one flat list. */
+.fg-category {
+  margin-top: 12px;
+}
+
+.fg-cat-label {
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--t-1);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+}
+
+/* Hairline-ruled tick instead of a bullet, matching the anatomy overlay's ticks. */
 .fg-list {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -412,10 +618,7 @@
 }
 
 /* ---------------------------------------------------------------------
-   Anatomy overlay — leader lines projected from the fish's actual animated
-   vertices each frame (see scene/fishAnatomy.js and renderAnatomyOverlay in
-   src/inspect.js). Positioned in pixel space via its viewBox, not CSS
-   layout, so it can sit exactly on top of the WebGL canvas.
+   Anatomy overlay — see .claude/context/scene/fishAnatomy.md
    --------------------------------------------------------------------- */
 
 #anatomy-overlay {

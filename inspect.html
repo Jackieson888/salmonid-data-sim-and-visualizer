@@ -4,9 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fish Viewer — Salmon Run</title>
-  <!-- Same reason index.html carries one: without it the browser requests
-       /favicon.ico on every load and the 404 lands in the console, which is
-       the one signal the capture scripts have for a GLSL compile failure. -->
+  <!-- See the favicon note in index.html / .claude/context/ui.md -->
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="inspect.css" />
@@ -15,60 +13,65 @@
   <main id="app">
     <canvas id="fish-canvas"></canvas>
 
-    <!-- Leader-line labels (see src/scene/fishAnatomy.js) and the scale bar,
-         drawn as an SVG overlay rather than into the WebGL scene: text and
-         hairlines are what the rest of this app's chrome is built from, and
-         an overlay tracks the 3D anchors without needing its own lighting or
-         depth-testing pass. Sized to the canvas in src/inspect.js. -->
+    <!-- SVG overlay (not drawn into the WebGL scene) for leader-line labels;
+         see .claude/context/scene/fishAnatomy.md. Sized to canvas in inspect.js. -->
     <svg id="anatomy-overlay" aria-hidden="true"></svg>
 
     <a id="back-link" href="/">&larr; Back to river</a>
 
-    <!-- Styled to match the river view's HUD (see style.css) rather than as a
-         separate look: hairline rules, uppercase labels, one accent color.
-         Pared down from a shader-tuning rig (the nine material sliders,
-         speed and amplitude, all removed — the shipped tuning lives in
-         MATERIAL_OVERRIDES in fishMesh.js and is recoverable from git
-         history) to what a visitor actually wants: which species, whether it
-         swims and turns, and now the anatomy plate. -->
-    <!-- Sectioned rather than a flat stack of controls: pick a fish, set up
-         the view, then read about it. Each section's contents are built in
-         src/inspect.js from the same data the river reads, so nothing here is
-         a hand-maintained copy of a species list. -->
+    <!-- Styled to match the river view's HUD. Split like the river page: a
+         bottom bar for everything but field notes, a side panel for just
+         the notes. See .claude/context/ui.md and .claude/context/inspect.md -->
     <div id="inspect-panel">
-      <p class="field-head"><span class="label">Fish viewer</span></p>
+      <div id="field-guide"></div>
+    </div>
 
-      <!-- Was a <select>. A list shows the whole roster at rest, carries each
-           species' own water tint as a key (the same vars the river's passage
-           table uses), and puts the scientific name where it can be read
-           rather than behind a click. Populated from SPECIES in inspect.js. -->
-      <div id="species-list" role="radiogroup" aria-label="Species"></div>
-
-      <div class="panel-section">
-        <p class="field-head"><span class="label">View</span></p>
-        <!-- Turntable OFF by default. It reads well as a demo and badly as a
-             plate: a rotating fish means every anatomy label is chasing an
-             anchor that never stops moving, so the one view where you would
-             actually read the labels is the one where they never settle.
-             Anyone who wants the rotation is one click away. -->
-        <div class="toggles">
-          <label><input type="checkbox" id="playing-toggle" checked /> Swimming</label>
-          <label><input type="checkbox" id="rotate-toggle" /> Turntable</label>
-          <label><input type="checkbox" id="labels-toggle" checked /> Anatomy labels</label>
+    <!-- The bottom bar — everything but field notes, using #report's
+         .field/.field-head vocabulary from style.css. No report-foot strip:
+         nothing here needs citing beyond what the field-notes panel credits. -->
+    <div id="inspect-bar">
+      <div class="report-body">
+        <!-- A list, not a <select> — whole roster readable at rest, each row
+             keyed with its species' water tint. Populated from SPECIES in inspect.js. -->
+        <div class="field" id="species-field">
+          <p class="field-head"><span class="label">Species</span></p>
+          <div id="species-list" role="radiogroup" aria-label="Species"></div>
         </div>
-        <button id="reset-view" type="button">Reset view</button>
+
+        <div class="field" id="view-field">
+          <p class="field-head"><span class="label">View</span></p>
+          <!-- Turntable off by default — see .claude/context/inspect.md.
+               Real buttons, not checkboxes; aria-pressed carries state
+               (setPressed/isPressed, src/inspect.js). -->
+          <div class="toggles">
+            <button type="button" class="toggle-btn" id="playing-toggle" aria-pressed="true"><i class="toggle-mark"></i>Swimming</button>
+            <button type="button" class="toggle-btn" id="rotate-toggle" aria-pressed="false"><i class="toggle-mark"></i>Turntable</button>
+            <button type="button" class="toggle-btn" id="labels-toggle" aria-pressed="true"><i class="toggle-mark"></i>Anatomy labels</button>
+            <!-- Loops through five build stages, crossfading — see
+                 applyConstruction/tickConstruction in src/inspect.js. -->
+            <button type="button" class="toggle-btn" id="construction-toggle" aria-pressed="false"><i class="toggle-mark"></i>Construction<b id="construction-stage"></b></button>
+          </div>
+          <button id="reset-view" type="button">Reset view</button>
+
+          <!-- Pushes this material's uFogDensity/uFogColor plus a drifting-
+               silt field (buildInspectParticles, src/inspect.js); 0 = no change. -->
+          <div class="range-field" id="turbidity-field">
+            <label for="turbidity-slider">Turbidity<b id="turbidity-value">Clear</b></label>
+            <input type="range" id="turbidity-slider" min="0" max="100" value="0" step="1">
+          </div>
+        </div>
+
+        <!-- Adult length, all five on one scale, drawn as real silhouettes
+             (buildFishSilhouette, src/inspect.js). See .claude/context/ui.md -->
+        <div class="field" id="length-field">
+          <div id="length-scale"></div>
+        </div>
+
+        <!-- This species' own season: a passage sparkline on the river chart's x-axis. -->
+        <div class="field" id="season-field">
+          <div id="season-card"></div>
+        </div>
       </div>
-
-      <!-- Adult length across all five on one scale, so "a jack is a small
-           Chinook" and "a lamprey is long and thin" are things you see rather
-           than work out from two numbers in a row. -->
-      <div class="panel-section" id="length-scale"></div>
-
-      <!-- This species' own season at Lower Granite: a passage sparkline on
-           the same x-axis as the river's chart, then the figures. -->
-      <div class="panel-section" id="season-card"></div>
-
-      <div class="panel-section" id="field-guide"></div>
     </div>
 
     <div id="fish-loading">

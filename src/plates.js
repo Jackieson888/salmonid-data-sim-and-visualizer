@@ -1,15 +1,7 @@
 // plates.js
-// The slide-in drawer of data plates — everything from the DART record that
-// the bar itself has no room for: species composition, the wild/hatchery
-// steelhead split, river conditions, and ten years of run history. Built
-// lazily on first open (not at boot) since none of it is on the critical
-// path the bar's own numbers are, and two of the six figures need a network
-// round-trip that has no business delaying first paint.
-//
-// Every season-x figure here shares one rule with the bar's own chart and
-// timeline axis: record index i sits at seasonFraction(i, last) along the
-// x-axis (see seasonScale.js). That is what lets a single moving cursor line
-// mean the same date on every plate at once.
+// The slide-in drawer of data plates the bar itself has no room for. Built
+// lazily on first open, not at boot.
+// Design rationale, invariants, gotchas: .claude/context/plates.md
 import {
   runData,
   runYear,
@@ -23,21 +15,14 @@ import { dayOfYear } from "./scene/season.js";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_W = 1000;
 
-// Last record index of the CURRENT season. A `let`, not a `const`, because the
-// year control swaps runData underneath this module and seasons differ in
-// length (290-306 days) — every path helper below reads it, so a stale value
-// would silently rescale every figure in the drawer. syncYear() is the one
-// place it is written, and rebuildPlatesForYear() is what calls it.
+// Last record index of the CURRENT season — a `let` because runData swaps underneath this module (see plates.md).
 let LAST = runData.length - 1;
 
 function syncYear() {
   LAST = runData.length - 1;
 }
 
-// The eight DART counts at LWG that have a color: the five the flock draws,
-// and the three it doesn't (see --sockeye etc. in style.css). Shared order
-// everywhere a plate stacks or lists them, so the composition plate, its
-// legend and its "today" bar always agree on which band is which.
+// The eight DART counts at LWG that have a color; shared order everywhere a plate stacks or lists them.
 const ALL_SPECIES = [
   { key: "chinook", label: "Chinook", swum: true },
   { key: "jackChinook", label: "Jack Chinook", swum: true },
@@ -68,10 +53,8 @@ function x(i) {
   return (seasonFraction(i, LAST) * VIEW_W).toFixed(2);
 }
 
-// Filled area under a per-day curve, baseline at `height`. `hasValue`
-// defaults to "always" — pass one for a series with real gaps (temperature-
-// shaped data), matching the break-the-line convention buildSeasonChart uses
-// in main.js: a gap is drawn as a gap, never bridged.
+// Filled area under a per-day curve. `hasValue` (default: always) lets a gappy series (e.g.
+// temperature) break the line instead of bridging it — see buildSeasonChart in main.js.
 function areaPath(height, yFor, hasValue = () => true) {
   const d = [];
   let pen = false;
@@ -103,10 +86,8 @@ function linePath(yFor, hasValue = () => true) {
   return d.join(" ");
 }
 
-// One filled band per series, stacked bottom to top in `series` order.
-// `totalFor(i)` is the denominator each day scales against — a fixed peak
-// for an absolute chart, or that day's own sum for a 100%-stacked one — so
-// the same function draws both modes (see buildCompositionPlate).
+// One filled band per series, stacked bottom to top. `totalFor(i)` is the denominator each day
+// scales against — a fixed peak or that day's own sum — so this draws both modes of FIG. 2.
 function stackedAreaPaths(height, series, totalFor) {
   const below = new Float64Array(LAST + 1);
   return series.map(({ getValue }) => {
@@ -163,16 +144,8 @@ function note(text) {
   return el("p", { class: "plate-note", text });
 }
 
-// ---------------------------------------------------------------------
-// FIG. 1 — Season passage: the bar's own chart, full size, with the
-// 2006-2015 daily mean traced behind it as a ghost line so a viewer can see
-// at a glance whether the season on screen ran ahead of or behind the
-// ten-year average.
-// ---------------------------------------------------------------------
-// Returns the figure plus an `addGhost(history)` hook: run history arrives
-// later (a network fetch, see build()) than the season passage this plate is
-// really about, so the ghost line is added to the already-built SVG in place
-// rather than the whole figure waiting on or being rebuilt for it.
+// FIG. 1 — Season passage, with the 2006-2015 daily mean as a ghost line (see plates.md).
+// Returns an `addGhost(history)` hook since run history arrives later than the plate itself.
 function buildPassagePlate(cursorSetters) {
   const figure = figureShell("FIG. 1", "Season Passage");
   const svg = plateSvg();
@@ -199,8 +172,7 @@ function buildPassagePlate(cursorSetters) {
 
   function addGhost(history) {
     const doyToMean = new Map(history.dailyEnvelope.map((d) => [d.doy, d.mean]));
-    // Rescale against whichever of the two is larger so the mean line never
-    // clips against the current season's own peak.
+    // Rescale against whichever peak is larger so the mean line never clips.
     const ghostPeak = Math.max(...doyToMean.values(), 0);
     const combinedPeak = Math.max(peak, ghostPeak, 1);
     const rescale = (v) => 200 - Math.sqrt(v / combinedPeak) * 200;
@@ -218,10 +190,7 @@ function buildPassagePlate(cursorSetters) {
   return { figure, svg, addGhost };
 }
 
-// ---------------------------------------------------------------------
-// FIG. 2 — Species composition: all eight DART counts stacked, absolute or
-// 100%, plus today's split as a single stacked bar.
-// ---------------------------------------------------------------------
+// FIG. 2 — Species composition: all eight DART counts stacked, absolute or 100%, plus today's split.
 function buildCompositionPlate(cursorSetters, todayUpdaters) {
   const figure = figureShell("FIG. 2", "Species Composition");
   const svg = plateSvg();
@@ -307,11 +276,7 @@ function buildCompositionPlate(cursorSetters, todayUpdaters) {
   return figure;
 }
 
-// ---------------------------------------------------------------------
-// FIG. 3 — Wild vs. hatchery steelhead. wildSteelhead is a subset of
-// steelhead, not an addition to it (see data.js) — this is the one place
-// that subset gets its own figure instead of a footnote.
-// ---------------------------------------------------------------------
+// FIG. 3 — Wild vs. hatchery steelhead. wildSteelhead is a subset of steelhead, not an addition (see data.js).
 function buildSteelheadPlate(cursorSetters, todayUpdaters) {
   const figure = figureShell("FIG. 3", "Wild vs. Hatchery Steelhead");
   const svg = plateSvg();
@@ -354,10 +319,7 @@ function buildSteelheadPlate(cursorSetters, todayUpdaters) {
   return figure;
 }
 
-// ---------------------------------------------------------------------
-// FIG. 4 — River conditions. Needs a network round trip
-// (loadRiverConditions); the caller shows a placeholder until it resolves.
-// ---------------------------------------------------------------------
+// FIG. 4 — River conditions. Needs a network round trip; caller shows a placeholder until it resolves.
 function buildConditionsPlate(cursorSetters, rows) {
   const figure = figureShell("FIG. 4", "River Conditions");
   const svg = plateSvg();
@@ -392,9 +354,7 @@ function buildConditionsPlate(cursorSetters, rows) {
   legend.appendChild(el("span", { text: `0–${flowPeak.toFixed(0)} kcfs` }));
   figure.appendChild(legend);
 
-  // Small scatter: daily water temperature vs. daily Chinook passage — the
-  // thermal window the run actually moves through, not just a line of two
-  // unrelated curves sharing an x-axis.
+  // Daily water temperature vs. daily Chinook passage (only when >2 readings exist).
   const points = runData
     .map((d) => ({ temp: d.tempC, chinook: d.chinook ?? 0 }))
     .filter((p) => typeof p.temp === "number");
@@ -430,20 +390,11 @@ function buildConditionsPlate(cursorSetters, rows) {
   return figure;
 }
 
-// ---------------------------------------------------------------------
-// FIG. 5 — Run history, 2006-2015: per-year totals, and the day-of-year
-// envelope with the season on screen traced through it. Needs
-// loadRunHistory(). The envelope itself is fixed at 2006-2015 whichever year
-// is showing, which is why the footnote in index.html says the average is
-// inclusive of the season shown.
-// ---------------------------------------------------------------------
+// FIG. 5 — Run history, 2006-2015: per-year totals, plus a day-of-year envelope (see plates.md).
 function buildHistoryPlate(cursorSetters, history) {
   const figure = figureShell("FIG. 5", "Run History, 2006–2015");
 
-  // (a) Per-year stacked totals. The season on screen gets the accent border
-  // everywhere else
-  // in this app reserves for the current reading (see style.css's four
-  // rules); every other year gets the neutral hairline.
+  // (a) Per-year stacked totals — the season on screen gets the accent border, others the neutral hairline.
   const barSvg = svgEl("svg", {
     viewBox: `0 0 ${VIEW_W} 160`,
     preserveAspectRatio: "none",
@@ -491,10 +442,8 @@ function buildHistoryPlate(cursorSetters, history) {
     note(`Season totals by species. ${runYear} outlined in red.`),
   );
 
-  // (b) Day-of-year envelope, with the current season traced through it. This sub-chart's
-  // x-axis is day-of-year, not record index — a different domain from every
-  // other plate here — so it gets its own cursor setter rather than sharing
-  // the shared seasonFraction() one the rest of the drawer uses.
+  // (b) Day-of-year envelope — its x-axis is day-of-year, not record index (see plates.md), so it
+  // gets its own cursor setter rather than sharing the seasonFraction() one the rest of the drawer uses.
   const envelope = history.dailyEnvelope;
   const doyMin = envelope[0].doy;
   const doyMax = envelope[envelope.length - 1].doy;
@@ -510,9 +459,7 @@ function buildHistoryPlate(cursorSetters, history) {
   band.push("Z");
   envSvg.appendChild(svgEl("path", { class: "plate-envelope-band", d: band.join(" ") }));
 
-  // linePath() draws against the record-index x() helper; this sub-chart's
-  // x-axis is day-of-year instead, so the trace is built by hand here rather
-  // than reusing that helper's x-positions.
+  // Built by hand rather than via linePath() — that helper's x-positions are record-index, not day-of-year.
   const doyToCount = new Map(runData.map((d) => [dayOfYear(d.date), d.count ?? 0]));
   const trace = [];
   let pen = false;
@@ -546,11 +493,7 @@ function buildHistoryPlate(cursorSetters, history) {
   return figure;
 }
 
-// ---------------------------------------------------------------------
-// FIG. 6 — Lamprey, day vs. night. The single richest fact the DART feed
-// publishes and nowhere else uses: lamprey pass mostly after dark, salmonids
-// don't (see data.js on why the split is kept alongside the combined count).
-// ---------------------------------------------------------------------
+// FIG. 6 — Lamprey, day vs. night: lamprey pass mostly after dark, salmonids don't (see data.md).
 function buildLampreyPlate(cursorSetters) {
   const figure = figureShell("FIG. 6", "Lamprey, Day vs. Night");
   const svg = svgEl("svg", {
@@ -642,12 +585,7 @@ export function initPlates() {
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-    // Escape closes, and is checked BEFORE the focused-control guard below.
-    // That ordering is the point: the toggle is itself a button, so after
-    // clicking it open the focus is sitting on exactly the element the guard
-    // skips — the one moment Escape is most likely to be pressed is the one
-    // moment the guard would have swallowed it. No control on this page uses
-    // Escape for anything else.
+    // Escape is checked BEFORE the focused-control guard, deliberately — see plates.md.
     if (e.key === "Escape" && isOpen) {
       e.preventDefault();
       setOpen(false);
@@ -672,11 +610,7 @@ function setOpen(next) {
   if (isOpen && !built) build();
 }
 
-// Incremented on every build. Both async plates below capture it and drop
-// their result if it has moved on — a river-conditions fetch that resolves
-// after the viewer has switched seasons would otherwise replace a placeholder
-// belonging to a drawer that no longer exists, or worse, draw last year's
-// gauges into this year's figure.
+// Incremented on every build; the two async plates below drop their result if it has moved on (see plates.md).
 let buildToken = 0;
 
 function build() {
@@ -709,9 +643,7 @@ function build() {
     .catch((err) => {
       if (token !== buildToken) return;
       console.warn(`River conditions plate unavailable for ${year}:`, err);
-      // Says which season is missing rather than a bare "unavailable": nine of
-      // the ten have no vendored river file, and "no data for 2011" is a fact
-      // about the archive, not a failure the viewer should read as a bug.
+      // Names the missing year rather than a bare "unavailable" (see plates.md).
       const missing = unavailablePlate("FIG. 4", "River Conditions");
       missing.querySelector(".plate-note").textContent =
         `No river-environment record vendored for ${year}. ` +
@@ -736,14 +668,7 @@ function build() {
   if (lastAt) updatePlatesToday(lastAt);
 }
 
-// Called from main.js's setYear() once the new season is assigned. Every
-// figure in the drawer is drawn from runData at build time, so there is
-// nothing to update in place — the honest move is to throw them away and draw
-// again, which is what build() already does.
-//
-// Deferred when the drawer is closed, reusing the same lazy path first open
-// uses: rebuilding six figures nobody is looking at is work for its own sake,
-// and two of them would fire network requests to do it.
+// Called from main.js's setYear(). Rebuilds immediately if open; deferred (lazy) if closed — see plates.md.
 export function rebuildPlatesForYear() {
   syncYear();
   if (!scrollEl) return;
