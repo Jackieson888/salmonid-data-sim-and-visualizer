@@ -62,6 +62,19 @@ Token notes:
 - `--rule`/`--rule-heavy` — rule weights shared by the plates drawer's
   figures and the bar's own accent rules, so a "heavy" line is the same
   weight everywhere it appears.
+- `--dur-fast`/`--dur-med`/`--ease` — the app's whole motion vocabulary: two
+  durations (120ms for a hover/focus color change or a class-toggled
+  highlight, 220ms for anything that swaps content or moves a panel) and one
+  plain easing, so a transition anywhere in the app reads as the same system
+  rather than a pile of hand-tuned numbers. The line for a
+  `prefers-reduced-motion` guard is **transform vs. not**: a pure
+  color/opacity transition (every hover state, `#season-delta`'s color flip,
+  the `.field-loading` dim during a season switch, the `fadeContent` dip in
+  `inspect.js`) is left unguarded, matching `#fish-loading`'s own
+  pre-existing unguarded opacity fade below; anything that also moves
+  something in space (the plates drawer's own slide, the plates-reveal
+  stagger, `#notice`'s entrance) gets an explicit `transition: none`
+  override, matching `#plates`'s own pre-existing guard.
 
 Shared cross-cutting rules: the `.label`/`.station`/`.reach`/... selector
 group is every piece of non-numeric HUD text, and is most of what makes the
@@ -109,7 +122,16 @@ and adding the three reported species broke every one of them. The
 `.key.reported` treatment (dimmed label, but the key square keeps the real
 species color) exists so the table never silently implies eight species are
 swimming past — the distinction has to be visible without reading the
-footnote.
+footnote. The chinook/steelhead/etc. mapping itself now lives in exactly one
+place — a `[data-species="x"] { --species-color: var(--x) }` block near the
+top of this file, applying globally rather than scoped to one table or
+drawer — and every consumer (this table, `#plates`, and `inspect.css`'s
+species picker and season sparkline) reads `var(--species-color)` instead of
+re-deriving the mapping. It used to be redeclared by hand in four separate
+places, which is exactly the drift risk described above; the `--species-key`
+custom property this table's reported-key squares briefly read is gone
+too — it was never actually set anywhere, so its fallback color always won
+silently.
 
 **Fields 3 & 4 — conditions and run status.** One treatment for both: both
 are label/value pairs off the same feed (one measured at the project, one
@@ -150,6 +172,15 @@ and month axis are both inset by half the slider cursor's width
 input's own box, and this is what puts a given date at the same x in all
 three elements.
 
+**Season-switch dimming (`.field-loading`).** `setYear()` (`main.js`) adds
+this to `#passage`/`#conditions`/`#run-status`/`#controls` for the duration
+of the year fetch — the only acknowledgment (opacity only, via the shared
+`.field` transition) that the figures on screen belong to the season about
+to be replaced, not the one just selected. `#masthead` is deliberately left
+out: `#year-select`'s own `:disabled` styling already marks it, and dimming
+the whole identity block underneath it too would be the same acknowledgment
+said twice.
+
 **Footnote strip.** Provenance. Used to also carry the reported-but-unswum
 species as a row of figures ("Also counted"); that moved to the plates
 drawer's FIG. 2/3, where it gets a real chart instead of an 8px aside.
@@ -173,6 +204,18 @@ it isn't a reading, and has to be legible in the one case where the report
 bar itself may never have been populated. `.warn` (muted rule, no accent)
 is for an interruption the scene expects to recover from on its own
 (WebGL context loss), distinct from something the viewer has to act on.
+Shows/hides via a `.shown` class rather than animating `[hidden]` directly
+(a `display: none` boundary can't transition across): `showNotice()`
+(`main.js`) unhides first, forces a reflow, then adds `.shown` — adding it in
+the same tick as the unhide would let the browser coalesce the two and skip
+the entrance transition entirely. `index.html`'s inline boot-failure
+script — the one other path that can show this element, for a failure
+`main.js` never got far enough to report itself — repeats the same
+three-step sequence for the same reason. `hideNotice()` (`main.js`) is the
+reverse: removes `.shown`, then defers the actual re-hide by a fixed timeout
+rather than trusting `transitionend`, the same guarantee-over-elegance
+reasoning as `dismissLoadingOverlay` (see `.claude/context/main.md`) — a
+backgrounded tab or reduced motion can mean that event never fires.
 
 **Debug panel (`D` key).** Shifted to `top: 56px` (down from the corner) to
 clear `#plates-toggle`, which took the primary top-right spot — this is a
@@ -186,6 +229,21 @@ shrinking it to make room would need a shader retune this pass doesn't do.
 close control (becomes "Plates ✕", see `setOpen` in `plates.js`) and
 `#plates` comes after it in the DOM — without an explicit stacking order,
 the open drawer painted straight over the only way to shut it.
+
+**Plate reveal stagger (`#plates-scroll > *`, `.plate-enter`).** Every direct
+child of the scroll region — the six figures, `#plates-titleblock`, and
+whichever placeholder or real plate currently occupies FIG. 4/5's slot —
+fades and settles in on arrival rather than popping in at full opacity the
+instant it lands in the DOM. `plates.js`'s `revealPlate()`/`appendPlate()`
+stagger the initial batch (`build()`'s six synchronous appends) by ~28ms per
+plate via an inline `transition-delay`, so opening the drawer reads as one
+cascade; the two async replacements (FIG. 4/5, whichever of their real or
+"unavailable" plate eventually lands) fade in unstaggered, since each arrives
+independently over the network rather than as part of one coordinated batch.
+Scoped to `#plates-scroll`'s direct children rather than a `.plate-reveal`
+class added to each plate, since every one of those children already *is* a
+direct child in build order — no separate class taxonomy needed just to say
+"everything in this container, in the order it arrived."
 
 **Scrollbars.** Thin, square-cornered, drawn from this file's own tokens
 rather than a light platform-default bar inside a dark panel. Shared (not

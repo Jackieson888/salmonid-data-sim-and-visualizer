@@ -38,6 +38,16 @@ the overlay would sit there dimming the finished scene forever. The
 `setTimeout(remove, 1200)` is the actual guarantee; the transition event just
 makes it prompt.
 
+`hideNotice()` mirrors that same guarantee-over-elegance choice for
+`#notice`'s own exit (removes the `.shown` class, then defers the actual
+`hidden = true` by a fixed timeout rather than trusting `transitionend`), and
+`showNotice()`'s entrance is the reverse of the CSS gotcha `dismissLoadingOverlay`
+sidesteps by never having to *un*hide from `display: none` in the first
+place: unhiding and adding `.shown` in the same tick would let the browser
+coalesce the two and skip the fade, so `showNotice()` unhides, forces a
+reflow (`void noticeEl.offsetWidth`), then adds `.shown`. See
+`.claude/context/ui.md` for the CSS side of both.
+
 ## HUD readouts (`setReadout`, `updateFishCountDisplay`, `writeMeasurement`)
 
 `setReadout` guards the DOM write on the **rendered string**, not the value:
@@ -672,7 +682,13 @@ the season, not throw the viewer back to March.
 
 `setYear(year)` guards against a second switch landing while the first is
 still fetching (`yearSwitchInFlight`) — the control is disabled for the
-duration, but a keyboard repeat can still outrun a slow network. Playback is
+duration, but a keyboard repeat can still outrun a slow network. It also adds
+`.field-loading` to `seasonSwitchFields` (passage/conditions/run-status/
+controls, cached once at module scope) for the same duration, removed in the
+`finally` alongside `yearSelect.disabled` — the only visible acknowledgment
+that those four fields' figures still belong to the outgoing season until
+the fetch resolves. `#masthead` is left out of that list deliberately: the
+year select's own `:disabled` state already marks it. Playback is
 held for the duration and restored after: a season change reallocates the
 day tables the pacing loop reads every frame, and letting the loop run
 through that risks a frame indexing a half-built table. On failure,

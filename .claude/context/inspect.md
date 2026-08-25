@@ -184,6 +184,35 @@ The list implements roving focus: the group is one tab stop and the arrow
 keys move within it (only the selected option has `tabIndex = 0`), which is
 what a radiogroup is expected to do.
 
+## Species-switch content fade (`fadeContent`)
+
+`setSpecies()` updates five separate pieces of chrome. Two of them —
+`markSpeciesSelection()`'s `.selected` toggle and `markLengthSelection()`'s
+`.current` toggle — just flip a class, so a plain CSS `transition` on the
+affected color/background properties (`inspect.css`) already animates them
+for free. The other two, `updateSeasonCard()` and `updateFieldGuide()`,
+`replaceChildren()` their panel wholesale — there's no property to
+transition, only old nodes and new ones — so `fadeContent(el, apply)` dips
+the panel to opacity 0, calls `apply()` while it's invisible, then lets it
+fade back in, giving those two panels the same "coordinated update" feel the
+class-toggle pair gets natively instead of a hard content-pop underneath a
+smoothly fading fish.
+
+Keyed by element in a `WeakMap` (`pendingContentFade`) so a fast arrow-key
+rove through the species list — which calls `setSpecies()`, and so
+`fadeContent()`, on every step — cancels the previous pending swap rather
+than layering timers: without that, a rapid rove could let an earlier
+step's `apply()` fire *after* a later step's, briefly showing a stale
+species' notes on top of the current selection. Cancelling instead keeps the
+panel dimmed continuously through the rove and only ever applies the
+last-requested species, which also reads better than flickering opaque
+between every step.
+
+`CONTENT_FADE_MS = 120` is a plain JS constant tracking `--dur-fast` in
+`style.css` rather than something read off the CSS at runtime — same
+lightweight convention `dismissLoadingOverlay`'s `setTimeout` uses in
+`main.js` to shadow its own CSS transition duration.
+
 ## Fish silhouettes and length scale
 
 Silhouettes are traced from the real GLB models

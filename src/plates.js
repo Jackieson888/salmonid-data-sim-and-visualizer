@@ -610,6 +610,37 @@ function setOpen(next) {
   if (isOpen && !built) build();
 }
 
+// Fades a plate in (.plate-enter in style.css) rather than letting it pop in
+// at full opacity the instant it lands in the DOM. staggered=true (the
+// initial batch in build(), below) spaces each plate ~28ms behind the last,
+// so the drawer reveals as one cascade rather than all six figures snapping
+// in together; the two async replacements pass staggered=false since they
+// each arrive independently over the network, not as part of one batch.
+//
+// Double rAF, not a single one: appending el and adding .plate-enter happen
+// in the same synchronous call here, so without waiting a full extra frame
+// the browser can coalesce the "hidden" state away entirely and jump
+// straight to the revealed one instead of animating between them.
+function revealPlate(el, staggered = true) {
+  let index = 0;
+  if (staggered) index = plateRevealIndex++;
+  el.classList.add("plate-enter");
+  el.style.transitionDelay = `${Math.min(index, 6) * 28}ms`;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.classList.remove("plate-enter");
+    });
+  });
+}
+
+function appendPlate(el) {
+  scrollEl.appendChild(el);
+  revealPlate(el);
+}
+
+// Reset at the top of every build() — see revealPlate() above.
+let plateRevealIndex = 0;
+
 // Incremented on every build; the two async plates below drop their result if it has moved on (see plates.md).
 let buildToken = 0;
 
@@ -620,24 +651,27 @@ function build() {
   cursorSetters = [];
   todayUpdaters = [];
   scrollEl.innerHTML = "";
+  plateRevealIndex = 0;
 
   const passage = buildPassagePlate(cursorSetters);
-  scrollEl.appendChild(passage.figure);
-  scrollEl.appendChild(buildCompositionPlate(cursorSetters, todayUpdaters));
-  scrollEl.appendChild(buildSteelheadPlate(cursorSetters, todayUpdaters));
+  appendPlate(passage.figure);
+  appendPlate(buildCompositionPlate(cursorSetters, todayUpdaters));
+  appendPlate(buildSteelheadPlate(cursorSetters, todayUpdaters));
 
   const conditionsPlaceholder = loadingPlate("FIG. 4", "River Conditions");
-  scrollEl.appendChild(conditionsPlaceholder);
+  appendPlate(conditionsPlaceholder);
   const historyPlaceholder = loadingPlate("FIG. 5", "Run History, 2006–2015");
-  scrollEl.appendChild(historyPlaceholder);
+  appendPlate(historyPlaceholder);
 
-  scrollEl.appendChild(buildLampreyPlate(cursorSetters));
-  scrollEl.appendChild(buildTitleBlock());
+  appendPlate(buildLampreyPlate(cursorSetters));
+  appendPlate(buildTitleBlock());
 
   loadRiverConditions(year)
     .then((rows) => {
       if (token !== buildToken) return;
-      conditionsPlaceholder.replaceWith(buildConditionsPlate(cursorSetters, rows));
+      const plate = buildConditionsPlate(cursorSetters, rows);
+      conditionsPlaceholder.replaceWith(plate);
+      revealPlate(plate, false);
       setPlatesDay(lastDayIndex);
     })
     .catch((err) => {
@@ -649,19 +683,24 @@ function build() {
         `No river-environment record vendored for ${year}. ` +
         `Outflow, spill and dissolved gas are available for 2015.`;
       conditionsPlaceholder.replaceWith(missing);
+      revealPlate(missing, false);
     });
 
   loadRunHistory()
     .then((history) => {
       if (token !== buildToken) return;
       passage.addGhost(history);
-      historyPlaceholder.replaceWith(buildHistoryPlate(cursorSetters, history));
+      const plate = buildHistoryPlate(cursorSetters, history);
+      historyPlaceholder.replaceWith(plate);
+      revealPlate(plate, false);
       setPlatesDay(lastDayIndex);
     })
     .catch((err) => {
       if (token !== buildToken) return;
       console.warn("Run history plate unavailable:", err);
-      historyPlaceholder.replaceWith(unavailablePlate("FIG. 5", "Run History, 2006–2015"));
+      const missing = unavailablePlate("FIG. 5", "Run History, 2006–2015");
+      historyPlaceholder.replaceWith(missing);
+      revealPlate(missing, false);
     });
 
   setPlatesDay(lastDayIndex);

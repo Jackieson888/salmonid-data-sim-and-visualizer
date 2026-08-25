@@ -135,6 +135,23 @@ day/night split is kept alongside the combined count).
   river-conditions fetch resolving after the viewer has switched seasons
   would replace a placeholder belonging to a drawer that no longer exists,
   or worse, draw last year's gauges into this year's figure.
+- **Reveal stagger (`revealPlate`, `appendPlate`)**: every plate fades and
+  settles in on arrival (`.plate-enter` in `style.css`) rather than popping
+  in at full opacity. `appendPlate()` (used for `build()`'s six synchronous
+  appends) wraps `scrollEl.appendChild` and calls `revealPlate(el)` with
+  staggering on, which spaces each plate ~28ms behind the last via
+  `plateRevealIndex` (reset to 0 at the top of every `build()`) so opening
+  the drawer reads as one cascade down the scroll region rather than six
+  figures landing at once. The two async replacements call `revealPlate(el,
+  false)` directly instead — unstaggered, since each one lands independently
+  whenever its own fetch resolves, not as part of the initial batch, and
+  giving it a stagger delay computed from a counter that's long since moved
+  on would be meaningless. `revealPlate()` uses a **double**
+  `requestAnimationFrame`, not a single one: adding `.plate-enter` happens in
+  the same synchronous call as inserting the element, so without waiting a
+  full extra frame the browser can coalesce the "just inserted, hidden"
+  state away entirely and jump straight to revealed without ever animating
+  between them.
 
 ## See also
 

@@ -55,6 +55,14 @@
   /* Rule weights, shared by the plates drawer and the bar's accent rules. */
   --rule: 1px;
   --rule-heavy: 2px;
+
+  /* Motion — every transition in the app maps to one of these two durations
+     and this one easing, the same way type/spacing/rules do. Kept simple
+     (ease, no springy custom curves) to match the instrument-panel register:
+     motion should read as acknowledgment, not decoration. */
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --ease: ease;
 }
 
 * {
@@ -122,6 +130,22 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Per-species color, set once from data-species and read everywhere a
+   species needs its own tint (the day's-counts table below, the plates
+   drawer, and inspect.css's species picker/length scale/season sparkline).
+   Previously each consumer re-derived the same chinook/steelhead/etc.
+   mapping by hand in 3+ separate places — the exact kind of drift ui.md
+   flags as having broken this table's key colors once already, back when
+   they were positional instead of data-driven. */
+[data-species="chinook"] { --species-color: var(--chinook); }
+[data-species="jackChinook"] { --species-color: var(--jack-chinook); }
+[data-species="steelhead"] { --species-color: var(--steelhead); }
+[data-species="shad"] { --species-color: var(--shad); }
+[data-species="sockeye"] { --species-color: var(--sockeye); }
+[data-species="coho"] { --species-color: var(--coho); }
+[data-species="jackCoho"] { --species-color: var(--jack-coho); }
+[data-species="lamprey"] { --species-color: var(--lamprey); }
+
 /* ---------------------------------------------------------------------
    The bar
    --------------------------------------------------------------------- */
@@ -149,6 +173,19 @@ body {
 .field + .field {
   padding-left: var(--field-gap);
   border-left: 1px solid var(--line-soft);
+}
+
+/* Dimmed during a season switch (setYear, main.js) while a field's old
+   figures are still on screen but no longer necessarily correct for the
+   year just selected — opacity only, so it reads as "updating," not spatial
+   motion (no prefers-reduced-motion guard needed, matching #fish-loading's
+   own unguarded opacity fade below). */
+.field {
+  transition: opacity var(--dur-med) var(--ease);
+}
+
+.field.field-loading {
+  opacity: 0.45;
 }
 
 /* Each field is headed once, so rows beneath don't repeat their unit. */
@@ -225,6 +262,7 @@ body {
   font-size: var(--t-2);
   letter-spacing: 0.04em;
   cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease);
   /* The dropdown itself is drawn by the platform; this is what stops it
      rendering as a white list over a dark page. */
   color-scheme: dark;
@@ -311,30 +349,23 @@ body {
   padding-right: 0;
 }
 
-/* Key colours keyed off data-species, not row position (see ui.md — a past
-   positional version broke when species were added/reordered). */
-#species-breakdown .key[data-species="chinook"] { color: var(--chinook); }
-#species-breakdown .key[data-species="jackChinook"] { color: var(--jack-chinook); }
-#species-breakdown .key[data-species="steelhead"] { color: var(--steelhead); }
-#species-breakdown .key[data-species="shad"] { color: var(--shad); }
-#species-breakdown .key[data-species="lamprey"] { color: var(--lamprey); }
-#species-breakdown .key[data-species="sockeye"] { color: var(--sockeye); }
-#species-breakdown .key[data-species="coho"] { color: var(--coho); }
-#species-breakdown .key[data-species="jackCoho"] { color: var(--jack-coho); }
+/* Key colours read the shared --species-color indirection above, keyed off
+   data-species rather than row position (see ui.md — a past positional
+   version broke when species were added/reordered). */
+#species-breakdown .key[data-species] {
+  color: var(--species-color);
+}
 
 /* Reported-but-unswum species: dimmed label, but the key square keeps its
-   real species color (re-stated below, not currentColor, or it'd be lost). */
+   real species color (read from --species-color, not currentColor, or it'd
+   be lost once .key.reported dims the text). */
 #species-breakdown .key.reported {
   color: var(--text-faint);
 }
 
 #species-breakdown .key.reported i {
-  background: var(--species-key, var(--text-faint));
+  background: var(--species-color);
 }
-
-#species-breakdown .key.reported[data-species="sockeye"] i { background: var(--sockeye); }
-#species-breakdown .key.reported[data-species="coho"] i { background: var(--coho); }
-#species-breakdown .key.reported[data-species="jackCoho"] i { background: var(--jack-coho); }
 
 #species-breakdown .key.reported + .count {
   color: var(--text-dim);
@@ -375,6 +406,10 @@ body {
 
 /* The one judgement (not measurement) reading in the bar — below-average is
    the neutral case (dimmed, not alarmed), not an error. */
+#season-delta {
+  transition: color var(--dur-fast) var(--ease);
+}
+
 #season-delta.above {
   color: var(--accent);
 }
@@ -438,6 +473,7 @@ body {
   letter-spacing: 0.12em;
   font-weight: 500;
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 .speed-btn {
@@ -534,6 +570,7 @@ body {
   font-family: var(--sans);
   font-size: var(--t-2);
   cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
 }
 
 #play-pause:hover {
@@ -635,6 +672,7 @@ body {
   color: var(--text-faint);
   white-space: nowrap;
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
 }
 
 #timeline-axis button:hover {
@@ -773,6 +811,7 @@ body {
   letter-spacing: 0.14em;
   font-weight: 500;
   text-decoration: none;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 #fish-viewer-link:hover,
@@ -790,7 +829,6 @@ body {
   position: absolute;
   top: 18px;
   left: 50%;
-  transform: translateX(-50%);
   max-width: min(46ch, calc(100vw - 36px));
   padding: 10px 14px;
   background: var(--ink);
@@ -800,6 +838,23 @@ body {
   font-size: var(--t-4);
   line-height: 1.45;
   pointer-events: auto;
+  /* Centering (-50%) and the entrance settle share one transform so they
+     never fight each other — see .shown, written by showNotice()/hideNotice()
+     in main.js. */
+  transform: translate(-50%, -4px);
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+}
+
+#notice.shown {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notice {
+    transition: none;
+  }
 }
 
 /* A recoverable interruption (WebGL context loss), not something to act on. */
@@ -853,6 +908,7 @@ body {
   font-weight: 500;
   cursor: pointer;
   pointer-events: auto;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 #plates-toggle:hover {
@@ -931,6 +987,31 @@ body {
 
 .plate:last-of-type {
   border-bottom: none;
+}
+
+/* Reveal cascade for the drawer's own contents — every direct child of the
+   scroll region, so it also covers #plates-titleblock at the end and the
+   two async replacements (FIG. 4/5) landing on their own later. Staggered
+   via a plain inline transition-delay set per-child by plates.js's
+   revealPlate()/appendPlate(); the async replacements pass no stagger
+   (delay 0) since they arrive independently over the network, not as one
+   coordinated batch. Transform + opacity, so it's guarded under reduced
+   motion below. */
+#plates-scroll > * {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+}
+
+#plates-scroll > *.plate-enter {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #plates-scroll > * {
+    transition: none;
+  }
 }
 
 .plate-caption {
@@ -1111,31 +1192,9 @@ body {
   color: var(--accent);
 }
 
-/* Per-species colors, set once and shared by every consuming rule below. */
-#plates [data-species="chinook"] {
-  --species-color: var(--chinook);
-}
-#plates [data-species="jackChinook"] {
-  --species-color: var(--jack-chinook);
-}
-#plates [data-species="steelhead"] {
-  --species-color: var(--steelhead);
-}
-#plates [data-species="shad"] {
-  --species-color: var(--shad);
-}
-#plates [data-species="sockeye"] {
-  --species-color: var(--sockeye);
-}
-#plates [data-species="coho"] {
-  --species-color: var(--coho);
-}
-#plates [data-species="jackCoho"] {
-  --species-color: var(--jack-coho);
-}
-#plates [data-species="lamprey"] {
-  --species-color: var(--lamprey);
-}
+/* --species-color for every [data-species] element in this drawer (and
+   everywhere else in the app) comes from the shared block near the top of
+   this file — nothing #plates-specific needed here any more. */
 
 .plate-area[data-species],
 .plate-today-bar rect[data-species],

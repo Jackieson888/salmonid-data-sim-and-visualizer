@@ -108,6 +108,7 @@
   text-align: left;
   cursor: pointer;
   font-family: var(--sans);
+  transition: border-left-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
 }
 
 .species-option:hover {
@@ -133,11 +134,10 @@
   transform: translateY(-1px);
 }
 
-.species-option[data-species="chinook"] .species-key { background: var(--chinook); }
-.species-option[data-species="jackChinook"] .species-key { background: var(--jack-chinook); }
-.species-option[data-species="steelhead"] .species-key { background: var(--steelhead); }
-.species-option[data-species="shad"] .species-key { background: var(--shad); }
-.species-option[data-species="lamprey"] .species-key { background: var(--lamprey); }
+/* Reads --species-color from the shared indirection in style.css. */
+.species-option[data-species] .species-key {
+  background: var(--species-color);
+}
 
 .species-names {
   display: flex;
@@ -150,6 +150,7 @@
   font-size: var(--t-3);
   color: var(--text-dim);
   letter-spacing: 0.02em;
+  transition: color var(--dur-fast) var(--ease);
 }
 
 .species-option.selected .species-common {
@@ -190,6 +191,7 @@
   letter-spacing: 0.12em;
   font-weight: 500;
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 .toggle-btn:hover {
@@ -241,6 +243,7 @@
   letter-spacing: 0.14em;
   font-weight: 500;
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 #reset-view:hover {
@@ -364,6 +367,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease);
 }
 
 .len-track {
@@ -380,6 +384,7 @@
   display: block;
   height: auto;
   background-color: var(--line);
+  transition: background-color var(--dur-fast) var(--ease);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   /* Safe to stretch-to-fill: the box's aspect-ratio (below) is locked to the
@@ -433,6 +438,7 @@
   font-size: var(--t-1);
   color: var(--text-faint);
   text-align: right;
+  transition: color var(--dur-fast) var(--ease);
 }
 
 /* The axis is a .len-row too, so its track is the same element at the same
@@ -487,11 +493,10 @@
   stroke: none;
 }
 
-.spark-area[data-species="chinook"] { fill: var(--chinook); }
-.spark-area[data-species="jackChinook"] { fill: var(--jack-chinook); }
-.spark-area[data-species="steelhead"] { fill: var(--steelhead); }
-.spark-area[data-species="shad"] { fill: var(--shad); }
-.spark-area[data-species="lamprey"] { fill: var(--lamprey); }
+/* Reads --species-color from the shared indirection in style.css. */
+.spark-area[data-species] {
+  fill: var(--species-color);
+}
 
 .spark-rule {
   stroke: var(--line-soft);
@@ -546,6 +551,23 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
   text-align: right;
+}
+
+/* Momentarily dipped to opacity 0 by fadeContent() (inspect.js) while
+   setSpecies() swaps their content — a brief, opacity-only dip rather than a
+   hard content-pop, coordinated with the length scale/species list above
+   (which just transition their own color/background) so switching species
+   reads as one update instead of several independently-timed ones. No
+   prefers-reduced-motion guard needed: opacity only, same as
+   #fish-loading's own unguarded fade in style.css. */
+#season-card,
+#field-guide {
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+#season-card.content-fading,
+#field-guide.content-fading {
+  opacity: 0;
 }
 
 .fg-note {
@@ -605,6 +627,7 @@
   letter-spacing: 0.1em;
   text-decoration: none;
   border-bottom: 1px solid var(--line);
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 .fg-source:hover {

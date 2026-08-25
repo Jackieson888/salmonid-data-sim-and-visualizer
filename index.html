@@ -228,10 +228,15 @@
         var notice = document.getElementById("notice");
         if (!notice) return;
         notice.hidden = false;
-        notice.className = "error";
         notice.textContent =
           "The simulation could not start — the passage data failed to load. " +
           "Reloading the page may fix it.";
+        // Mirrors showNotice()'s entrance in main.js (see .claude/context/ui.md) —
+        // this path runs instead of that one, only when main.js itself never
+        // got far enough to run it.
+        notice.className = "error";
+        void notice.offsetWidth;
+        notice.classList.add("shown");
 
         var reason = (event && (event.reason || event.error)) || null;
         if (reason) console.error("Boot failed:", reason);

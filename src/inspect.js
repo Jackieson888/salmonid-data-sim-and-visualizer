@@ -783,6 +783,30 @@ function updateFieldGuide(species) {
   fieldGuideEl.appendChild(link);
 }
 
+// Dips an element's own content to opacity 0 (.content-fading in
+// inspect.css), swaps it while invisible, then lets it fade back in — used
+// below for the two panels that replaceChildren() wholesale on a species
+// switch (the length scale and species list only ever toggle a class, so a
+// plain CSS transition already covers them). Keyed by element in case a
+// fast arrow-key rove through the species list calls this again before a
+// pending swap has landed: the stale timeout is cancelled so only the
+// last-requested species ever actually applies, and the panel stays dimmed
+// through the rove instead of flickering up and down each step.
+const CONTENT_FADE_MS = 120; // matches --dur-fast in style.css
+const pendingContentFade = new WeakMap();
+
+function fadeContent(el, apply) {
+  const existing = pendingContentFade.get(el);
+  if (existing) clearTimeout(existing);
+  el.classList.add("content-fading");
+  const timeoutId = setTimeout(() => {
+    apply();
+    el.classList.remove("content-fading");
+    pendingContentFade.delete(el);
+  }, CONTENT_FADE_MS);
+  pendingContentFade.set(el, timeoutId);
+}
+
 function setSpecies(species) {
   currentSpecies = species;
   previewFish = makePreviewFish(species);
@@ -791,8 +815,8 @@ function setSpecies(species) {
   markSpeciesSelection();
   frameCamera(lastBodyLength);
   markLengthSelection();
-  updateSeasonCard(species);
-  updateFieldGuide(species);
+  fadeContent(seasonCardEl, () => updateSeasonCard(species));
+  fadeContent(fieldGuideEl, () => updateFieldGuide(species));
 
   // Different species = different part list, so old label state must not carry over.
   resetLabelLayout();

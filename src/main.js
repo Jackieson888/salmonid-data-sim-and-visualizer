@@ -54,6 +54,13 @@ const canvas = document.getElementById("river-canvas");
 const dateLabel = document.getElementById("date-label");
 const dayOrdinalLabel = document.getElementById("day-ordinal");
 const yearSelect = document.getElementById("year-select");
+// Dimmed during a season switch (setYear) — see .field-loading in style.css.
+const seasonSwitchFields = [
+  document.getElementById("passage"),
+  document.getElementById("conditions"),
+  document.getElementById("run-status"),
+  document.getElementById("controls"),
+];
 const playPauseBtn = document.getElementById("play-pause");
 const timelineInput = document.getElementById("timeline");
 const timelineAxis = document.getElementById("timeline-axis");
@@ -85,8 +92,27 @@ const noticeEl = document.getElementById("notice");
 function showNotice(message, kind = "error") {
   if (!noticeEl) return;
   noticeEl.textContent = message;
-  noticeEl.className = kind;
   noticeEl.hidden = false;
+  // className reset, then a forced reflow before adding "shown" — otherwise
+  // the unhide and the entrance transition's start state would land in the
+  // same tick and the browser would skip straight to the end state instead
+  // of animating it (see .claude/context/ui.md).
+  noticeEl.className = kind;
+  void noticeEl.offsetWidth;
+  noticeEl.classList.add("shown");
+}
+
+// The one other place a notice needs to go away on its own (a season-load
+// warning clearing once a later switch succeeds) — mirrors the entrance
+// above but in reverse, with the same timeout-is-the-real-guarantee pattern
+// dismissLoadingOverlay uses below: a transitionend that never fires (tab
+// backgrounded, reduced motion) would otherwise leave it un-hidden forever.
+function hideNotice() {
+  if (!noticeEl || noticeEl.hidden) return;
+  noticeEl.classList.remove("shown");
+  setTimeout(() => {
+    noticeEl.hidden = true;
+  }, 260);
 }
 
 // Fades the loading overlay out and drops it from the DOM. The timeout is
@@ -1006,6 +1032,11 @@ async function setYear(year) {
   if (yearSwitchInFlight || year === runYear) return;
   yearSwitchInFlight = true;
   yearSelect.disabled = true;
+  // The four fields whose figures are about to go stale mid-fetch — see
+  // .field-loading in style.css. Masthead is left alone: #year-select's own
+  // :disabled treatment already marks it, and dimming the h1/station under
+  // it too would be the same acknowledgment said twice.
+  for (const field of seasonSwitchFields) field.classList.add("field-loading");
 
   // A season change reallocates the day tables the pacing loop reads every
   // frame, so playback is held for the duration and restored after.
@@ -1017,7 +1048,7 @@ async function setYear(year) {
     rebuildForYear();
     rebuildPlatesForYear();
     loadConditionsForYear();
-    if (noticeEl && noticeEl.className === "warn") noticeEl.hidden = true;
+    if (noticeEl && noticeEl.classList.contains("warn")) hideNotice();
   } catch (err) {
     console.warn(`Could not load the ${year} season:`, err);
     // runData/runYear are untouched on failure — still a warning, not the
@@ -1032,6 +1063,7 @@ async function setYear(year) {
     yearSelect.disabled = false;
     yearSwitchInFlight = false;
     setPlaying(wasPlaying);
+    for (const field of seasonSwitchFields) field.classList.remove("field-loading");
   }
 }
 
