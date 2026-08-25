@@ -16,47 +16,62 @@
   transform: translateY(calc(var(--bar-h, 170px) * -0.5));
 }
 
-/* Slides in like the river's own #plates drawer (see plates.js) — closed by
-   default (transform below) so the fish fills more of the screen; opened via
-   #field-notes-toggle (style.css, sharing #plates-toggle's treatment).
-   top:60px clears that button (18px + its own ~28px + a gap) rather than
-   overlapping it. Flush to the right edge (right:0, border-left only) like
-   #plates, so it reaches full-bleed on a narrow phone instead of leaving an
-   18px sliver of canvas down the side.
-
-   bottom:0, not anchored above #inspect-bar via --bar-h: that was tried
-   first, but a viewport short enough to push the bar toward its own 70vh cap
-   left almost no room left for the panel above it, squeezing "Field notes"
-   down to an unreadable sliver whenever both were open together. Running the
-   panel the rest of the way to the true bottom instead — same full-bleed
-   idiom #plates uses on the river page — costs nothing: #inspect-bar comes
-   after this element in inspect.html, so its own opaque background already
-   paints over whatever part of the panel it overlaps. */
+/* Position, z-index, colors, border, slide transform and reduced-motion
+   guard are all the shared #plates/#inspect-panel drawer rule in style.css
+   (see .claude/context/drawer.md) — this page only overrides sizing/padding.
+   width narrower than #plates' 400px: this panel's content (field notes
+   prose) reads fine narrower, and a phone viewport has that much less room
+   to spare against the fish behind it. padding-top only has to clear
+   .drawer-close now (#field-notes-toggle no longer needs clearing — it
+   hides itself while open, see ui.md) — full-height (inset: 0 0 0 auto,
+   from the shared rule) rather than starting below the button, so the
+   drawer fills the same space #plates does and paints in front of
+   #inspect-bar the same way, instead of stopping above it. */
 #inspect-panel {
-  position: absolute;
-  top: 60px;
-  right: 0;
-  bottom: 0;
   width: min(320px, 100vw);
   overflow-y: auto;
-  padding: 10px 14px 12px;
-  background: var(--ink);
-  border-left: 1px solid var(--line);
-  border-top: 2px solid var(--accent);
-  color: var(--text);
-  transform: translateX(100%);
-  transition: transform 0.3s ease;
-  pointer-events: auto;
+  padding: 46px 14px 12px;
 }
 
-#inspect-panel.open {
-  transform: translateX(0);
+/* Shares the panel's top row with .drawer-close, filling the space
+   #field-notes-toggle used to occupy before it started hiding itself while
+   open (ui.md) — pulled out of #field-guide's own replaceChildren cycle
+   (updateFieldGuide, inspect.js) specifically so it can live here, in
+   normal flow's way, as a stable element rather than something rebuilt on
+   every species switch. position:absolute, not normal flow: #field-guide's
+   content needs to start right after the close button clears
+   (#inspect-panel's own reduced padding-top above), not stack below this
+   row too — the two are meant to occupy the same visual band, not two
+   separate ones. left clears .drawer-close (12px offset + 28px width + a
+   gap); right matches the panel's own right padding, same margin every
+   other edge already gets. */
+/* Stays the base rule's flex space-between row (label left, name right) —
+   a stacked 2-line version was tried first and rejected: it grew taller
+   than .drawer-close, which meant #inspect-panel's padding-top couldn't
+   actually shrink from the old 52px, defeating the point. Single line
+   instead, with the name itself made safe against the one name long enough
+   to threaten it ("Jack Chinook Salmon", the longest of the five): a
+   smaller font (the base rule's t-5 is sized for a much wider field-head
+   elsewhere in the app) plus nowrap+ellipsis as a hard backstop (measured:
+   fits without truncating in practice, but this is what stops a wrapped
+   second line from colliding with #field-guide's content below if it ever
+   doesn't — see .claude/context/ui.md). min-width:0 is what lets a flex
+   item's ellipsis actually engage; flex items default to a content-based
+   min-width that overrides overflow:hidden otherwise. */
+#field-notes-head {
+  position: absolute;
+  top: 12px;
+  left: 50px;
+  right: 14px;
+  margin: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  #inspect-panel {
-    transition: none;
-  }
+#field-notes-head b {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--t-4);
 }
 
 /* ---------------------------------------------------------------------
@@ -142,22 +157,35 @@
    child of it, so it isn't clipped by the bar's own overflow-y:auto (see
    the height safety net above). Floats off the bar's own measured height
    (--bar-h, written by the ResizeObserver in inspect.js) so it tracks the
-   bar up or down as it collapses/expands, the same plumbing #inspect-panel's
-   bottom anchor and #fish-canvas's recentering shift already read.
-   --------------------------------------------------------------------- */
+   bar up or down as it collapses/expands, the same plumbing #fish-canvas's
+   recentering shift already reads. No explicit z-index (was 1, tied with
+   #inspect-panel's own z-index:1 and — coming later in the DOM — winning
+   that tie): this button already paints above #inspect-bar/#fish-canvas
+   from DOM order alone, and leaving it at the implicit z-index:auto lets
+   the open field-notes drawer cover it the same way #plates covers
+   #report-toggle on the river page (see .claude/context/drawer.md).
+
+   Redesigned to match #report-toggle's own treatment byte-for-byte (chevron
+   icon, centered tab welded onto the bar's top edge, no bottom border) —
+   left:50%/translateX(-50%) is this page's version of that page's
+   align-self:center, since this button is position:absolute (no #hud-style
+   flex column to center it in) rather than a flow sibling. bottom sits
+   flush on --bar-h (no added gap, unlike the old +10px) so it touches the
+   bar the same way #report-toggle's margin-bottom:0 does. */
 #inspect-bar-toggle {
   position: absolute;
-  right: 18px;
-  bottom: calc(var(--bar-h, 170px) + 10px);
-  z-index: 1;
-  padding: 6px 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--bar-h, 170px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 7px 16px 6px;
   background: var(--ink);
   border: 1px solid var(--line);
+  border-bottom: none;
   color: var(--text-dim);
-  font-size: var(--t-3);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 500;
   cursor: pointer;
   pointer-events: auto;
   transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), bottom var(--dur-med) var(--ease);
@@ -185,28 +213,97 @@
   }
 }
 
-/* Compacts the bar to species selection plus the core view controls
-   (swim/turntable/reset). Hidden: the secondary toggles, turbidity, and the
-   two data fields (length scale, season card) — comparative info, not
-   controls, and the two tallest things in the bar. Defaults collapsed on a
-   small/short viewport (see setBarCollapsed() in inspect.js) so the model
-   reads larger on a phone without an extra tap; desktop opens full. */
-#inspect-bar.collapsed #labels-toggle,
-#inspect-bar.collapsed #construction-toggle,
-#inspect-bar.collapsed .range-field,
+/* Compacts the bar to just species selection. Hidden: the view controls
+   (swim/turntable/reset/etc.), turbidity, and the two data fields (length
+   scale, season card) — comparative info, not controls, and the tallest
+   things in the bar. Defaults collapsed on a small/short viewport (see
+   setBarCollapsed() in inspect.js) so the model reads larger on a phone
+   without an extra tap; desktop opens full.
+
+   Animated, not toggled — same two techniques as the river's own
+   #report.collapsed (.claude/context/ui.md): whole fields leaving the row
+   (#view-field, #length-field, #season-field) fade+scale rather than
+   animate width, for the same reason the river's #conditions/#run-status
+   do — .field + .field's divider system and this bar's own flex-basis
+   rules would need re-deriving per breakpoint to animate width safely.
+   #labels-toggle/#construction-toggle/.range-field aren't listed here any
+   more — they're nested inside #view-field, so hiding it already hides
+   them; the old parallel display:none rules were dead weight once
+   #view-field itself joined this list. */
+#view-field,
+#length-field,
+#season-field {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+  transition-behavior: allow-discrete;
+}
+
+#inspect-bar.collapsed #view-field,
 #inspect-bar.collapsed #length-field,
 #inspect-bar.collapsed #season-field {
   display: none;
+  opacity: 0;
+  transform: scale(0.96);
 }
 
-/* Beyond just hiding fields, the two that remain are flattened from stacked
-   columns into single compact rows — the species list's per-row scientific
-   name and the view toggles' vertical stack are what a "compact" bar least
-   needs, since the field-guide/plates-style reading is exactly what Expand
-   is for. Field headers ("Species"/"View") are dropped too — the picker and
-   toggles are self-explanatory as a row of chips/buttons. */
-#inspect-bar.collapsed .field-head {
+@starting-style {
+  #inspect-bar:not(.collapsed) #view-field,
+  #inspect-bar:not(.collapsed) #length-field,
+  #inspect-bar:not(.collapsed) #season-field {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #view-field,
+  #length-field,
+  #season-field {
+    transition: none;
+  }
+}
+
+/* Beyond just hiding fields, the one that remains is flattened from a
+   stacked list into a compact grid — the species list's per-row scientific
+   name is what a "compact" bar least needs, since the field-guide/
+   plates-style reading is exactly what Expand is for. The field header
+   ("Species") drops too — the picker is self-explanatory as a row of chips.
+   Both get a real max-height collapse (not display:none outright) for the
+   same reason the river's own sub-collapses do: known, bounded content
+   (one label line, one small caption line) animates precisely instead of
+   snapping. */
+#species-field .field-head,
+.species-scientific {
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height var(--dur-med) var(--ease), opacity var(--dur-med) var(--ease);
+  transition-behavior: allow-discrete;
+}
+
+#species-field .field-head { max-height: 30px; }
+.species-scientific { max-height: 14px; }
+
+#inspect-bar.collapsed #species-field .field-head,
+#inspect-bar.collapsed .species-scientific {
   display: none;
+  max-height: 0;
+  opacity: 0;
+}
+
+@starting-style {
+  #inspect-bar:not(.collapsed) #species-field .field-head,
+  #inspect-bar:not(.collapsed) .species-scientific {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #species-field .field-head,
+  .species-scientific {
+    transition: none;
+  }
 }
 
 #inspect-bar.collapsed .report-body {
@@ -219,14 +316,23 @@
   padding-left: var(--s3);
 }
 
-#inspect-bar.collapsed #species-field,
-#inspect-bar.collapsed #view-field {
+/* Only field left standing when collapsed — free to grow into the row
+   width #view-field used to share, so the grid below has room to lay the
+   whole roster out in as few rows as possible instead of one overflowing
+   line (see .claude/context/ui.md). */
+#inspect-bar.collapsed #species-field {
+  flex: 1 1 auto;
   width: auto;
 }
 
+/* auto-fit + minmax picks as many columns as actually fit the bar's width
+   and wraps the rest to new rows, rather than flex-wrap's single unbroken
+   line (which only wraps when a parent constrains the item's width, and
+   nothing here did — the whole roster tried to fit on one line and
+   overflowed instead of wrapping). */
 #inspect-bar.collapsed #species-list {
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 4px;
 }
 
@@ -242,31 +348,11 @@
   border-color: var(--accent);
 }
 
-#inspect-bar.collapsed .species-scientific {
-  display: none;
-}
-
-#inspect-bar.collapsed #view-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-#inspect-bar.collapsed #view-field .toggles {
-  flex-direction: row;
-}
-
-#inspect-bar.collapsed .toggle-btn {
-  width: auto;
-}
-
-#inspect-bar.collapsed #reset-view {
-  width: auto;
-  margin-top: 0;
-}
-
+/* margin-bottom dropped from the base rule (style.css) — this element is
+   position:absolute now (#field-notes-head, above), so a bottom margin
+   pushes nothing; padding-bottom/border-bottom stay as its own visual
+   underline. */
 #inspect-panel .field-head {
-  margin-bottom: 8px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line-soft);
 }
@@ -869,7 +955,8 @@
 @media (pointer: coarse) {
   .toggle-btn,
   #reset-view,
-  .species-option {
+  .species-option,
+  #inspect-bar-toggle {
     padding-block: 10px;
   }
 

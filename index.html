@@ -1,255 +1,343 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Salmon Run — A Boids Simulation</title>
-  <meta
-    name="description"
-    content="A Three.js flocking simulation of the salmon run past Lower
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Salmon Run — A Boids Simulation</title>
+    <meta
+      name="description"
+      content="A Three.js flocking simulation of the salmon run past Lower
              Granite Dam on the Snake River, driven by real daily adult
              passage counts from Columbia Basin Research DART."
-  />
-  <!-- Explicit icon: without one, a 404 for /favicon.ico trips
+    />
+    <!-- Explicit icon: without one, a 404 for /favicon.ico trips
        scripts/screenshot.mjs's failure detection. See .claude/context/ui.md -->
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <meta name="theme-color" content="#0a0f12" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0a0f12" />
 
-  <!-- Social card — regenerate og-image.png via scripts/screenshot.mjs
+    <!-- Social card — regenerate og-image.png via scripts/screenshot.mjs
        rather than hand-making one. See .claude/context/ui.md -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Salmon Run — A Boids Simulation" />
-  <meta
-    property="og:description"
-    content="A Three.js flocking simulation of the salmon run past Lower
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Salmon Run — A Boids Simulation" />
+    <meta
+      property="og:description"
+      content="A Three.js flocking simulation of the salmon run past Lower
              Granite Dam on the Snake River, driven by real daily adult
              passage counts from Columbia Basin Research DART."
-  />
-  <meta property="og:image" content="/og-image.png" />
-  <meta property="og:image:width" content="1800" />
-  <meta property="og:image:height" content="945" />
-  <meta
-    property="og:image:alt"
-    content="An underwater view of a dense school of shad and chinook salmon
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1800" />
+    <meta property="og:image:height" content="945" />
+    <meta
+      property="og:image:alt"
+      content="An underwater view of a dense school of shad and chinook salmon
              in green river water, over a data readout of the day's fish
              passage counts at Lower Granite Dam."
-  />
-  <meta name="twitter:card" content="summary_large_image" />
+    />
+    <meta name="twitter:card" content="summary_large_image" />
 
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <main id="app">
-    <canvas id="river-canvas"></canvas>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="river-canvas"></canvas>
 
-    <!-- The HUD's report styling: .claude/context/ui.md -->
-    <div id="hud">
-      <!-- Collapses #report to the current reading, the day's total, and
+      <!-- The HUD's report styling: .claude/context/ui.md -->
+      <div id="hud">
+        <!-- Collapses #report to the current reading, the day's total, and
            playback — see setReportCollapsed() in main.js and #report.collapsed
            in style.css. A flex sibling of #report (not a child), so it isn't
            clipped by #report's own overflow-y:auto. -->
-      <button id="report-toggle" type="button" aria-pressed="false" aria-controls="report">Collapse</button>
-      <section id="report">
-        <div class="report-body">
-          <!-- 1. Identity and the current reading. -->
-          <header class="field" id="masthead">
-            <p class="station">Project LWG &middot; Lower Granite Lock &amp; Dam</p>
-            <h1>Adult Fish Passage</h1>
-            <p class="reach">
-              <span>Snake River &middot; Counting Season</span>
-              <!-- Options/initial value written from AVAILABLE_YEARS in main.js. -->
-              <select id="year-select" aria-label="Counting season"></select>
-            </p>
-            <!-- Stays a printed reading, not a picker — the season select,
+        <button
+          id="report-toggle"
+          type="button"
+          aria-pressed="false"
+          aria-controls="report"
+          aria-label="Collapse panel"
+        >
+          <svg
+            class="chevron-icon"
+            viewBox="0 0 12 8"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M1 1l5 5 5-5" />
+          </svg>
+        </button>
+        <section id="report">
+          <div class="report-body">
+            <!-- 1. Identity and the current reading. -->
+            <header class="field" id="masthead">
+              <p class="station">Adult Fish Passage</p>
+              <h1>LWG &middot; Lower Granite Lock &amp; Dam</h1>
+              <p class="reach">
+                <span>Snake River &middot; Counting Season</span>
+                <!-- A custom listbox, not a native <select> — Chromium's own
+                   select popup ignores color-scheme:dark on Windows and
+                   rendered as a stock white listbox over this page's dark
+                   chrome. #year-listbox (a sibling of #report below, not a
+                   descendant — see .claude/context/ui.md) holds the actual
+                   options, populated from AVAILABLE_YEARS in main.js. -->
+                <button
+                  type="button"
+                  id="year-select"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls="year-listbox"
+                  aria-label="Counting season"
+                >
+                  <span id="year-select-value">2015</span>
+                  <svg
+                    class="chevron-icon"
+                    viewBox="0 0 12 8"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M1 1l5 5 5-5" />
+                  </svg>
+                </button>
+              </p>
+              <!-- Stays a printed reading, not a picker — the season select,
                  month ticks, slider and arrow keys already reach any date. -->
-            <p class="readout">
-              <span id="date-label">Loading run data…</span>
-              <span id="day-ordinal"></span>
-            </p>
-          </header>
+              <p class="readout">
+                <span id="date-label">Loading run data…</span>
+                <span id="day-ordinal"></span>
+              </p>
+            </header>
 
-          <!-- 2. The day's counts — all eight DART species at this project,
+            <!-- 2. The day's counts — all eight DART species at this project,
                not just the five the flock draws (see .claude/context/data.md
                and .claude/context/main.md for the simulated/reported split). -->
-          <div class="field" id="passage">
-            <p class="field-head">
-              <span class="label">Daily adult passage</span>
-              <b id="fish-count">0</b>
-            </p>
-            <table id="species-breakdown">
-              <tbody>
-                <tr>
-                  <td class="key" data-species="chinook"><i></i>Chinook</td>
-                  <td class="count" id="count-chinook">0</td>
-                  <td class="key" data-species="steelhead"><i></i>Steelhead</td>
-                  <td class="count" id="count-steelhead">0</td>
-                </tr>
-                <tr>
-                  <td class="key" data-species="jackChinook"><i></i>Jack Chinook</td>
-                  <td class="count" id="count-jackChinook">0</td>
-                  <td class="key" data-species="shad"><i></i>Shad</td>
-                  <td class="count" id="count-shad">0</td>
-                </tr>
-                <tr>
-                  <td class="key" data-species="lamprey"><i></i>Lamprey</td>
-                  <td class="count" id="count-lamprey">0</td>
-                  <td class="key reported" data-species="sockeye"><i></i>Sockeye&dagger;</td>
-                  <td class="count" id="count-sockeye">0</td>
-                </tr>
-                <tr>
-                  <td class="key reported" data-species="coho"><i></i>Coho&dagger;</td>
-                  <td class="count" id="count-coho">0</td>
-                  <td class="key reported" data-species="jackCoho"><i></i>Jack Coho&dagger;</td>
-                  <td class="count" id="count-jackCoho">0</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <div class="field" id="passage">
+              <p class="field-head">
+                <span class="label">Daily adult passage</span>
+                <b id="fish-count">0</b>
+              </p>
+              <table id="species-breakdown">
+                <tbody>
+                  <tr>
+                    <td class="key" data-species="chinook"><i></i>Chinook</td>
+                    <td class="count" id="count-chinook">0</td>
+                    <td class="key" data-species="steelhead">
+                      <i></i>Steelhead
+                    </td>
+                    <td class="count" id="count-steelhead">0</td>
+                  </tr>
+                  <tr>
+                    <td class="key" data-species="jackChinook">
+                      <i></i>Jack Chinook
+                    </td>
+                    <td class="count" id="count-jackChinook">0</td>
+                    <td class="key" data-species="shad"><i></i>Shad</td>
+                    <td class="count" id="count-shad">0</td>
+                  </tr>
+                  <tr>
+                    <td class="key" data-species="lamprey"><i></i>Lamprey</td>
+                    <td class="count" id="count-lamprey">0</td>
+                    <td class="key reported" data-species="sockeye">
+                      <i></i>Sockeye&dagger;
+                    </td>
+                    <td class="count" id="count-sockeye">0</td>
+                  </tr>
+                  <tr>
+                    <td class="key reported" data-species="coho">
+                      <i></i>Coho&dagger;
+                    </td>
+                    <td class="count" id="count-coho">0</td>
+                    <td class="key reported" data-species="jackCoho">
+                      <i></i>Jack Coho&dagger;
+                    </td>
+                    <td class="count" id="count-jackCoho">0</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-          <!-- 3. Conditions — temperature rides the passage CSV; outflow,
+            <!-- 3. Conditions — temperature rides the passage CSV; outflow,
                spill, dissolved gas load after boot (loadConditionsForYear,
                main.js) and read "—" for a season with no vendored river file. -->
-          <div class="field" id="conditions">
-            <p class="field-head"><span class="label">Conditions</span></p>
-            <p><span class="label">Water</span><b id="water-temp">—</b></p>
-            <p><span class="label">Outflow</span><b id="outflow">—</b></p>
-            <p><span class="label">Spill</span><b id="spill">—</b></p>
-            <p><span class="label">Diss. gas</span><b id="dissolved-gas">—</b></p>
-            <p><span class="label">Chinook run</span><b id="chinook-run">—</b></p>
-          </div>
-
-          <!-- 4. Where this season stands vs. the ten-year daily mean —
-               both figures count the same five species (data.md). -->
-          <div class="field" id="run-status">
-            <p class="field-head"><span class="label">Run to date</span></p>
-            <p><span class="label">Season</span><b id="season-total">0</b></p>
-            <p><span class="label">10-yr avg</span><b id="season-average">—</b></p>
-            <p><span class="label">Vs. avg</span><b id="season-delta">—</b></p>
-          </div>
-
-          <!-- 5. The season and its controls — column layout, see ui.md. -->
-          <div class="field" id="controls">
-            <!-- Deliberately short: day-to-day stepping is the arrow keys
-                 and slider, season ends are Home/End. Just run/hold + pace. -->
-            <div id="transport">
-              <!-- No aria-label — it would override the visible text (the
-                   actual state). aria-pressed set from setPlaying(), main.js. -->
-              <button id="play-pause" aria-pressed="false">Pause</button>
-              <button class="transport-btn" id="to-peak" type="button">Peak</button>
-
-              <!-- Written from SPEEDS in main.js so labels/divisors agree. -->
-              <div id="speed" role="group" aria-label="Playback speed">
-                <span class="label">Speed</span>
-              </div>
+            <div class="field" id="conditions">
+              <p class="field-head"><span class="label">Conditions</span></p>
+              <p><span class="label">Water</span><b id="water-temp">—</b></p>
+              <p><span class="label">Outflow</span><b id="outflow">—</b></p>
+              <p><span class="label">Spill</span><b id="spill">—</b></p>
+              <p>
+                <span class="label">Diss. gas</span><b id="dissolved-gas">—</b>
+              </p>
+              <p>
+                <span class="label">Chinook run</span><b id="chinook-run">—</b>
+              </p>
             </div>
-            <div id="timeline-block">
-              <!-- Daily passage as an area, water temp as a line — drawn at
+
+            <!-- 4. Where this season stands vs. the ten-year daily mean —
+               both figures count the same five species (data.md). -->
+            <div class="field" id="run-status">
+              <p class="field-head"><span class="label">Run to date</span></p>
+              <p><span class="label">Season</span><b id="season-total">0</b></p>
+              <p>
+                <span class="label">10-yr avg</span><b id="season-average">—</b>
+              </p>
+              <p>
+                <span class="label">Vs. avg</span><b id="season-delta">—</b>
+              </p>
+            </div>
+
+            <!-- 5. The season and its controls — column layout, see ui.md. -->
+            <div class="field" id="controls">
+              <!-- Deliberately short: day-to-day stepping is the arrow keys
+                 and slider, season ends are Home/End. Just run/hold + pace. -->
+              <div id="transport">
+                <!-- No aria-label — it would override the visible text (the
+                   actual state). aria-pressed set from setPlaying(), main.js. -->
+                <button id="play-pause" aria-pressed="false">Pause</button>
+                <button class="transport-btn" id="to-peak" type="button">
+                  Peak
+                </button>
+              </div>
+              <div id="timeline-block">
+                <!-- Daily passage as an area, water temp as a line — drawn at
                    boot from runData (buildSeasonChart, main.js). -->
-              <figure id="season-chart">
-                <figcaption>
-                  <span class="key-passage">Daily passage</span>
-                  <span class="key-temp">Water &deg;C</span>
-                  <span id="chart-scale"></span>
-                </figcaption>
-                <svg
-                  viewBox="0 0 1000 100"
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
-                >
-                  <path id="chart-passage" d="" />
-                  <path id="chart-temp" d="" vector-effect="non-scaling-stroke" />
-                </svg>
-              </figure>
-              <input
-                type="range"
-                id="timeline"
-                min="0"
-                max="100"
-                value="0"
-                aria-label="Date in the counting season"
-              />
-              <!-- Month ticks, positioned from runData (buildTimelineAxis,
+                <figure id="season-chart">
+                  <figcaption>
+                    <span class="key-passage">Daily passage</span>
+                    <span class="key-temp">Water &deg;C</span>
+                    <span id="chart-scale"></span>
+                  </figcaption>
+                  <svg
+                    viewBox="0 0 1000 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <path id="chart-passage" d="" />
+                    <path
+                      id="chart-temp"
+                      d=""
+                      vector-effect="non-scaling-stroke"
+                    />
+                  </svg>
+                </figure>
+                <input
+                  type="range"
+                  id="timeline"
+                  min="0"
+                  max="100"
+                  value="0"
+                  aria-label="Date in the counting season"
+                />
+                <!-- Month ticks, positioned from runData (buildTimelineAxis,
                    main.js) — not spaced evenly, since months aren't equal
                    fractions of a counting-season track. -->
-              <div id="timeline-axis" aria-hidden="true"></div>
+                <div id="timeline-axis" aria-hidden="true"></div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Provenance. -->
-        <div class="report-foot">
-          <p class="footnote">
-            &dagger; counted at the dam, not drawn in the water &middot;
-            ten-year average from 2006&ndash;2015, inclusive of the season shown
-          </p>
-          <p class="source">
-            Columbia Basin Research DART &middot; adult passage daily counts
-            &middot; data courtesy of the U.S. Army Corps of Engineers
-          </p>
-        </div>
-      </section>
-    </div>
+          <!-- Provenance. -->
+          <div class="report-foot">
+            <p class="footnote">
+              &dagger; counted at the dam, not drawn in the water &middot;
+              ten-year average from 2006&ndash;2015, inclusive of the season
+              shown
+            </p>
+            <p class="source">
+              Columbia Basin Research DART &middot; adult passage daily counts
+              &middot; data courtesy of the U.S. Army Corps of Engineers
+            </p>
+          </div>
+        </section>
+        <!-- #year-select's popup — position:fixed and a sibling of #report,
+           not a descendant, so it isn't clipped by #report's own
+           max-height:70vh/overflow-y:auto (same reason #report-toggle sits
+           outside #report — see ui.md). Positioned from #year-select's own
+           bounding rect on open (main.js); options populated there too. -->
+        <ul
+          id="year-listbox"
+          role="listbox"
+          aria-label="Counting season"
+          tabindex="-1"
+          hidden
+        ></ul>
+      </div>
 
-    <pre id="debug-panel" hidden></pre>
+      <pre id="debug-panel" hidden></pre>
 
-    <!-- A single fish up close, running the swim clip in isolation — src/inspect.js -->
-    <a id="fish-viewer-link" href="/inspect.html">Fish viewer &rarr;</a>
+      <!-- A single fish up close, running the swim clip in isolation — src/inspect.js -->
+      <a id="fish-viewer-link" href="/inspect.html">Fish viewer &rarr;</a>
 
-    <!-- The plates drawer — closed by default, built lazily on first open.
+      <!-- The plates drawer — closed by default, built lazily on first open.
          See .claude/context/plates.md -->
-    <button
-      id="plates-toggle"
-      type="button"
-      aria-pressed="false"
-      aria-controls="plates"
-    >
-      Plates
-    </button>
-    <aside id="plates" aria-label="Data plates">
-      <div id="plates-scroll"></div>
-    </aside>
+      <button
+        id="plates-toggle"
+        type="button"
+        aria-pressed="false"
+        aria-controls="plates"
+      >
+        Plates
+      </button>
+      <aside id="plates" aria-label="Data plates">
+        <!-- Dedicated close control, a real child of the panel. The toggle
+           above stays a plain "Plates" open button, but hides itself
+           (CSS, keyed off aria-pressed) while open — this is now the only
+           way to close. See .claude/context/drawer.md. -->
+        <button
+          type="button"
+          class="drawer-close"
+          id="plates-close"
+          aria-label="Close plates"
+        >
+          <svg
+            class="close-icon"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M1 1l10 10M11 1L1 11" />
+          </svg>
+        </button>
+        <div id="plates-scroll"></div>
+      </aside>
 
-    <div id="fish-loading">
-      <div class="bar"></div>
-      <p>Loading fish assets</p>
-    </div>
+      <div id="fish-loading">
+        <div class="bar"></div>
+        <p>Loading fish assets</p>
+      </div>
 
-    <!-- role="status" announces failures without stealing focus; written by
+      <!-- role="status" announces failures without stealing focus; written by
          showNotice() in main.js and the boot handler below. -->
-    <div id="notice" role="status" hidden></div>
-  </main>
+      <div id="notice" role="status" hidden></div>
+    </main>
 
-  <!-- Catches a module-eval throw in main.js/data.js, which would otherwise
+    <!-- Catches a module-eval throw in main.js/data.js, which would otherwise
        skip main.js's own error handling entirely. See .claude/context/ui.md -->
-  <script>
-    (function () {
-      function onBootFailure(event) {
-        // main.js sets this once booted; after that, errors aren't necessarily fatal.
-        if (window.__riverBooted) return;
+    <script>
+      (function () {
+        function onBootFailure(event) {
+          // main.js sets this once booted; after that, errors aren't necessarily fatal.
+          if (window.__riverBooted) return;
 
-        var loading = document.getElementById("fish-loading");
-        if (loading) loading.remove();
+          var loading = document.getElementById("fish-loading");
+          if (loading) loading.remove();
 
-        var notice = document.getElementById("notice");
-        if (!notice) return;
-        notice.hidden = false;
-        notice.textContent =
-          "The simulation could not start — the passage data failed to load. " +
-          "Reloading the page may fix it.";
-        // Mirrors showNotice()'s entrance in main.js (see .claude/context/ui.md) —
-        // this path runs instead of that one, only when main.js itself never
-        // got far enough to run it.
-        notice.className = "error";
-        void notice.offsetWidth;
-        notice.classList.add("shown");
+          var notice = document.getElementById("notice");
+          if (!notice) return;
+          notice.hidden = false;
+          notice.textContent =
+            "The simulation could not start — the passage data failed to load. " +
+            "Reloading the page may fix it.";
+          // Mirrors showNotice()'s entrance in main.js (see .claude/context/ui.md) —
+          // this path runs instead of that one, only when main.js itself never
+          // got far enough to run it.
+          notice.className = "error";
+          void notice.offsetWidth;
+          notice.classList.add("shown");
 
-        var reason = (event && (event.reason || event.error)) || null;
-        if (reason) console.error("Boot failed:", reason);
-      }
-      window.addEventListener("error", onBootFailure);
-      window.addEventListener("unhandledrejection", onBootFailure);
-    })();
-  </script>
-  <script type="module" src="/src/main.js"></script>
-</body>
+          var reason = (event && (event.reason || event.error)) || null;
+          if (reason) console.error("Boot failed:", reason);
+        }
+        window.addEventListener("error", onBootFailure);
+        window.addEventListener("unhandledrejection", onBootFailure);
+      })();
+    </script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
 </html>

@@ -28,6 +28,7 @@ drift back into a growing comment block.
 | `src/main.js` | `.claude/context/main.md` | Orchestration, timeline/population loop, boot/context-loss lifecycle |
 | `src/inspect.js` | `.claude/context/inspect.md` | Fish viewer page (species list, turntable, sparkline, anatomy overlay) |
 | `src/plates.js` | `.claude/context/plates.md` | Slide-in data plates drawer |
+| `src/drawer.js` | `.claude/context/drawer.md` | Shared slide-in drawer mechanics (`#plates`, `#inspect-panel`) |
 | `src/insights.js` | `.claude/context/insights.md` | Shared insight toast and its `.info-btn` triggers (used from `main.js`, `plates.js`, `inspect.js`) |
 | `src/quality.js` | `.claude/context/quality.md` | Quality tiers, perf governor |
 | `src/scene/fishMesh.js` | `.claude/context/scene/fishMesh.md` | GLB loading, VAT baking, instancing, per-model rotation fixups, material tuning |

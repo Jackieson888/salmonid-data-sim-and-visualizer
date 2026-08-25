@@ -94,15 +94,74 @@ reach line exactly until the season became a control at the end of it — at
 30ch, "2015" wrapped alone onto a second line as an orphan under "Counting
 Season"; widened to 34ch. `#masthead .reach` is deliberately **not** a flex
 row: the reach text wraps to two lines in this field, and as a flex
-container the `<select>` becomes a sibling item of the whole wrapped block,
-so it sat baseline-aligned to the *first* line while the text's second line
-ran on underneath it. Left as normal inline flow, the select is just
-another word in the sentence and wraps with it. `#year-select` is
-deliberately quiet — no background, no chevron beyond the platform's, a
-hairline that only resolves on hover/focus — since a full-weight control in
-the identity block would read as the loudest thing there despite being the
-least-used; `color-scheme: dark` stops the platform dropdown rendering as a
-white list over a dark page.
+container the year control becomes a sibling item of the whole wrapped
+block, so it sat baseline-aligned to the *first* line while the text's
+second line ran on underneath it. Left as normal inline flow, the control is
+just another word in the sentence and wraps with it — `display: inline-flex`
+on `#year-select` (below) still participates in that flow as one atomic
+inline box, the same as the `<select>` it replaced.
+
+`#year-select`/`#year-listbox` — a hand-built listbox, not a native
+`<select>`. `color-scheme: dark` was tried first (the platform popup's own
+attempt at theming), but Chromium's select dropdown on Windows ignores it in
+practice and rendered as a stock white listbox with a blue selection color
+sitting over this page's otherwise entirely dark chrome — the one element in
+the app not drawn from its own tokens, because it wasn't actually drawn by
+the app at all. It also had no chevron by design ("deliberately quiet"), and
+that quietness read as broken rather than restrained: a plain underlined
+word in the identity block gave no signal it was a control at all. Both
+problems needed the same fix — draw the whole thing, closed and open state
+both, from `style.css`'s own tokens — so the native element is gone.
+
+`#year-select` is now a `<button>`: the same quiet hairline-underline
+register as before (transparent background, border only resolving on
+hover/focus/open), but with a small `.chevron-icon` (shared with
+`#report-toggle`/`#inspect-bar-toggle`, rotating 180° via
+`[aria-expanded="true"]` the same way theirs rotates via
+`[aria-pressed="true"]`) as the explicit "this opens something" affordance
+the old control lacked. `#year-listbox` is a real `<ul role="listbox">` of
+`<li role="option">`s, populated from `AVAILABLE_YEARS` in `main.js`, styled
+like every other panel in the app (hard corners, hairline border, `--ink`
+background) rather than inheriting a platform popup's own chrome. The
+currently-loaded season gets `--accent` text (`aria-selected`, the same
+current-reading convention as `.speed-btn[aria-pressed="true"]`/
+`#season-delta.above`); the keyboard/mouse-highlighted row gets a neutral
+`--line-soft` background (`.active`, mirrored by a plain `:hover` rule) —
+kept as two distinct signals so browsing the list with arrow keys never
+reads as if it had already changed the season.
+
+`#year-listbox` is a **fixed-position sibling of `#report`**, not a
+descendant — `#report` carries `max-height: 70vh; overflow-y: auto` (see
+"Height safety net" below), which would otherwise clip a 21-item popup the
+instant it grew taller than whatever sliver of `#report` was visible, in
+either direction. This is the same reason `#report-toggle` sits outside
+`#report` rather than inside it. Because it's `position: fixed` rather than
+positioned against an ancestor's box, `main.js`'s `positionYearListbox()`
+computes its `left`/`bottom` directly from `#year-select`'s own
+`getBoundingClientRect()` on every open — anchored **above** the button
+(`bottom`, not `top`) since the trigger sits near the bottom of the screen
+inside the HUD bar, where opening downward would run the list straight off
+the viewport edge. `max-height` is clamped to the room actually above the
+button (`rect.top - gap - 8`, capped at 260px) rather than a flat guess, so
+a short or landscape viewport gets an internally-scrolling list instead of
+one silently clipped by the browser's own edge — the same measured-not-
+guessed instinct as `#report`'s own 70vh cap and `thinMonthLabels`.
+`main.js` closes the list outright on `resize` rather than repositioning it
+live, since nothing else in this control needs to track a moving anchor
+continuously and a stale fixed position from before the resize would be a
+worse bug than a closed dropdown.
+
+Keyboard handling lives on `#year-listbox` itself (Arrow Up/Down, Home/End,
+Enter/Space, Escape) and every one of those handlers calls
+`e.stopPropagation()` — not just `preventDefault()`. The page's own global
+`keydown` listener further down `main.js` binds several of the same keys
+(Home/End/arrows) to the timeline transport, and already knows to skip a
+focused `INPUT`/`SELECT` — but `#year-listbox` is neither; it's a `<ul
+tabindex="-1">`, focused programmatically rather than by Tab. Without the
+`stopPropagation()`, arrowing through years would also step the timeline
+underneath the open list. Closing is on `pointerdown`, not `click`, so a
+drag that ends outside the list still dismisses it, matching how native
+`<select>`/menu popups behave.
 
 **Field 2 — the day's counts.** `#species-breakdown` is a `<table>` rather
 than a flex row of chips so counts sit in fixed columns and stop shifting
@@ -172,6 +231,67 @@ and month axis are both inset by half the slider cursor's width
 input's own box, and this is what puts a given date at the same x in all
 three elements.
 
+**Collapsed report (`#report.collapsed`).** Shows identity (`#masthead` in
+full — station, `h1`, reach/year-select, readout) and just the daily-total
+line of field 2 (`#passage .field-head`, not `#species-breakdown`), plus the
+transport row. Everything else (species table, conditions, run-status,
+chart/axis, footnote) is hidden. Used to hide `#masthead`'s station/h1/reach
+too, leaving only the readout row — widened to the full identity block since
+a collapsed HUD with no station/title read as anonymous.
+
+**Collapse animates, not toggles.** Every element the collapsed state hides
+transitions out instead of snapping to `display:none`, via
+`transition-behavior: allow-discrete` + `@starting-style` (the modern way to
+run a transition across a `display:none` boundary at all — a transitioning
+property still jumps instantly at that boundary without it; unsupported
+browsers just get today's instant toggle, no breakage). Two techniques,
+picked by shape, not one applied everywhere:
+- **Self-contained pieces with a known, bounded height**
+  (`.report-foot`, `#species-breakdown`, `#season-chart`, `#timeline-axis`)
+  get a real `max-height` transition. The cap on each is picked *close to*
+  its real content height (measured across breakpoints, not a big round
+  number) — `#timeline-axis`'s 13px is literally its own fixed `height`
+  elsewhere in this file; `#season-chart`'s 90px and `#species-breakdown`'s
+  96px are generous-but-tight estimates with real headroom (measured real
+  heights top out around 63px/80px in practice). A cap much larger than the
+  content would reach its true height early and then visibly "keep
+  animating" doing nothing for the rest of the duration — the failure mode
+  that ruled out one blanket cap for all four.
+- **Whole fields leaving the flex row** (`#conditions`, `#run-status`) fade +
+  scale (`opacity`/`transform: scale`) instead of animating width. This is a
+  deliberate scope cut, not an oversight: `.field + .field`'s hairline-border
+  divider system and the breakpoint-specific `flex-basis` rules further down
+  this file would both need re-deriving to animate a field's own width to 0
+  safely, and that risk wasn't worth it for two fields. They keep their
+  layout width for the fade's duration and only reflow the row at the very
+  end when `display:none` lands — a smaller, later snap than today's instant
+  pop, not a fully width-animated one. `#passage .field-head`'s own
+  divider (margin/padding/border-color) rides the same duration so it
+  collapses in sync with `#species-breakdown` rather than snapping the
+  instant that table's `display` flips; `.field`'s own `border-left-color`/
+  `padding-left` do the same for the collapsed row's other dividers.
+  `border-*-color: transparent` is used throughout instead of `border: none`
+  for exactly this reason — a color can transition, removing a border
+  outright can't.
+All of it is guarded under `prefers-reduced-motion: reduce` (max-height/
+transform both move something in space, so they get the explicit
+`transition: none` this file's four-rule motion system reserves for that
+case — plain `opacity` alone wouldn't need it).
+
+**Collapse/expand handle, redesigned as an icon tab.** `#report-toggle` used
+to be a right-aligned "Collapse"/"Expand" text button floating above the bar
+with a gap. It's now a small tab **centered** on the bar's own top edge
+(`align-self: center`, not `flex-end`), with no bottom border and
+`margin-bottom: 0` so it sits flush against `#report`'s own accent top
+border — reads as a handle welded onto the panel, the same idea as a bottom
+sheet's own drag handle, rather than an unrelated floating control. The
+label is a `.chevron-icon` SVG (shared with `#inspect-bar-toggle`, inspect.css)
+instead of text: down at rest ("tap to collapse, push this down"), rotated
+180° once collapsed ("tap to expand, pull this up") — the accessible name
+moved from `textContent` (there's no text node left) to a JS-written
+`aria-label` (`setReportCollapsed()`, `main.js`), toggled the same way the
+text used to be.
+
 **Season-switch dimming (`.field-loading`).** `setYear()` (`main.js`) adds
 this to `#passage`/`#conditions`/`#run-status`/`#controls` for the duration
 of the year fetch — the only acknowledgment (opacity only, via the shared
@@ -235,9 +355,116 @@ rather than resizing it, since the underwater vignette in
 `scene/sceneSetup.js` is tuned to the canvas's current on-screen size, and
 shrinking it to make room would need a shader retune this pass doesn't do.
 `#plates-toggle` needs its own `z-index: 2` because it's also the drawer's
-close control (becomes "Plates ✕", see `setOpen` in `plates.js`) and
-`#plates` comes after it in the DOM — without an explicit stacking order,
-the open drawer painted straight over the only way to shut it.
+close control (becomes "Plates ✕", see `createDrawer()` in `drawer.js`) and
+`#plates` sits at `z-index: 1` — without that ordering, the open drawer
+would paint straight over the only way to shut it. `#plates`'s own
+`z-index: 1` is also what puts it in front of `#hud` (the river's bottom
+bar, `z-index: auto`) when open, rather than stopping above it — the same
+rule (`#plates, #inspect-panel`, just below) drives the fish viewer's
+field-notes drawer identically, and both pages' open/close/Escape behavior
+comes from the one `createDrawer()` implementation in `drawer.js` rather
+than two hand-kept-in-sync copies (see `.claude/context/drawer.md`).
+
+**Shared drawer chrome (`#plates, #inspect-panel`).** Position, `z-index:
+1`, background, border, the slide `transform`, and the reduced-motion guard
+are one rule (`style.css`) rather than `inspect.css` repeating it — same
+`#report`/`#inspect-bar`-style reasoning as everywhere else this file shares
+a treatment across pages. Each page still sets its own `width` (`#plates`:
+400px; `#inspect-panel`: 320px, narrower since a phone viewport has less
+room to spare against the fish behind it) and its own top clearance for its
+own toggle button (`#plates-scroll`'s `padding-top: 52px` vs.
+`#inspect-panel`'s own `padding-top: 52px`, `inspect.css`) — real
+content-driven sizing, not chrome, so it stays out of the shared rule.
+`#inspect-bar-toggle` (the fish viewer's bar collapse handle) deliberately
+carries no explicit `z-index` any more (was `1`, tied with `#inspect-panel`
+and — later in the DOM — winning that tie, which kept the collapse button
+clickable on top of an open field-notes drawer): at the implicit
+`z-index: auto` it still paints above `#inspect-bar`/`#fish-canvas` from DOM
+order alone, but now the open drawer covers it, the same way `#plates`
+covers the river's `#report-toggle` (a plain `#hud` child, no `z-index` of
+its own) when open.
+
+**Dedicated close control (`.drawer-close`, `#plates-close`/
+`#field-notes-close`).** `#plates-toggle`/`#field-notes-toggle` used to do
+double duty — open the drawer, and (once open) close it too, its own label
+flipping to "Plates ✕"/"Field Notes ✕" to say so. They're now
+**open-only**: static markup, no more JS-written label (see `drawer.js` —
+`label` was dropped from `createDrawer()`'s options entirely once nothing
+read it), reading "Plates"/"Field Notes" whenever visible. Closing is a real
+icon button (`.close-icon`, an SVG ×), and a genuine DOM **child** of
+`#plates`/`#inspect-panel` — unlike the toggle (a page-level sibling kept
+that way deliberately, see "The report bar"/"Fish viewer chrome" above),
+this one has nowhere else it needs to be measured from, so it can just be
+part of the panel. Positioned **top-left**, not top-right: top-right is
+already the toggle's own corner, and stacking a second control there would
+overlap it. Goes off-screen for free whenever its panel is closed, riding
+the parent's own `transform: translateX(100%)` — no separate visibility
+rule needed. Wired up in `drawer.js`'s `createDrawer()` (`closeButton`
+option): clicking it closes the drawer and returns focus to `toggle`,
+identical to what Escape already does, so keyboard/focus behavior doesn't
+depend on which of the three ways of closing (toggle, close icon, Escape)
+was used.
+
+**The toggle hides itself once open** (`#plates-toggle[aria-pressed="true"],
+#field-notes-toggle[aria-pressed="true"] { display: none }`, `style.css`) —
+a second "open" control sitting right next to the new close icon read as
+clutter now that closing has its own dedicated affordance, and hiding it
+also frees the top-right corner it used to occupy. `createDrawer()`
+(`drawer.js`) moves focus to `closeButton` on open specifically so this
+doesn't strand keyboard focus on an element that just vanished; every
+existing close path (`closeButton`'s own click handler, Escape, or clicking
+`toggle` itself — still a genuine toggle under the hood, just with nothing
+visible to click once open) sets `aria-pressed` back to `false` *before*
+refocusing `toggle`, so it's visible again by the time focus actually lands
+there.
+
+That `closeButton.focus()` shipped with a real bug the first time: without
+`{ preventScroll: true }`, focusing an element still mid `transform:
+translateX(...)` (the drawer's own slide-in, just started) reads as
+off-screen to the browser's implicit scroll-into-view, and it scrolled
+`document.body.scrollLeft` to "reveal" it — visibly dragging the whole
+page, canvas included, left for the ~300ms the slide-in transition took to
+catch up. This is a different mechanism than the overlay-not-resize
+decision this section documents elsewhere (nothing here was ever laying
+the canvas out narrower — it's a scroll offset applied to the whole
+document, not a box resize) but the *symptom* reads the same to a viewer:
+the canvas appearing to shift when a drawer opens. See
+`.claude/context/drawer.md` for the fix and the measured before/after.
+
+**`#field-notes-head` fills the freed corner.** The fish viewer took this
+one step further: `.field-head` (the "FIELD NOTES / Steelhead" line) used
+to be the first thing `updateFieldGuide()` built inside `#field-guide`,
+starting well below the fold once `#inspect-panel`'s `padding-top` cleared
+`#field-notes-toggle`. It's pulled out into its own stable element,
+`#field-notes-head` (`inspect.html`), sharing the panel's top row with
+`.drawer-close` instead — `position: absolute`, `left` clearing the close
+button (12px offset + 28px width + a gap), `right` matching the panel's own
+right padding. `#inspect-panel`'s `padding-top` drops from 52px (sized for
+the old corner *button*) to 46px (sized for `.drawer-close` alone, the
+taller of the two things it now needs to clear). `updateFieldGuide()`
+(`inspect.js`) no longer builds a `.field-head` as part of what it
+`replaceChildren()`s — it just writes the species name into
+`#field-notes-species-name`'s `textContent` directly (see
+`.claude/context/inspect.md`, "Species-switch content fade," for why that's
+not part of the fade either). A stacked (2-line) version of this header was
+tried first and rejected: it grew taller than `.drawer-close`, so
+`padding-top` couldn't actually shrink — the whole point. It stayed the
+base rule's single-line flex row instead, with the name's own font-size
+brought down from the base rule's `--t-5` (sized for a much wider
+`.field-head` elsewhere in the app) plus `white-space: nowrap` +
+`text-overflow: ellipsis` (and the `min-width: 0` a flex item needs for
+that ellipsis to actually engage) as a backstop against the one common name
+long enough to threaten it, "Jack Chinook Salmon" — measured to fit without
+truncating in practice, but the row is only 255px wide here (`#plates`' own
+copy of this idea, `.plate-caption`/`.plate-title`, has the full width of a
+400px drawer to work with and doesn't need this).
+
+**`#plates` didn't get the same treatment** — `.plate-caption`
+("FIG. 1 SEASON PASSAGE") already sits close to the top of each figure by
+its own nature (a compact caption row, not a page-title-sized `.field-head`
+line), so there wasn't the same empty band to reclaim once `#plates-toggle`
+started hiding itself. This is a fish-viewer-specific refinement, not
+something the drawers disagree on.
 
 **Plate reveal stagger (`#plates-scroll > *`, `.plate-enter`).** Every direct
 child of the scroll region — the six figures, `#plates-titleblock`, and
@@ -319,12 +546,15 @@ move, via the `shiftPx` offset baked into the overlay's own pixel math.
 `#fish-loading` keeps the shift purely so the loading indicator doesn't sit
 at a different height than the fish it's covering for.
 
-**`#inspect-panel` anchoring.** `bottom: calc(var(--bar-h, 170px) + 14px)`
-— anchored above `#inspect-bar` rather than a fixed distance from the
-viewport bottom, tracking the bar's own measured height (written in
-`resize()`, same as above) at every breakpoint the bar reflows to. The
-170px fallback only matters for the instant before that first measurement
-lands.
+**`#inspect-panel` anchoring.** Full height (`inset: 0 0 0 auto`, from the
+shared `#plates, #inspect-panel` rule above), not anchored above
+`#inspect-bar` — that was tried first (`bottom: calc(var(--bar-h) + 14px)`),
+but a viewport short enough to push the bar toward its own 70vh cap left
+almost no room for the panel above it, squeezing "Field notes" down to an
+unreadable sliver whenever both were open together. Running the panel the
+rest of the way to the true bottom — same full-bleed idiom `#plates` uses on
+the river page, `z-index: 1` and all — costs nothing, since the drawer now
+paints in front of `#inspect-bar` rather than needing to stop above it.
 
 **`#inspect-bar .report-body { display: flex; flex-wrap: wrap; }`.**
 `display: flex` has to be reasserted, not just `flex-wrap`, because
@@ -345,6 +575,39 @@ silhouette actually benefits from extra width.
 at rest, each row keyed with that species' own water tint. `.species-key`
 reserves a 2px left border on every row (not just the selected one) so
 selecting a species doesn't shift the other four rows' text sideways.
+
+**Collapsed bar (`#inspect-bar.collapsed`).** Shows just the species picker —
+`#view-field` (swim/turntable/reset and the rest) is hidden entirely, not
+just its secondary toggles, so a small/short viewport's one tap opens
+straight onto species selection. `#species-list` switches from a stacked
+column to a CSS grid (`repeat(auto-fit, minmax(150px, 1fr))`) rather than
+plain `flex-wrap: wrap` — the list's own width was `auto` inside a flex
+parent, so with nothing constraining it the browser gave it its full
+unwrapped content width and the row overflowed the bar instead of wrapping;
+a grid picks its own column count from the available width and always wraps
+the remainder to new rows.
+
+**Collapse animates here too**, mirroring `#report.collapsed` byte-for-byte
+in technique (see the river's own writeup above): `#view-field`/
+`#length-field`/`#season-field` (whole fields leaving the row) fade+scale
+rather than animate width, for the identical divider/flex-basis-risk reason;
+`#species-field .field-head` and `.species-scientific` (self-contained,
+bounded content — one label line, one small caption line each) get a real
+`max-height` transition with a tight cap (30px/14px). `#labels-toggle`/
+`#construction-toggle`/`.range-field` no longer have their own `display:none`
+rules — they're nested inside `#view-field`, so hiding that field already
+hides them; the old parallel rules were dead once `#view-field` itself
+joined the hidden list in an earlier pass.
+
+**Collapse/expand handle, redesigned as an icon tab** — the fish viewer's
+`#inspect-bar-toggle` gets the exact same treatment as `#report-toggle`
+(shared `.chevron-icon`, `style.css`): a tab centered on the bar's top edge,
+no bottom border, chevron flips 180° on collapse. `left: 50%` +
+`transform: translateX(-50%)` is this page's version of the river's
+`align-self: center` — this button is `position:absolute` (no `#hud`-style
+flex column to center it in), so it needs an explicit centering transform
+instead. `bottom: var(--bar-h, 170px)` (no added gap, was `+ 10px`) welds it
+to the bar the same way the river's `margin-bottom: 0` does.
 
 **View controls.** `.toggle-btn` is styled after `.transport-btn`/
 `.speed-btn` in `style.css` — a hairline border that lights to accent when
@@ -493,3 +756,6 @@ layout, so it can sit exactly on top of the WebGL canvas.
 - `.claude/context/insights.md` — `.info-btn`/`#insight-toast`, styled from
   this file's tokens and following `#notice`'s own entrance/exit and
   top-center placement conventions.
+- `.claude/context/drawer.md` — `createDrawer()`, the open/close/Escape/
+  shortcut-key state machine behind the `.open` class this file's shared
+  `#plates, #inspect-panel` rule renders.

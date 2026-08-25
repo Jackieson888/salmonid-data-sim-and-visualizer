@@ -56,16 +56,26 @@ The mesh's bbox center sits half a body length behind the tracked nose point
 (see `noseOffsetLocal` in `fishMesh.js`). `previewFish` is nose-anchored at
 the world origin heading straight down +Z, so the body itself extends back
 along -Z from there — hence `target = (0, 0, -bodyLength / 2)`. The camera
-sits at roughly `1.1×` body length out in X, `0.45×` up in Y, `1.3×` out in
-Z from that target. The reference grid's colors are matched to style.css's
+sits at roughly `1.3×` body length out in X, `0.55×` up in Y, `1.55×` out in
+Z from that target (backed off ~20% from an original 1.1/0.45/1.3 — `fov` on
+the `PerspectiveCamera` is vertical, so a portrait aspect narrows the
+horizontal FOV more than the vertical one, and the tighter original distance
+clipped a wide-bodied species like steelhead on load in portrait). The
+reference grid's colors are matched to style.css's
 `--line`/`--line-soft` so it reads as this page's own chrome rather than an
 arbitrary three.js default.
 
 ## Panel height sync
 
-`#inspect-panel`'s bottom edge is pinned above `#inspect-bar` via a CSS
-custom property (`--bar-h`, see `inspect.css`) rather than a guessed
-constant or a plain `resize` listener. The bar's own height depends on
+`#inspect-panel` no longer tracks `#inspect-bar`'s height at all — it's the
+same full-height, in-front-of-the-bar drawer `#plates` is on the river page
+(shared rule in `style.css`, mechanics in `drawer.js`; see
+`.claude/context/drawer.md`), so opening it simply covers the bar rather
+than needing to stop above it. `--bar-h` (a CSS custom property, see
+`inspect.css`) still exists for two things that *do* need the bar's real
+measured height: recentering the fish above the bar
+(`#fish-canvas`/`#fish-loading`'s `translateY`) and floating
+`#inspect-bar-toggle` just above it. The bar's own height depends on
 content this script fills in *after* first paint (`buildSpeciesList()` runs
 well after this module's top-level code — see "Boot the panel" below) as
 well as on which of its own CSS breakpoints is active, so a window `resize`
@@ -197,6 +207,15 @@ the panel to opacity 0, calls `apply()` while it's invisible, then lets it
 fade back in, giving those two panels the same "coordinated update" feel the
 class-toggle pair gets natively instead of a hard content-pop underneath a
 smoothly fading fish.
+
+`updateFieldGuide()`'s species-name header (`#field-notes-head`,
+`inspect.html`) isn't part of this fade any more — it moved out of
+`#field-guide` entirely, to share the panel's top row with `.drawer-close`
+(see `ui.md`, "Dedicated close control"), so `updateFieldGuide()` now just
+writes `fieldNotesSpeciesNameEl.textContent` directly, a plain instant swap
+rather than something `replaceChildren()` rebuilds. Same non-fading
+treatment `#masthead`'s identity block already gets during the river's own
+season-switch dim (`ui.md`) — an identity/title element, not a data field.
 
 Keyed by element in a `WeakMap` (`pendingContentFade`) so a fast arrow-key
 rove through the species list — which calls `setSpecies()`, and so
@@ -567,3 +586,5 @@ fins instead of a glint.
   `--bar-h` variable, `#fish-canvas`'s shift transform, panel breakpoints.
 - `.claude/context/insights.md` — the info buttons on the length scale and
   season card headers, and the shared toast they open.
+- `.claude/context/drawer.md` — `createDrawer()`, the field-notes panel's
+  open/close/Escape mechanics, shared with the river's own plates drawer.

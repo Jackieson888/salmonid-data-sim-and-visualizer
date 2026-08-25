@@ -113,16 +113,16 @@ day/night split is kept alongside the combined count).
 
 ## Public surface and lifecycle
 
-- **Escape-key ordering**: the Escape-closes handler in `initPlates()`'s
-  keydown listener runs *before* the focused-control guard
-  (`tag === "INPUT" || tag === "SELECT"`). That ordering is the point — the
-  drawer's own toggle is a button, so right after clicking it open, focus
-  sits on exactly the element the guard would otherwise skip. That's the
-  one moment Escape is most likely to be pressed. No other control on this
-  page uses Escape for anything else.
-- **Lazy build, deferred rebuild**: `setOpen()` builds on first open only.
-  `rebuildPlatesForYear()` (called from `main.js`'s `setYear()` once the
-  new season is assigned) rebuilds immediately if the drawer is open, or
+- **Open/close, Escape-to-close, the "p" shortcut**: none of that lives in
+  this file any more — `initPlates()` hands `#plates`/`#plates-toggle` to
+  `createDrawer()` (`drawer.js`) and gets back a `{ open, close, toggle,
+  isOpen }` handle. See `.claude/context/drawer.md` for the mechanics
+  (Escape-ordering, the shortcut-key guard) shared with the fish viewer's
+  field-notes drawer.
+- **Lazy build, deferred rebuild**: `createDrawer()`'s `onOpen` callback
+  builds on first open only (`if (!built) build()`). `rebuildPlatesForYear()`
+  (called from `main.js`'s `setYear()` once the new season is assigned)
+  reads `drawer.isOpen()` to rebuild immediately if the drawer is open, or
   just marks `built = false` if it's closed — reusing the same lazy path
   first open uses. Every figure is drawn from `runData` at build time, so
   there's nothing to update in place; the honest move is to throw them away
@@ -165,3 +165,6 @@ day/night split is kept alongside the combined count).
   caller of `rebuildPlatesForYear()`.
 - `.claude/context/insights.md` — the `insightText` parameter `figureShell()`
   accepts and the shared toast every `FIG.` caption's info button opens.
+- `.claude/context/drawer.md` — `createDrawer()`, the open/close/Escape/
+  shortcut-key mechanics this file hands `#plates` off to, shared with the
+  fish viewer's field-notes drawer.

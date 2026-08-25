@@ -176,21 +176,29 @@ body {
 
 /* Collapse/expand handle — a flex sibling of #report inside #hud, not a
    child of it, so it isn't clipped by #report's own overflow-y:auto above.
-   align-self:flex-end right-aligns it in #hud's column layout; preceding
+   Redesigned from a right-aligned "Collapse"/"Expand" text button into a
+   small tab centered on the bar's own top edge (align-self:center) with a
+   chevron icon instead of a word — reads as a handle attached to the panel
+   rather than an unrelated floating control, the same idea as a bottom
+   sheet's own drag handle. No bottom border + margin-bottom:0 is what
+   welds it visually onto the bar: it sits flush against #report's own
+   accent top border rather than floating above it with a gap. Preceding
    #report in DOM order is what lands it directly above the bar, since #hud
-   packs its flex children from the end (justify-content: flex-end). */
+   packs its flex children from the end (justify-content: flex-end). See
+   .claude/context/ui.md. */
 #report-toggle {
-  align-self: flex-end;
-  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  min-width: 40px;
+  margin-bottom: 0;
   pointer-events: auto;
-  padding: 6px 10px;
+  padding: 7px 16px 6px;
   background: var(--ink);
   border: 1px solid var(--line);
+  border-bottom: none;
   color: var(--text-dim);
-  font-size: var(--t-3);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 500;
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
@@ -211,10 +219,36 @@ body {
   border-color: var(--accent);
 }
 
+/* Shared chevron for #report-toggle/#inspect-bar-toggle (inspect.css) — down
+   at rest ("tap to collapse, push this down"), rotated to point up once
+   collapsed ("tap to expand, pull this up"), matching a bottom sheet's own
+   handle convention for a bottom-anchored panel. */
+.chevron-icon {
+  width: 12px;
+  height: 8px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+#report-toggle[aria-pressed="true"] .chevron-icon,
+#inspect-bar-toggle[aria-pressed="true"] .chevron-icon {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron-icon {
+    transition: none;
+  }
+}
+
 /* ---------------------------------------------------------------------
    Collapsed report — set by setReportCollapsed() in main.js. Shrinks the
-   bar to the current reading, the day's total, and playback, hiding
-   everything else (species table, conditions, run-status, chart/axis).
+   bar to identity, the day's total, and playback, hiding everything else
+   (species table, conditions, run-status, chart/axis).
    Defaults collapsed on a small/short viewport (read once at boot, same
    one-time-read convention PREFERS_REDUCED_MOTION uses below in main.js),
    but the toggle works at any width. Every rule here targets #report.collapsed
@@ -223,16 +257,100 @@ body {
    collapsed view reads the same regardless of which of those is also active.
    --------------------------------------------------------------------- */
 
+/* Animated, not toggled: every element below transitions out instead of
+   snapping to display:none. Two different techniques, chosen by shape:
+   - Self-contained pieces with a known, bounded height (a 4-row species
+     table, a chart/axis whose own SVG/height is already a fixed CSS value,
+     a 1-2 line footnote) get a real max-height animation — the cap is
+     picked close to their actual content height (not a big round number),
+     since a cap much larger than the real content reaches its full height
+     early and then visibly "keeps animating" doing nothing for the rest of
+     the duration.
+   - Whole *fields* leaving the flex row (#conditions, #run-status) do NOT
+     animate width: #report-body's fields are divided by the `.field +
+     .field` hairline-border-left system and sized by breakpoint-specific
+     flex-basis rules (see the "Narrower viewports" section below) — safely
+     animating a field's own width to 0 would mean auditing and re-deriving
+     all of that per breakpoint. They fade+scale out instead, keep their
+     layout width for the fade's duration, and only reflow the row at the
+     very end when display:none lands — softer than an instant pop, without
+     touching the divider/flex-basis system. See .claude/context/ui.md.
+   transition-behavior:allow-discrete + @starting-style is what lets a
+   transition run across the display:none boundary at all — without it a
+   transitioning property still jumps instantly the moment display flips.
+   Unsupported browsers just keep today's instant toggle; nothing breaks. */
+.report-foot,
+#species-breakdown,
+#season-chart,
+#timeline-axis {
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height var(--dur-med) var(--ease), opacity var(--dur-med) var(--ease);
+  transition-behavior: allow-discrete;
+}
+
+.report-foot { max-height: 88px; } /* up to 2 wrapped lines of footnote + source, generously */
+#species-breakdown { max-height: 96px; } /* 4 rows at ~21px each, plus slack */
+#season-chart { max-height: 90px; } /* svg's own fixed 32px + figcaption, which can wrap to 2-3 lines narrow */
+#timeline-axis { max-height: 13px; } /* exact — #timeline-axis's own height below is this same value */
+
+#conditions,
+#run-status {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+  transition-behavior: allow-discrete;
+}
+
 #report.collapsed .report-foot,
-#report.collapsed #masthead .station,
-#report.collapsed #masthead h1,
-#report.collapsed #masthead .reach,
 #report.collapsed #species-breakdown,
-#report.collapsed #conditions,
-#report.collapsed #run-status,
 #report.collapsed #season-chart,
 #report.collapsed #timeline-axis {
   display: none;
+  max-height: 0;
+  opacity: 0;
+}
+
+#report.collapsed #conditions,
+#report.collapsed #run-status {
+  display: none;
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+@starting-style {
+  #report:not(.collapsed) .report-foot,
+  #report:not(.collapsed) #species-breakdown,
+  #report:not(.collapsed) #season-chart,
+  #report:not(.collapsed) #timeline-axis {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  #report:not(.collapsed) #conditions,
+  #report:not(.collapsed) #run-status {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* #passage's field-head loses the divider that used to separate it from
+   #species-breakdown in sync with that table's own collapse, rather than
+   snapping the instant the table's display flips. */
+#passage .field-head {
+  transition: margin-bottom var(--dur-med) var(--ease), padding-bottom var(--dur-med) var(--ease), border-color var(--dur-med) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-foot,
+  #species-breakdown,
+  #season-chart,
+  #timeline-axis,
+  #conditions,
+  #run-status,
+  #passage .field-head {
+    transition: none;
+  }
 }
 
 /* display:flex, not left implicit — beats the >=640px/500px breakpoint's
@@ -250,19 +368,13 @@ body {
 
 #report.collapsed .field {
   min-width: 0;
-  border-left: none;
+  border-left-color: transparent; /* not border-left:none — see the field-head note below */
   padding-left: 0;
 }
 
 #report.collapsed #masthead {
   flex: 0 1 auto;
   max-width: none;
-}
-
-#report.collapsed #masthead .readout {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
 }
 
 #report.collapsed #passage {
@@ -272,7 +384,7 @@ body {
 #report.collapsed #passage .field-head {
   margin-bottom: 0;
   padding-bottom: 0;
-  border-bottom: none;
+  border-bottom-color: transparent; /* not border-bottom:none — a color can transition, removing the border outright can't */
 }
 
 #report.collapsed #controls {
@@ -294,11 +406,21 @@ body {
 
 /* Dimmed during a season switch (setYear, main.js) while a field's old
    figures are still on screen but no longer necessarily correct for the
-   year just selected — opacity only, so it reads as "updating," not spatial
-   motion (no prefers-reduced-motion guard needed, matching #fish-loading's
-   own unguarded opacity fade below). */
+   year just selected — the opacity part of this transition needs no
+   prefers-reduced-motion guard on its own, matching #fish-loading's own
+   unguarded opacity fade below. padding-left/border-left-color ride the
+   same rule so the collapsed bar's divider fade (`#report.collapsed
+   .field`, above) doesn't need a second transition list — but unlike plain
+   opacity, those two move the divider hairline in space, so the guard below
+   trims the rule back to opacity-only under reduced motion. */
 .field {
-  transition: opacity var(--dur-med) var(--ease);
+  transition: opacity var(--dur-med) var(--ease), padding-left var(--dur-med) var(--ease), border-left-color var(--dur-med) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field {
+    transition: opacity var(--dur-med) var(--ease);
+  }
 }
 
 .field.field-loading {
@@ -361,11 +483,15 @@ body {
   color: var(--text-dim);
 }
 
-/* Deliberately quiet: no background, no chevron, hairline only on hover/focus. */
+/* The #year-listbox trigger (below) — kept in the same quiet, hairline-
+   underline register the old <select> had, but now a real button with a
+   chevron: a bare underlined word didn't read as interactive at all (see
+   ui.md). flows as a word in the reach line, same as the control it
+   replaced. */
 #year-select {
-  appearance: none;
-  -webkit-appearance: none;
-  display: inline-block; /* flows as a word in the reach line */
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   vertical-align: baseline;
   margin-left: 4px;
   background: transparent;
@@ -380,13 +506,22 @@ body {
   letter-spacing: 0.04em;
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease);
-  /* The dropdown itself is drawn by the platform; this is what stops it
-     rendering as a white list over a dark page. */
-  color-scheme: dark;
 }
 
-#year-select:hover {
+#year-select .chevron-icon {
+  width: 8px;
+  height: 6px;
+}
+
+/* aria-expanded, not :hover alone — the open state should read as "in use"
+   even after the pointer moves onto the listbox itself. */
+#year-select:hover,
+#year-select[aria-expanded="true"] {
   border-bottom-color: var(--text-dim);
+}
+
+#year-select[aria-expanded="true"] .chevron-icon {
+  transform: rotate(180deg);
 }
 
 #year-select:focus-visible {
@@ -399,6 +534,59 @@ body {
 #year-select:disabled {
   color: var(--text-faint);
   cursor: default;
+}
+
+/* The listbox itself — see the #year-listbox markup comment in index.html
+   for why this lives outside #report. Styled from the same tokens as every
+   other panel in the app (hard corners, hairline border, --ink background)
+   instead of inheriting a platform popup's own light-mode chrome. */
+#year-listbox {
+  position: fixed;
+  /* #hud sets pointer-events:none and #year-listbox is its own sibling of
+     #report (not a descendant — see the markup comment in index.html), so
+     it doesn't inherit #report's own opt-back-in the way everything inside
+     the bar does. Without this, every option click fell straight through
+     to #river-canvas underneath. */
+  pointer-events: auto;
+  z-index: 3;
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+  overflow-y: auto;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-2);
+  letter-spacing: 0.04em;
+  /* Focused programmatically on open (setYearListboxOpen, main.js), never
+     by Tab — the highlighted row (.active) already marks position, so the
+     browser's own default focus ring here would just be noise. */
+  outline: none;
+}
+
+#year-listbox[hidden] {
+  display: none;
+}
+
+#year-listbox li {
+  padding: 5px 14px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* .active is the keyboard-navigated row; :hover mirrors it for the mouse. */
+#year-listbox li:hover,
+#year-listbox li.active {
+  background: var(--line-soft);
+  color: var(--text);
+}
+
+/* The loaded season — same accent-marks-the-current-reading convention as
+   .speed-btn[aria-pressed="true"] and #season-delta.above. */
+#year-listbox li[aria-selected="true"] {
+  color: var(--accent);
 }
 
 #masthead .readout {
@@ -1036,8 +1224,13 @@ body {
   top: 18px;
   left: 50%;
   z-index: 3; /* above #plates-toggle (2) / #plates (1) and #notice */
-  max-width: min(48ch, calc(100vw - 36px));
-  padding: 11px 34px 11px 14px;
+  /* A flat px cap, not #notice's ch-based one — ch measures against this
+     font's "0", and in the proportional --sans face that undershoots badly
+     (68ch landed under 460px, barely wider than #notice). 720px reads as
+     genuinely filling more of the top on a real monitor; small viewports
+     still fall back to the calc() margin the same as #notice does. */
+  width: min(720px, calc(100vw - 48px));
+  padding: 12px 34px 12px 14px;
   background: var(--ink);
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
@@ -1048,6 +1241,19 @@ body {
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+}
+
+.insight-toast-title {
+  margin-bottom: 4px;
+  color: var(--text-dim);
+  font-size: var(--t-2);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.insight-toast-title[hidden] {
+  display: none;
 }
 
 #insight-toast.shown {
@@ -1118,13 +1324,16 @@ body {
 /* #field-notes-toggle (inspect.html) shares this treatment byte-for-byte —
    same reasoning as the #fish-viewer-link/#back-link rule above. It never
    coexists with #plates-toggle (different pages), so the shared top:18px/
-   right:18px corner slot is never contested. */
+   right:18px corner slot is never contested. z-index:2 still matters even
+   though this is no longer the drawer's close control (that's .drawer-close
+   now, a child of the panel with its own z-index:1) — it's what keeps this
+   button paintable/clickable above #plates/#inspect-panel while closed. */
 #plates-toggle,
 #field-notes-toggle {
   position: absolute;
   top: 18px;
   right: 18px;
-  z-index: 2; /* also the drawer's close control — must paint above #plates/#inspect-panel */
+  z-index: 2;
   padding: 6px 10px;
   background: var(--ink);
   border: 1px solid var(--line);
@@ -1144,17 +1353,33 @@ body {
   border-color: var(--text-dim);
 }
 
+/* aria-pressed=true means its drawer is open — hidden rather than styled
+   "active" (its old treatment), since .drawer-close now owns closing and a
+   second, now-redundant control sitting right next to it read as clutter,
+   not a second affordance. createDrawer() (drawer.js) moves focus to
+   closeButton on open specifically so this doesn't leave keyboard focus on
+   an element that just vanished; closing (by any of the three routes —
+   this toggle's own click handler still works, closeButton, or Escape)
+   sets aria-pressed back to false before refocusing this element, so it's
+   visible again by the time focus actually lands on it. */
 #plates-toggle[aria-pressed="true"],
 #field-notes-toggle[aria-pressed="true"] {
-  color: var(--text);
-  border-color: var(--accent);
+  display: none;
 }
 
-#plates {
+/* Shared slide-in drawer chrome — #plates (this page) and #inspect-panel
+   (inspect.css) are the same component, driven by the same drawer.js
+   open/close logic, so their look can't drift out of sync the way two
+   independent copies did. z-index:1 is what puts the drawer in front of
+   the bottom bar (#hud/#inspect-bar, both z-index:auto) when open,
+   regardless of DOM order — see .claude/context/drawer.md. Each page still
+   sets its own width below (400px here vs. 320px in inspect.css), since
+   that's real content-driven sizing, not chrome. */
+#plates,
+#inspect-panel {
   position: absolute;
   inset: 0 0 0 auto;
   z-index: 1;
-  width: min(400px, 100vw);
   background: var(--ink);
   border-left: 1px solid var(--line);
   border-top: var(--rule-heavy) solid var(--accent);
@@ -1164,14 +1389,68 @@ body {
   pointer-events: auto;
 }
 
-#plates.open {
+#plates.open,
+#inspect-panel.open {
   transform: translateX(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #plates {
+  #plates,
+  #inspect-panel {
     transition: none;
   }
+}
+
+#plates {
+  width: min(400px, 100vw);
+}
+
+/* Dedicated close control, shared between #plates and #inspect-panel — a
+   real child of the panel (unlike #plates-toggle/#field-notes-toggle,
+   page-level siblings kept exactly where they are so opening a drawer
+   always stays a plain text button, per .claude/context/ui.md), so it
+   reads as chrome that belongs to the panel rather than a page-level
+   control that happens to sit nearby. Top-left, not top-right: top-right is
+   already #plates-toggle/#field-notes-toggle's own corner, and giving this
+   the same corner would stack two controls on top of each other. Neither
+   panel needs extra top padding to clear it — both already clear the
+   *other* corner's button with room to spare (52px). Off-screen (and out of
+   the way) for free whenever its panel is closed, via the parent's own
+   transform:translateX(100%) — no separate visibility rule needed. */
+.drawer-close {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.drawer-close:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.drawer-close:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.close-icon {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
 }
 
 #plates-scroll {
@@ -1186,7 +1465,8 @@ body {
 #plates-scroll,
 #inspect-panel,
 #inspect-bar,
-#report {
+#report,
+#year-listbox {
   scrollbar-width: thin;
   scrollbar-color: var(--line) var(--ink);
 }
@@ -1194,21 +1474,24 @@ body {
 #plates-scroll::-webkit-scrollbar,
 #inspect-panel::-webkit-scrollbar,
 #inspect-bar::-webkit-scrollbar,
-#report::-webkit-scrollbar {
+#report::-webkit-scrollbar,
+#year-listbox::-webkit-scrollbar {
   width: 8px;
 }
 
 #plates-scroll::-webkit-scrollbar-track,
 #inspect-panel::-webkit-scrollbar-track,
 #inspect-bar::-webkit-scrollbar-track,
-#report::-webkit-scrollbar-track {
+#report::-webkit-scrollbar-track,
+#year-listbox::-webkit-scrollbar-track {
   background: var(--ink);
 }
 
 #plates-scroll::-webkit-scrollbar-thumb,
 #inspect-panel::-webkit-scrollbar-thumb,
 #inspect-bar::-webkit-scrollbar-thumb,
-#report::-webkit-scrollbar-thumb {
+#report::-webkit-scrollbar-thumb,
+#year-listbox::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 0;
 }
@@ -1216,7 +1499,8 @@ body {
 #plates-scroll::-webkit-scrollbar-thumb:hover,
 #inspect-panel::-webkit-scrollbar-thumb:hover,
 #inspect-bar::-webkit-scrollbar-thumb:hover,
-#report::-webkit-scrollbar-thumb:hover {
+#report::-webkit-scrollbar-thumb:hover,
+#year-listbox::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
 }
 
@@ -1642,8 +1926,14 @@ body {
   #fish-viewer-link,
   #back-link,
   #timeline-axis button,
-  .plate-toggle {
+  .plate-toggle,
+  #report-toggle {
     padding-block: 10px;
+  }
+
+  .drawer-close {
+    width: 36px;
+    height: 36px;
   }
 
   /* The visual gauge cursor stays a thin hairline bar (see rule above) —

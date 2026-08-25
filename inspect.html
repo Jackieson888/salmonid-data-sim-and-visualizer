@@ -34,6 +34,22 @@
          bottom bar for everything but field notes, a side panel for just
          the notes. See .claude/context/ui.md and .claude/context/inspect.md -->
     <div id="inspect-panel">
+      <!-- Dedicated close control, a real child of the panel. The toggle
+           above stays a plain "Field Notes" open button, but hides itself
+           (CSS, keyed off aria-pressed) while open — this is now the only
+           way to close. See .claude/context/drawer.md. -->
+      <button type="button" class="drawer-close" id="field-notes-close" aria-label="Close field notes">
+        <svg class="close-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M1 1l10 10M11 1L1 11" /></svg>
+      </button>
+      <!-- Pulled out of #field-guide (updateFieldGuide, src/inspect.js) so
+           it can share the panel's top row with .drawer-close, filling the
+           space #field-notes-toggle used to occupy before it started
+           hiding itself while open — see .claude/context/ui.md. Only the
+           species name (<b>) is JS-written; "Field notes" is static. -->
+      <p class="field-head" id="field-notes-head">
+        <span class="label">Field notes</span>
+        <b id="field-notes-species-name"></b>
+      </p>
       <div id="field-guide"></div>
     </div>
 
@@ -95,8 +111,9 @@
       type="button"
       aria-pressed="false"
       aria-controls="inspect-bar"
+      aria-label="Collapse panel"
     >
-      Collapse
+      <svg class="chevron-icon" viewBox="0 0 12 8" aria-hidden="true" focusable="false"><path d="M1 1l5 5 5-5" /></svg>
     </button>
 
     <div id="fish-loading">

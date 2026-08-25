@@ -34,11 +34,7 @@ import {
   causticsTargetSize,
 } from "./scene/causticsGenerator.js";
 import { loadFishAssets, createFishInstancedMesh } from "./scene/fishMesh.js";
-import {
-  dayOfYear,
-  setSunSeason,
-  sweptSunDirection,
-} from "./scene/season.js";
+import { dayOfYear, setSunSeason, sweptSunDirection } from "./scene/season.js";
 import { setFogSeason } from "./scene/fog.js";
 import {
   QUALITY,
@@ -55,6 +51,8 @@ const canvas = document.getElementById("river-canvas");
 const dateLabel = document.getElementById("date-label");
 const dayOrdinalLabel = document.getElementById("day-ordinal");
 const yearSelect = document.getElementById("year-select");
+const yearSelectValue = document.getElementById("year-select-value");
+const yearListbox = document.getElementById("year-listbox");
 // Dimmed during a season switch (setYear) — see .field-loading in style.css.
 const seasonSwitchFields = [
   document.getElementById("passage"),
@@ -98,10 +96,16 @@ const reportToggle = document.getElementById("report-toggle");
 // one-time-read convention PREFERS_REDUCED_MOTION below uses) so a mobile
 // visitor gets the compact bar without an extra tap; a resize mid-session
 // doesn't yank an already-open bar shut.
+// reportToggle carries a static chevron icon (index.html), not text — its
+// accessible name comes from aria-label, not textContent, since there's no
+// text node left to change.
 function setReportCollapsed(collapsed) {
   reportEl.classList.toggle("collapsed", collapsed);
   reportToggle.setAttribute("aria-pressed", String(collapsed));
-  reportToggle.textContent = collapsed ? "Expand" : "Collapse";
+  reportToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Expand panel" : "Collapse panel",
+  );
 }
 reportToggle.addEventListener("click", () =>
   setReportCollapsed(!reportEl.classList.contains("collapsed")),
@@ -198,15 +202,43 @@ function updateFishCountDisplay(idx, progress = 0) {
 
   // River/water readings ramp day-to-day, but only where both ends of the
   // interpolation exist — see writeMeasurement().
-  writeMeasurement(waterTempLabel, today.tempC, tomorrow.tempC, progress, 1, "°C");
+  writeMeasurement(
+    waterTempLabel,
+    today.tempC,
+    tomorrow.tempC,
+    progress,
+    1,
+    "°C",
+  );
 
   // Outflow/spill/dissolved gas load after boot and are absent for most
   // seasons — riverConditionsByDate stays empty until (unless) it resolves.
   const flowToday = riverConditionsByDate.get(today.date);
   const flowTomorrow = riverConditionsByDate.get(tomorrow.date);
-  writeMeasurement(outflowLabel, flowToday?.outflowKcfs, flowTomorrow?.outflowKcfs, progress, 1, "kcfs");
-  writeMeasurement(spillLabel, flowToday?.spillKcfs, flowTomorrow?.spillKcfs, progress, 1, "kcfs");
-  writeMeasurement(dissolvedGasLabel, flowToday?.dissolvedGasMmHg, flowTomorrow?.dissolvedGasMmHg, progress, 0, "mmHg");
+  writeMeasurement(
+    outflowLabel,
+    flowToday?.outflowKcfs,
+    flowTomorrow?.outflowKcfs,
+    progress,
+    1,
+    "kcfs",
+  );
+  writeMeasurement(
+    spillLabel,
+    flowToday?.spillKcfs,
+    flowTomorrow?.spillKcfs,
+    progress,
+    1,
+    "kcfs",
+  );
+  writeMeasurement(
+    dissolvedGasLabel,
+    flowToday?.dissolvedGasMmHg,
+    flowTomorrow?.dissolvedGasMmHg,
+    progress,
+    0,
+    "mmHg",
+  );
 
   // A label, not a measurement, so it snaps at the day boundary.
   chinookRunLabel.textContent = today.chinookRun ?? "—";
@@ -301,7 +333,8 @@ function updateRunComparison(idx) {
   }
   const delta = ((seasonToDate[idx] - average) / average) * 100;
   const text = `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(0)}%`;
-  if (seasonDeltaLabel.textContent !== text) seasonDeltaLabel.textContent = text;
+  if (seasonDeltaLabel.textContent !== text)
+    seasonDeltaLabel.textContent = text;
   // The one saturated color in the bar, reserved for running ahead of
   // average — behind average is the neutral case, not an alarm.
   seasonDeltaLabel.className = delta >= 0 ? "above" : "below";
@@ -312,15 +345,25 @@ function updateRunComparison(idx) {
 function setDateReadout(idx) {
   dateLabel.textContent = runData[idx].date;
   dayOrdinalLabel.textContent =
-    `Rec ${idx + 1} / ${runData.length}` +
+    `Day ${idx + 1} of ${runData.length} Tracked` +
     (seasonComplete ? "" : " · season in progress");
 }
 
 // Month ticks under the timeline. Positioned from real dates in runData,
 // not spaced evenly — the season starts partway through March.
 const MONTH_ABBREVIATIONS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 // Running total of the five simulated species through day i. Reallocated
@@ -373,7 +416,9 @@ function buildSeasonChart() {
   area.push("L 1000 100 Z");
   chartPassagePath.setAttribute("d", area.join(" "));
 
-  const temps = runData.map((d) => d.tempC).filter((t) => typeof t === "number");
+  const temps = runData
+    .map((d) => d.tempC)
+    .filter((t) => typeof t === "number");
   if (temps.length < 2) {
     chartScaleLabel.textContent = `Peak ${peak.toLocaleString()} / day · √ scale`;
     return;
@@ -475,7 +520,6 @@ timelineAxis.addEventListener("click", (e) => {
 // WORLD_SCALE — see .claude/context/main.md for why fish size doesn't scale
 // down with it.
 const WORLD_SCALE = 0.55;
-
 
 let pixelBounds = { width: window.innerWidth, height: window.innerHeight };
 let bounds = {
@@ -843,7 +887,9 @@ function rebuildDayTables() {
     // Falls back to the day's plain `count` (still capped) with no species
     // breakdown. Rounded since callers compare against integer fish counts.
     dayTargets[i] =
-      total > 0 ? Math.round(cumulative) : Math.min(cap, Math.round(day.count ?? 0));
+      total > 0
+        ? Math.round(cumulative)
+        : Math.min(cap, Math.round(day.count ?? 0));
   }
 
   for (let i = 0; i < runData.length; i++) {
@@ -935,7 +981,10 @@ const POPULATION_CORRECTION_GAIN = 0.15;
 const MAX_CORRECTION_GAIN = 0.6;
 
 function correctionGain() {
-  return Math.min(MAX_CORRECTION_GAIN, POPULATION_CORRECTION_GAIN * speedMultiple);
+  return Math.min(
+    MAX_CORRECTION_GAIN,
+    POPULATION_CORRECTION_GAIN * speedMultiple,
+  );
 }
 
 // Floor on how much of the outgoing flow gets replaced by
@@ -1082,19 +1131,188 @@ async function setYear(year) {
       "warn",
     );
   } finally {
-    yearSelect.value = String(runYear);
+    syncYearControl();
     yearSelect.disabled = false;
     yearSwitchInFlight = false;
     setPlaying(wasPlaying);
-    for (const field of seasonSwitchFields) field.classList.remove("field-loading");
+    for (const field of seasonSwitchFields)
+      field.classList.remove("field-loading");
   }
 }
 
+// #year-select/#year-listbox: a hand-built listbox, not a native <select> —
+// the platform's own popup ignores color-scheme:dark on Windows/Chromium and
+// rendered as a stock white listbox over this page's dark chrome (see
+// .claude/context/ui.md). yearListboxOptions maps year -> its <li>, so
+// selection/highlight updates are a lookup rather than a DOM query per call.
+const yearListboxOptions = new Map();
+let yearListboxOpen = false;
+
 for (const year of AVAILABLE_YEARS) {
-  yearSelect.appendChild(new Option(String(year), String(year)));
+  const option = document.createElement("li");
+  option.id = `year-option-${year}`;
+  option.setAttribute("role", "option");
+  option.textContent = String(year);
+  option.dataset.year = String(year);
+  yearListbox.appendChild(option);
+  yearListboxOptions.set(year, option);
 }
-yearSelect.value = String(runYear);
-yearSelect.addEventListener("change", () => setYear(Number(yearSelect.value)));
+
+// Marks the currently-loaded season in the listbox (accent text, aria-selected)
+// and the trigger's own label — called on boot and after every setYear().
+function syncYearControl() {
+  yearSelectValue.textContent = String(runYear);
+  for (const [year, option] of yearListboxOptions) {
+    option.setAttribute("aria-selected", String(year === runYear));
+  }
+}
+
+// The keyboard-navigated row, independent of aria-selected (the loaded
+// season) — mirrors :hover for the mouse (see style.css). Also what
+// aria-activedescendant points at while the listbox is open.
+function setActiveYearOption(year) {
+  for (const [y, option] of yearListboxOptions) {
+    option.classList.toggle("active", y === year);
+  }
+  const option = yearListboxOptions.get(year);
+  if (!option) return;
+  yearListbox.setAttribute("aria-activedescendant", option.id);
+  option.scrollIntoView({ block: "nearest" });
+}
+
+function activeYear() {
+  const id = yearListbox.getAttribute("aria-activedescendant");
+  const year = id && Number(id.slice("year-option-".length));
+  return AVAILABLE_YEARS.includes(year) ? year : runYear;
+}
+
+// Fixed, not absolute: #year-listbox sits outside #report specifically to
+// escape its max-height:70vh/overflow-y:auto (see the markup comment in
+// index.html), so its position has to be computed from the trigger's own
+// viewport rect rather than an ancestor's box. Anchored above the button
+// (bottom-anchored, top left unset) since the trigger sits near the bottom
+// of the screen inside the HUD bar — opening downward would run the 21-year
+// list straight off the bottom edge. max-height is clamped to the actual
+// room above the button rather than a flat guess, so a short/landscape
+// viewport gets an internally-scrolling list instead of one clipped by the
+// browser's own edge.
+function positionYearListbox() {
+  const rect = yearSelect.getBoundingClientRect();
+  const gap = 4;
+  yearListbox.style.left = `${Math.round(rect.left)}px`;
+  yearListbox.style.top = "auto";
+  yearListbox.style.bottom = `${Math.round(window.innerHeight - rect.top + gap)}px`;
+  yearListbox.style.minWidth = `${Math.round(rect.width)}px`;
+  yearListbox.style.maxHeight = `${Math.min(260, Math.max(120, rect.top - gap - 8))}px`;
+
+  // Clamp off the right edge after layout, since the list's real width
+  // isn't known until it's rendered.
+  const overflowRight =
+    yearListbox.getBoundingClientRect().right - (window.innerWidth - 8);
+  if (overflowRight > 0) {
+    yearListbox.style.left = `${Math.round(rect.left - overflowRight)}px`;
+  }
+}
+
+function setYearListboxOpen(open) {
+  if (open === yearListboxOpen) return;
+  yearListboxOpen = open;
+  yearListbox.hidden = !open;
+  yearSelect.setAttribute("aria-expanded", String(open));
+  if (open) {
+    positionYearListbox();
+    setActiveYearOption(runYear);
+    yearListbox.focus({ preventScroll: true });
+  }
+}
+
+function chooseYear(year) {
+  setYearListboxOpen(false);
+  yearSelect.focus({ preventScroll: true });
+  setYear(year);
+}
+
+yearSelect.addEventListener("click", () => setYearListboxOpen(!yearListboxOpen));
+
+// ArrowDown/Up from the (closed) trigger opens straight into the list,
+// landing on the loaded season — standard select-replacement behavior, and
+// the one case setYearListboxOpen(true) alone wouldn't cover since that
+// leaves the active option wherever it last was.
+yearSelect.addEventListener("keydown", (e) => {
+  if (yearListboxOpen) return;
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  setYearListboxOpen(true);
+});
+
+yearListbox.addEventListener("click", (e) => {
+  const option = e.target.closest("li[role='option']");
+  if (option) chooseYear(Number(option.dataset.year));
+});
+
+// stopPropagation on every handled key: the page's own global keydown
+// listener (further down) also binds ArrowLeft/Right/Home/End/Space for the
+// timeline transport, and #year-listbox isn't an INPUT/SELECT/BUTTON that
+// listener already knows to skip — without this, arrowing through years
+// would also step the timeline underneath the open list.
+yearListbox.addEventListener("keydown", (e) => {
+  const years = AVAILABLE_YEARS;
+  const idx = years.indexOf(activeYear());
+
+  switch (e.key) {
+    case "ArrowDown":
+      e.preventDefault();
+      e.stopPropagation();
+      setActiveYearOption(years[Math.min(idx + 1, years.length - 1)]);
+      return;
+    case "ArrowUp":
+      e.preventDefault();
+      e.stopPropagation();
+      setActiveYearOption(years[Math.max(idx - 1, 0)]);
+      return;
+    case "Home":
+      e.preventDefault();
+      e.stopPropagation();
+      setActiveYearOption(years[0]);
+      return;
+    case "End":
+      e.preventDefault();
+      e.stopPropagation();
+      setActiveYearOption(years[years.length - 1]);
+      return;
+    case "Enter":
+    case " ":
+      e.preventDefault();
+      e.stopPropagation();
+      chooseYear(activeYear());
+      return;
+    case "Escape":
+      e.preventDefault();
+      e.stopPropagation();
+      setYearListboxOpen(false);
+      yearSelect.focus({ preventScroll: true });
+      return;
+    case "Tab":
+      setYearListboxOpen(false);
+      return;
+    default:
+      return;
+  }
+});
+
+// Closing on outside pointerdown (not click) so a drag that ends outside
+// the list still closes it, matching native <select>/menu dismissal.
+window.addEventListener("pointerdown", (e) => {
+  if (!yearListboxOpen) return;
+  if (yearSelect.contains(e.target) || yearListbox.contains(e.target)) return;
+  setYearListboxOpen(false);
+});
+
+// A resize can invalidate the fixed position outright (positionYearListbox
+// isn't re-run live); closing is simpler and safer than tracking it.
+window.addEventListener("resize", () => setYearListboxOpen(false));
+
+syncYearControl();
 
 // Transport. Both route through jumpToDay(), which already holds playback
 // and re-seeds everything — so they add reach, not a second code path.
@@ -1110,50 +1328,6 @@ peakBtn.addEventListener("click", () => {
   setPlaying(false);
   jumpToDay(peakDayIndex);
 });
-
-// Playback speed. Divides BASE_FRAMES_PER_DAY, so 8x is 30 frames/day and
-// a whole season is ~2.5 minutes rather than twenty.
-const SPEEDS = [
-  { multiple: 0.5, label: "½×" },
-  { multiple: 1, label: "1×" },
-  { multiple: 2, label: "2×" },
-  { multiple: 4, label: "4×" },
-  { multiple: 8, label: "8×" },
-];
-const DEFAULT_SPEED_INDEX = 1;
-const speedGroup = document.getElementById("speed");
-const speedButtons = [];
-
-function setSpeed(index) {
-  const clamped = Math.max(0, Math.min(SPEEDS.length - 1, index));
-  speedMultiple = SPEEDS[clamped].multiple;
-  framesPerDay = BASE_FRAMES_PER_DAY / speedMultiple;
-
-  // Rescaled, not reset — changing speed mid-day holds the day's progress
-  // instead of jumping the readout and spawn ramp back to dawn.
-  frameCounter = Math.min(frameCounter, framesPerDay);
-
-  speedButtons.forEach((btn, i) => {
-    btn.setAttribute("aria-pressed", String(i === clamped));
-  });
-}
-
-SPEEDS.forEach((speed, i) => {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "speed-btn";
-  btn.textContent = speed.label;
-  btn.setAttribute("aria-label", `${speed.multiple}× speed`);
-  btn.addEventListener("click", () => setSpeed(i));
-  speedGroup.appendChild(btn);
-  speedButtons.push(btn);
-});
-setSpeed(DEFAULT_SPEED_INDEX);
-
-function nudgeSpeed(delta) {
-  const current = SPEEDS.findIndex((s) => s.multiple === speedMultiple);
-  setSpeed(current + delta);
-}
 
 // Keyboard control for run/hold and moving through the season. Space and
 // the arrows are the conventional transport bindings; stepping a day
@@ -1263,7 +1437,8 @@ const MAX_STEP_FRAMES = 3;
 function loop(t) {
   // Advance the simulation clock. Everything below reads `simTime`, never
   // `t`, so pausing stops the whole scene, not just the date.
-  const rawDelta = lastFrameTime === null ? REFERENCE_FRAME_MS : t - lastFrameTime;
+  const rawDelta =
+    lastFrameTime === null ? REFERENCE_FRAME_MS : t - lastFrameTime;
   if (lastFrameTime !== null && isPlaying) simTime += rawDelta;
   lastFrameTime = t;
   const seconds = simTime * 0.001;
@@ -1574,7 +1749,7 @@ function initInsights() {
       createInfoButton(
         () => `passage:${runYear}:${runData[dayIndex].date}`,
         passageInsightText,
-        "daily adult passage",
+        "Daily adult passage",
       ),
     );
   }
@@ -1587,7 +1762,7 @@ function initInsights() {
       createInfoButton(
         () => `conditions:${runYear}:${runData[dayIndex].date}`,
         conditionsInsightText,
-        "conditions",
+        "Conditions",
       ),
     );
   }
@@ -1600,7 +1775,7 @@ function initInsights() {
       createInfoButton(
         () => `run-status:${runYear}:${runData[dayIndex].date}`,
         runStatusInsightText,
-        "run to date",
+        "Run to date",
       ),
     );
   }
@@ -1608,7 +1783,7 @@ function initInsights() {
   const chartCaption = document.querySelector("#season-chart figcaption");
   if (chartCaption) {
     chartCaption.appendChild(
-      createInfoButton("season-chart", seasonChartInsightText, "the season chart"),
+      createInfoButton("season-chart", seasonChartInsightText, "Season chart"),
     );
   }
 }

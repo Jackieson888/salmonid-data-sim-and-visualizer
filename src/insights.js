@@ -3,6 +3,7 @@
 // localStorage-backed cache that keeps each one from being recomputed.
 // Design rationale, invariants, gotchas: .claude/context/insights.md
 let toastEl = null;
+let titleEl = null;
 let bodyEl = null;
 let activeBtn = null;
 let hideTimer = null;
@@ -18,6 +19,10 @@ export function initInsightToast() {
   toastEl.id = "insight-toast";
   toastEl.setAttribute("role", "status");
   toastEl.hidden = true;
+
+  titleEl = document.createElement("p");
+  titleEl.className = "insight-toast-title";
+  toastEl.appendChild(titleEl);
 
   bodyEl = document.createElement("p");
   toastEl.appendChild(bodyEl);
@@ -67,7 +72,7 @@ export function initInsightToast() {
   );
 }
 
-function showInsight(text, btn) {
+function showInsight(title, text, btn) {
   clearTimeout(hideTimer);
   if (activeBtn === btn) {
     hideInsight();
@@ -76,6 +81,8 @@ function showInsight(text, btn) {
   if (activeBtn) activeBtn.setAttribute("aria-pressed", "false");
   activeBtn = btn;
   btn.setAttribute("aria-pressed", "true");
+  titleEl.textContent = title || "";
+  titleEl.hidden = !title;
   bodyEl.textContent = text;
   toastEl.hidden = false;
   // Forces a reflow so the entrance transition runs even when the toast was
@@ -155,7 +162,10 @@ function resolveInsight(key, getText) {
 // just like getText — most call sites need a fresh key (today's date, the
 // selected species) rather than whatever was current when the button was
 // built. getText only ever runs on a cache miss; a hit skips it entirely.
-export function createInfoButton(key, getText, label) {
+// title is the toast's own heading (also folded into the aria-label) — it's
+// never cached, since it's just the field/figure's own name, already known
+// synchronously wherever the button is built.
+export function createInfoButton(key, getText, title) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "info-btn";
@@ -163,13 +173,13 @@ export function createInfoButton(key, getText, label) {
   btn.setAttribute("aria-pressed", "false");
   btn.setAttribute(
     "aria-label",
-    label ? `What does ${label} mean?` : "What does this mean?",
+    title ? `What does ${title} mean?` : "What does this mean?",
   );
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     const resolvedKey = typeof key === "function" ? key() : key;
     const text = resolveInsight(resolvedKey, getText);
-    showInsight(text, btn);
+    showInsight(title, text, btn);
   });
   return btn;
 }

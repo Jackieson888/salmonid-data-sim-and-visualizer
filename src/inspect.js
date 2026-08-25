@@ -27,6 +27,7 @@ import { Fish, BODY_VISUAL_SCALE, SPECIES_LENGTH_INCHES } from "./boids.js";
 import { runData, runYear } from "./data.js";
 import { seasonFraction } from "./seasonScale.js";
 import { initInsightToast, createInfoButton } from "./insights.js";
+import { createDrawer } from "./drawer.js";
 
 const canvas = document.getElementById("fish-canvas");
 const fishLoadingEl = document.getElementById("fish-loading");
@@ -46,6 +47,8 @@ const overlaySvg = document.getElementById("anatomy-overlay");
 const inspectPanel = document.getElementById("inspect-panel");
 const inspectBar = document.getElementById("inspect-bar");
 const fieldNotesToggle = document.getElementById("field-notes-toggle");
+const fieldNotesClose = document.getElementById("field-notes-close");
+const fieldNotesSpeciesNameEl = document.getElementById("field-notes-species-name");
 const inspectBarToggle = document.getElementById("inspect-bar-toggle");
 
 // The species on show, in the order the panel lists them — largest salmonid
@@ -111,10 +114,15 @@ function frameCamera(bodyLength) {
   // fishMesh.js); previewFish is nose-anchored at the origin heading +Z.
   const target = new THREE.Vector3(0, 0, -bodyLength / 2);
   controls.target.copy(target);
+  // Backed off ~20% from the original 1.1/0.45/1.3 multipliers, same
+  // direction/framing — a portrait aspect narrows the horizontal FOV more
+  // than the vertical one (fov is vertical, see the camera constructor
+  // above), which clipped a wide-bodied species like steelhead at the
+  // original, tighter distance.
   camera.position.set(
-    target.x + bodyLength * 1.1,
-    target.y + bodyLength * 0.45,
-    target.z + bodyLength * 1.3,
+    target.x + bodyLength * 1.3,
+    target.y + bodyLength * 0.55,
+    target.z + bodyLength * 1.55,
   );
   camera.near = Math.max(1, bodyLength * 0.02);
   camera.far = bodyLength * 40;
@@ -161,33 +169,31 @@ new ResizeObserver(([entry]) => {
 }).observe(inspectBar);
 resize();
 
-// Field notes slide in like the river's own plates drawer (see plates.js) —
-// closed by default so the fish fills more of the screen.
-function setFieldNotesOpen(open) {
-  inspectPanel.classList.toggle("open", open);
-  fieldNotesToggle.setAttribute("aria-pressed", String(open));
-  fieldNotesToggle.textContent = open ? "Field Notes ✕" : "Field Notes";
-}
-fieldNotesToggle.addEventListener("click", () =>
-  setFieldNotesOpen(!inspectPanel.classList.contains("open")),
-);
-window.addEventListener("keydown", (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key !== "Escape" || !inspectPanel.classList.contains("open")) return;
-  setFieldNotesOpen(false);
-  fieldNotesToggle.focus();
+// Field notes is the same drawer component as the river's own plates
+// drawer (see drawer.js/plates.js) — open/close, Escape-to-close and toggle
+// button state all come from there rather than a second hand-kept-in-sync
+// copy. Closed by default so the fish fills more of the screen; no
+// shortcutKey, unlike Plates' "p" — createDrawer() takes that as opt-in.
+// fieldNotesToggle stays a plain "Field Notes" open button always (static
+// markup, not JS-driven); fieldNotesClose is the dedicated icon inside the
+// panel itself.
+createDrawer({
+  panel: inspectPanel,
+  toggle: fieldNotesToggle,
+  closeButton: fieldNotesClose,
 });
 
-// The bottom bar collapses to species selection plus the core view controls,
-// hiding the secondary toggles/turbidity and the length scale/season card
-// behind "Expand" (see #inspect-bar.collapsed, inspect.css). Defaults
-// compact on a small/short viewport (read once at boot, not watched — same
-// one-time-read convention PREFERS_REDUCED_MOTION above uses) so the model
-// reads larger on a phone without an extra tap; desktop opens full.
+// The bottom bar collapses to just species selection (see
+// #inspect-bar.collapsed, inspect.css). Defaults compact on a small/short
+// viewport (read once at boot, not watched — same one-time-read convention
+// PREFERS_REDUCED_MOTION above uses) so the model reads larger on a phone
+// without an extra tap; desktop opens full.
+// inspectBarToggle carries a static chevron icon (inspect.html), not text —
+// its accessible name comes from aria-label, not textContent.
 function setBarCollapsed(collapsed) {
   inspectBar.classList.toggle("collapsed", collapsed);
   inspectBarToggle.setAttribute("aria-pressed", String(collapsed));
-  inspectBarToggle.textContent = collapsed ? "Expand" : "Collapse";
+  inspectBarToggle.setAttribute("aria-label", collapsed ? "Expand panel" : "Collapse panel");
 }
 inspectBarToggle.addEventListener("click", () =>
   setBarCollapsed(!inspectBar.classList.contains("collapsed")),
@@ -638,7 +644,7 @@ function buildLengthScale() {
         "from this app's own 3D fish models rather than drawn by hand — " +
         "the comparison you're looking at is the real model geometry, not " +
         "an illustration of it.",
-      "adult length",
+      "Adult length",
     ),
   );
   head.appendChild(label);
@@ -791,7 +797,7 @@ function updateSeasonCard(species) {
           `"when does this run happen" than first-to-last sighting, since ` +
           `one stray fish in an off month can otherwise stretch the whole ` +
           `season.`,
-      "this season",
+      "This season",
     ),
   );
 
@@ -826,10 +832,12 @@ function updateFieldGuide(species) {
   fieldGuideEl.replaceChildren();
 
   // Names the species explicitly since the bar may be scrolled out of view.
-  const head = el("p", "field-head");
-  head.appendChild(el("span", "label", "Field notes"));
-  head.appendChild(el("b", null, COMMON_NAMES[species]));
-  fieldGuideEl.appendChild(head);
+  // #field-notes-head lives outside #field-guide now (inspect.html), sharing
+  // the panel's top row with .drawer-close — it doesn't get replaceChildren'd
+  // or fadeContent'd along with the rest, just a plain text swap, same as
+  // #masthead's identity block not fading through the river's own
+  // season-switch dim (ui.md).
+  fieldNotesSpeciesNameEl.textContent = COMMON_NAMES[species];
 
   const notes = SPECIES_FIELD_NOTES[species];
   fieldGuideEl.appendChild(el("p", "fg-note", notes.intro));

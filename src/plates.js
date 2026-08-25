@@ -12,6 +12,7 @@ import {
 import { seasonFraction } from "./seasonScale.js";
 import { dayOfYear } from "./scene/season.js";
 import { initInsightToast, createInfoButton } from "./insights.js";
+import { createDrawer } from "./drawer.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_W = 1000;
@@ -645,7 +646,7 @@ function unavailablePlate(num, title) {
 let toggleBtn = null;
 let asideEl = null;
 let scrollEl = null;
-let isOpen = false;
+let drawer = null;
 let built = false;
 
 let cursorSetters = [];
@@ -661,36 +662,23 @@ export function initPlates() {
   toggleBtn = document.getElementById("plates-toggle");
   asideEl = document.getElementById("plates");
   scrollEl = document.getElementById("plates-scroll");
+  const closeBtn = document.getElementById("plates-close");
   if (!toggleBtn || !asideEl || !scrollEl) return;
 
-  toggleBtn.addEventListener("click", () => setOpen(!isOpen));
-
-  window.addEventListener("keydown", (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-    // Escape is checked BEFORE the focused-control guard, deliberately — see plates.md.
-    if (e.key === "Escape" && isOpen) {
-      e.preventDefault();
-      setOpen(false);
-      toggleBtn.focus();
-      return;
-    }
-
-    const tag = e.target.tagName;
-    if (tag === "INPUT" || tag === "SELECT") return;
-
-    if (e.key.toLowerCase() !== "p") return;
-    e.preventDefault();
-    setOpen(!isOpen);
+  // Escape-key ordering, lazy-build-on-first-open: see drawer.md. "p" is
+  // this drawer's own shortcut — the fish viewer's field-notes drawer has
+  // none, since createDrawer() takes it as an opt-in. toggleBtn stays a
+  // plain "Plates" open button always (its label is static markup now, not
+  // JS-driven); closeBtn is the dedicated icon living inside the panel.
+  drawer = createDrawer({
+    panel: asideEl,
+    toggle: toggleBtn,
+    closeButton: closeBtn,
+    shortcutKey: "p",
+    onOpen: () => {
+      if (!built) build();
+    },
   });
-}
-
-function setOpen(next) {
-  isOpen = next;
-  asideEl.classList.toggle("open", isOpen);
-  toggleBtn.setAttribute("aria-pressed", String(isOpen));
-  toggleBtn.textContent = isOpen ? "Plates ✕" : "Plates";
-  if (isOpen && !built) build();
 }
 
 // Fades a plate in (.plate-enter in style.css) rather than letting it pop in
@@ -794,7 +782,7 @@ function build() {
 export function rebuildPlatesForYear() {
   syncYear();
   if (!scrollEl) return;
-  if (isOpen) build();
+  if (drawer?.isOpen()) build();
   else built = false;
 }
 
