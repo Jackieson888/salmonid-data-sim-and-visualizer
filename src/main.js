@@ -262,7 +262,9 @@ function updateRunComparison(idx) {
 // day-of-year — see .claude/context/main.md.
 function setDateReadout(idx) {
   dateLabel.textContent = runData[idx].date;
-  dayOrdinalLabel.textContent = `Rec ${idx + 1} / ${runData.length}`;
+  dayOrdinalLabel.textContent =
+    `Rec ${idx + 1} / ${runData.length}` +
+    (seasonComplete ? "" : " · season in progress");
 }
 
 // Month ticks under the timeline. Positioned from real dates in runData,
@@ -279,8 +281,16 @@ let seasonToDate = new Float64Array(0);
 // The season's heaviest day, for the transport's "peak" jump.
 let peakDayIndex = 0;
 
+// Every complete counting season on file ends in December (see
+// .claude/context/main.md); a season whose last record doesn't is still
+// being counted by DART, not a short year. Data-driven rather than clock-driven
+// on purpose — it needs no maintenance and flips itself off the next time
+// scripts/fetch-dart.mjs is rerun after the real season finishes.
+let seasonComplete = true;
+
 function rebuildSeasonTotals() {
   seasonToDate = new Float64Array(runData.length);
+  seasonComplete = runData.at(-1).date.slice(5, 7) === "12";
   let running = 0;
   let peak = -1;
   for (let i = 0; i < runData.length; i++) {

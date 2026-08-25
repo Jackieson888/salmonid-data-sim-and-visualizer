@@ -7,24 +7,37 @@
 //   node scripts/fetch-dart.mjs
 //
 // What it writes:
-//   data/dart/lwg-adult-daily-{2006..2015}.csv   raw, byte-for-byte per year
-//   public/lwg-adult-daily-{2006..2015}.csv      the same, shipped
-//   data/dart/lwg-river-{2006..2015}.csv         raw river-environment exports
-//   public/lwg-river-{2006..2015}.csv            the above, pivoted to wide
-//   public/lwg-history-2006-2015.json            derived: season totals +
-//                                                 day-of-year envelope
+//   data/dart/lwg-adult-daily-{VENDOR_YEARS}.csv  raw, byte-for-byte per year
+//   public/lwg-adult-daily-{VENDOR_YEARS}.csv     the same, shipped
+//   data/dart/lwg-river-{HISTORY_YEARS}.csv       raw river-environment exports
+//   public/lwg-river-{HISTORY_YEARS}.csv          the above, pivoted to wide
+//   public/lwg-history-2006-2015.json             derived: season totals +
+//                                                  day-of-year envelope
+//
+// Two different year ranges drive two different things, deliberately kept
+// separate: VENDOR_YEARS is every season the app offers in its year picker
+// (see AVAILABLE_YEARS in src/data.js) and grows every time a new counting
+// season is added. HISTORY_YEARS feeds the run-history JSON and the river
+// exports — the frozen 2006-2015 baseline that FIG. 5 and the FIG. 1 ghost
+// line compare every season against regardless of which one is on screen
+// (see .claude/context/plates.md) — and does not grow with VENDOR_YEARS.
 //
 // The adult-daily CSVs are written to BOTH trees, and the two copies are
-// byte-identical on purpose: the app now serves any of the ten seasons at
-// runtime (see AVAILABLE_YEARS in src/data.js), so every year has to be under
-// public/ to be fetchable, while data/dart/ stays the auditable archive the
-// derivation below reads. The river exports are raw under data/dart/ and
+// byte-identical on purpose: every VENDOR_YEARS season has to be under
+// public/ to be fetchable at runtime, while data/dart/ stays the auditable
+// archive the history derivation below reads (that derivation only reads the
+// HISTORY_YEARS subset of it). The river exports are raw under data/dart/ and
 // pivoted under public/, so those two genuinely differ.
 //
 // 2015 is the one year this script does NOT re-fetch: it copies
 // public/lwg-adult-daily-2015.csv instead, which src/data.js's own comment
 // describes as frozen at its retrieval date on purpose. Re-fetching it here
 // would let the archive drift from what the boot path actually serves.
+//
+// A year at the trailing edge of VENDOR_YEARS may be a season still in
+// progress — DART simply answers with however many rows it has counted so
+// far. See the season-completeness note in .claude/context/main.md for how
+// the app itself detects and displays that.
 
 import { writeFile, readFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -37,6 +50,13 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 
 const PROJECT = "LWG";
 const FROZEN_YEAR = 2015;
+// Every season the app offers in its year picker (AVAILABLE_YEARS in
+// src/data.js) — bump the end when a new counting season should become
+// selectable, provided this script has actually fetched it.
+const VENDOR_YEARS = Array.from({ length: 2026 - 2006 + 1 }, (_, i) => 2006 + i); // 2006-2026
+// The frozen ten-year baseline FIG. 5 and the FIG. 1 ghost line compare every
+// season against — intentionally NOT tied to VENDOR_YEARS (see the header
+// comment and .claude/context/plates.md).
 const HISTORY_YEARS = Array.from({ length: 10 }, (_, i) => 2006 + i); // 2006-2015
 
 const FETCH_TIMEOUT_MS = 20000;
@@ -206,14 +226,16 @@ function buildRunHistory(rowsByYear) {
     return totals;
   });
 
-  // For every day-of-year that appears in ANY year, the min/mean/max of that
-  // day's `count` (see parseAdultDailyCsv — currently the five simulated
-  // species) across whichever years actually have a record for it — the
-  // counting season's start/end drifts a little year to year, so not every
-  // day has all ten years behind it.
+  // For every day-of-year that appears in ANY of the HISTORY_YEARS (not all
+  // of rowsByYear — that map now also holds every VENDOR_YEARS season, and
+  // this envelope is the frozen ten-year baseline, not a growing one), the
+  // min/mean/max of that day's `count` (see parseAdultDailyCsv — currently
+  // the five simulated species) across whichever of those years actually
+  // have a record for it — the counting season's start/end drifts a little
+  // year to year, so not every day has all ten years behind it.
   const byDoy = new Map();
-  for (const [, rows] of rowsByYear) {
-    for (const row of rows) {
+  for (const year of HISTORY_YEARS) {
+    for (const row of rowsByYear.get(year) ?? []) {
       const doy = dayOfYear(row.date);
       if (!byDoy.has(doy)) byDoy.set(doy, []);
       byDoy.get(doy).push(row.count);
@@ -243,9 +265,9 @@ function buildRunHistory(rowsByYear) {
 async function main() {
   await mkdir(DART_DIR, { recursive: true });
 
-  console.log(`Adult daily passage, ${HISTORY_YEARS[0]}-${HISTORY_YEARS.at(-1)}:`);
+  console.log(`Adult daily passage, ${VENDOR_YEARS[0]}-${VENDOR_YEARS.at(-1)}:`);
   const rowsByYear = new Map();
-  for (const year of HISTORY_YEARS) {
+  for (const year of VENDOR_YEARS) {
     const text = await fetchAdultDailyYear(year);
     rowsByYear.set(year, parseAdultDailyCsv(text, "Lower Granite"));
     if (year !== FROZEN_YEAR) await sleep(REQUEST_GAP_MS);

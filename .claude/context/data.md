@@ -84,7 +84,34 @@ never mutated downstream, so handing the same array out twice is safe.
 **The counting season is 290–306 days, never 365** — Lower Granite's
 counting season runs roughly March–December, not the full calendar year,
 and the exact length differs year to year. Nothing may cache
-`runData.length` across a year change.
+`runData.length` across a year change. The one exception to the 290–306
+range is the trailing entry in `AVAILABLE_YEARS` when it names a season
+that hasn't finished yet — DART just answers with however many rows it's
+counted so far (176 for 2026 as of this writing), and the app shows that
+honestly rather than padding it out. See the season-completeness note in
+`.claude/context/main.md` for how that's detected and surfaced.
+
+### AVAILABLE_YEARS and scripts/fetch-dart.mjs's two year ranges
+
+`AVAILABLE_YEARS` must exactly match what `scripts/fetch-dart.mjs` has
+actually vendored under `public/` — it's a literal list, not a computed
+range, on purpose: a formula (e.g. "2006 through this year") would drift
+from what's really on disk the moment a season goes un-fetched, and a
+year offered in the picker with no snapshot behind it fails at `loadYear()`
+time instead of at review time. Bump both together.
+
+That script itself now tracks two *different* year ranges, and it matters
+that they stay separate: `VENDOR_YEARS` is every season this file's
+`AVAILABLE_YEARS` offers, and grows every time a new counting season is
+added. `HISTORY_YEARS` is the frozen 2006–2015 baseline `loadRunHistory()`
+serves — fixed regardless of how far `VENDOR_YEARS` grows, because FIG. 5
+and the FIG. 1 ghost line in `plates.js` are explicitly a ten-year
+comparison, not a growing one (see `.claude/context/plates.md`). Folding
+new seasons into that baseline — especially a partial, in-progress one,
+which would drag its day-of-year envelope toward artificially low
+min/mean values for no reason other than the season not being over yet —
+is a distinct decision for a future pass, not a side effect of vendoring
+more years.
 
 ### River conditions and run history — lazy and memoized, unlike runData
 

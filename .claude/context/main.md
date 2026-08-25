@@ -126,6 +126,18 @@ Month ticks (`buildTimelineAxis`) are positioned from real dates in `runData`
 rather than spaced evenly, for the same reason: the season starts partway
 through March and the months are not equal fractions of the track.
 
+`seasonComplete` (set in `rebuildSeasonTotals()`, read by `setDateReadout()`)
+flags a season whose last record's month isn't December — every one of the
+ten historical seasons on file ends in December, so a season that doesn't is
+still being counted by DART, not a genuinely short year (see the 290–306-day
+note in `.claude/context/data.md`). This is deliberately data-driven, not
+`new Date()`-driven: keying it off the wall clock would mean it silently
+stops applying to a season that's still actually incomplete the moment the
+calendar year rolls over, even though nothing about the vendored file
+changed. Checking the record's own last date instead needs no maintenance
+and no clock — it flips itself off the next time `scripts/fetch-dart.mjs` is
+rerun after the real season finishes in December.
+
 ## Season totals (`rebuildSeasonTotals`, `peakDayIndex`)
 
 `seasonToDate` is the running total of the five simulated species from the

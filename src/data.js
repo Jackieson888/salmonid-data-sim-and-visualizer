@@ -8,13 +8,18 @@ import { parseAdultDailyCsv } from "./dart/parseAdultDaily.js";
 // The rest of what DART publishes is parsed too and reported in the HUD
 // without being simulated — see the note on `count` in parseAdultDailyCsv.
 //
-// The ten counting seasons vendored under public/, oldest first — every one a
-// DART adult_daily.php export for Lower Granite (scripts/fetch-dart.mjs).
+// Every counting season vendored under public/, oldest first — each a DART
+// adult_daily.php export for Lower Granite (scripts/fetch-dart.mjs, whose
+// own VENDOR_YEARS is the source of what's actually on disk — bump both
+// together). The trailing year may be a season still in progress; DART just
+// answers with however many rows it's counted so far (see main.js's
+// season-completeness note).
 //
 // NOTHING may cache runData.length across a year change — see the rebuild
 // hooks in main.js and plates.js.
 export const AVAILABLE_YEARS = [
-  2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015,
+  2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017,
+  2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026,
 ];
 
 // The season the app opens on — 2015 has substantial counts across all five
@@ -26,8 +31,9 @@ const DEFAULT_YEAR = 2015;
 const snapshotUrl = (year) => `/lwg-adult-daily-${year}.csv`;
 
 // Opt-in-only fallback source (see liveRefreshRequested) — snapshots are the default. See data.md.
+// Same query shape as adultDailyUrl() in scripts/fetch-dart.mjs — one implementation, not two that can drift.
 const liveDartUrl = (year) =>
-  `https://www.cbr.washington.edu/dart/cs/php/rpt/adult_daily.php?sc=1&outputFormat=csv&year=${year}&proj=LWG&span=no&startdate=1%2F1&enddate=12%2F31&run=&syear=2026&eyear=2026`;
+  `https://www.cbr.washington.edu/dart/cs/php/rpt/adult_daily.php?sc=1&outputFormat=csv&year=${year}&proj=LWG&span=no&startdate=1%2F1&enddate=12%2F31&run=`;
 
 // Same-origin static asset — generous, bounds a wedged connection rather than policing a slow one.
 const SNAPSHOT_TIMEOUT_MS = 15000;
