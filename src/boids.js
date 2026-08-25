@@ -4,13 +4,25 @@
 // the renderer (fishMesh.js) reinterprets these as worldX/worldZ.
 // Design rationale, invariants, gotchas: .claude/context/boids.md
 
+// Equal to REMOVE_FADE_FRAMES intentionally — fish fade in and out over the same duration.
 const SPAWN_FADE_FRAMES = 24;
 
 // Renderer sizes its instance capacity off this — see FISH_RENDER_HEADROOM in main.js.
+// Equal to SPAWN_FADE_FRAMES intentionally, not a coincidence.
 export const REMOVE_FADE_FRAMES = 24;
 
 // Blend factor for Fish.smoothSpeed's EMA (see constructor).
 const SPEED_SMOOTHING = 0.03;
+
+// Flocking-force tuning knobs used in step() (see .claude/context/boids.md).
+const ALIGNMENT_GAIN = 0.05;
+const COHESION_GAIN = 0.0005;
+const FLOW_BIAS_SCALE = 0.01;
+const CURRENT_DRAG_SCALE = 0.01;
+const CURRENT_DRAG_FREQUENCY = 0.002;
+
+// Spread of a freshly spawned fish's initial heading around straight downstream.
+const SPAWN_HEADING_SPREAD = Math.PI * 0.5;
 
 // Real-world nose-to-tail length range per DART species, in inches.
 // Also used by the fish viewer's field-guide card (src/inspect.js).
@@ -87,7 +99,7 @@ export class Fish {
     // Which DART species (data.js) — renderer picks the model/tint from this.
     this.species = species;
     // Mostly rightward (downstream) with some spread.
-    const angle = (Math.random() - 0.5) * Math.PI * 0.5;
+    const angle = (Math.random() - 0.5) * SPAWN_HEADING_SPREAD;
     const speed = 1 + Math.random() * 0.5;
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
@@ -128,7 +140,8 @@ export class Fish {
     this.removeAge = 0;
 
     // Low-passed swim speed (see Flock.step()), read by the renderer for tailbeat rate.
-    this.smoothSpeed = Math.hypot(this.vx, this.vy);
+    // Equal to `speed` above exactly — vx/vy are its cos/sin decomposition.
+    this.smoothSpeed = speed;
   }
 
   get opacity() {
@@ -153,7 +166,6 @@ export class Flock {
 
     // Maintained rather than recounted — see activeCount().
     this._activeCount = 0;
-
 
     this.options = {
       perceptionRadius: options.perceptionRadius ?? 55,
@@ -202,15 +214,24 @@ export class Flock {
 
   // Immediately drops fish still mid-fade-out, skipping the rest of the fade — called at the start of a fresh jumpToDay resync (main.js).
   finalizeRemovals() {
-    if (this.fish.some((f) => f.removing)) {
-      this.fish = this.fish.filter((f) => !f.removing);
+    this._pruneFish(
+      this.fish.some((f) => f.removing),
+      (f) => f.removing,
+    );
+  }
+
+  // Filters this.fish to drop everything matching `predicate`, but only when `shouldPrune`
+  // is true — callers that already know the answer (e.g. a flag set while scanning for
+  // something else) pass it in directly instead of paying for a second full-array scan.
+  _pruneFish(shouldPrune, predicate) {
+    if (shouldPrune) {
+      this.fish = this.fish.filter((f) => !predicate(f));
     }
   }
 
   setBounds(bounds) {
     this.bounds = bounds;
   }
-
 
   step(dt = 1) {
     const { perceptionRadius, separationRadius } = this.options;
@@ -274,23 +295,26 @@ export class Flock {
       if (aliCount > 0) {
         const avgVx = aliX / aliCount,
           avgVy = aliY / aliCount;
-        ax += (avgVx - fish.vx) * 0.05 * this.options.alignmentWeight;
-        ay += (avgVy - fish.vy) * 0.05 * this.options.alignmentWeight;
+        ax += (avgVx - fish.vx) * ALIGNMENT_GAIN * this.options.alignmentWeight;
+        ay += (avgVy - fish.vy) * ALIGNMENT_GAIN * this.options.alignmentWeight;
       }
       // Cohesion: steer toward the neighborhood's average position, so the
       // school stays loosely grouped instead of drifting apart.
       if (cohCount > 0) {
         const cx = cohX / cohCount,
           cy = cohY / cohCount;
-        ax += (cx - fish.x) * 0.0005 * this.options.cohesionWeight;
-        ay += (cy - fish.y) * 0.0005 * this.options.cohesionWeight;
+        ax += (cx - fish.x) * COHESION_GAIN * this.options.cohesionWeight;
+        ay += (cy - fish.y) * COHESION_GAIN * this.options.cohesionWeight;
       }
 
       // Gentle downstream bias — the run flows left (spawn) to right (exit).
-      ax += this.options.flowWeight * 0.01;
+      ax += this.options.flowWeight * FLOW_BIAS_SCALE;
 
       // Current drag: a slow lateral drift, like river current pushing back
-      ay += Math.sin(fish.x * 0.002) * this.options.currentWeight * 0.01;
+      ay +=
+        Math.sin(fish.x * CURRENT_DRAG_FREQUENCY) *
+        this.options.currentWeight *
+        CURRENT_DRAG_SCALE;
 
       // Clamp steering force. Math.sqrt, not Math.hypot — faster in V8, and overflow protection is unneeded at these magnitudes (see boids.md).
       const forceMag = Math.sqrt(ax * ax + ay * ay);
@@ -326,10 +350,18 @@ export class Flock {
         fish.vy *= scale;
       }
 
-      // Post-clamp, so this reflects the speed actually applied below (see Fish.smoothSpeed).
+      // Post-clamp, so this reflects the speed actually applied (see Fish.smoothSpeed).
+      // Derived from the branch just taken above instead of a third sqrt call: the clamp
+      // already pins the resulting magnitude to maxSpeed, maxSpeed*0.4, or the untouched
+      // pre-clamp `speed`.
+      const newSpeed =
+        speed > maxSpeed
+          ? maxSpeed
+          : speed < maxSpeed * 0.4
+            ? maxSpeed * 0.4
+            : speed;
       fish.smoothSpeed +=
-        (Math.sqrt(fish.vx * fish.vx + fish.vy * fish.vy) - fish.smoothSpeed) *
-        Math.min(1, SPEED_SMOOTHING * dt);
+        (newSpeed - fish.smoothSpeed) * Math.min(1, SPEED_SMOOTHING * dt);
 
       // Integrate: apply velocity to position.
       fish.x += fish.vx * dt;
@@ -412,40 +444,39 @@ export class Flock {
       }
     }
 
-    // Apply the accumulated corrections, each clamped to maxCorrection so a
-    // fish deep in a crowd is nudged rather than thrown.
-    for (const f of this.fish) {
-      let cx = f._corrX;
-      let cy = f._corrY;
-      if (cx === 0 && cy === 0) continue;
-      const magSq = cx * cx + cy * cy;
-      if (magSq > maxCorrectionSq) {
-        const scale = maxCorrection / Math.sqrt(magSq);
-        cx *= scale;
-        cy *= scale;
-      }
-      f.x += cx;
-      f.y += cy;
-    }
-
-    // River flow-through: fish past the right edge have finished their run — fade them out (remove()).
+    // Apply each fish's accumulated correction (clamped to maxCorrection so a fish deep
+    // in a crowd is nudged rather than thrown), then check its finalized position against
+    // the exit line — one pass, since neither step reads any other fish's state.
     const exitX = this.bounds.width + 40;
     let anyFaded = false;
     this.exitedLastStep = 0;
-    for (const fish of this.fish) {
+    for (const f of this.fish) {
+      let cx = f._corrX;
+      let cy = f._corrY;
+      if (cx !== 0 || cy !== 0) {
+        const magSq = cx * cx + cy * cy;
+        if (magSq > maxCorrectionSq) {
+          const scale = maxCorrection / Math.sqrt(magSq);
+          cx *= scale;
+          cy *= scale;
+        }
+        f.x += cx;
+        f.y += cy;
+      }
+
+      // River flow-through: fish past the right edge have finished their run — fade them out (remove()).
       // `!removing` guard: without it, a fish sitting past exitX for its whole fade-out would be counted ~24 times.
-      if (fish.x > exitX && !fish.removing) {
-        this.remove(fish);
+      if (f.x > exitX && !f.removing) {
+        this.remove(f);
         this.exitedLastStep++;
       }
-      if (fish.removing && fish.removeAge >= REMOVE_FADE_FRAMES) anyFaded = true;
+      if (f.removing && f.removeAge >= REMOVE_FADE_FRAMES) anyFaded = true;
     }
 
     // Guarded like finalizeRemovals() — skip the rebuild on the common frame where nothing finished fading.
-    if (anyFaded) {
-      this.fish = this.fish.filter(
-        (f) => !(f.removing && f.removeAge >= REMOVE_FADE_FRAMES),
-      );
-    }
+    this._pruneFish(
+      anyFaded,
+      (f) => f.removing && f.removeAge >= REMOVE_FADE_FRAMES,
+    );
   }
 }

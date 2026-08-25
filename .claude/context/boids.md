@@ -58,10 +58,15 @@ in either axis.
 
 **Key packing**: `gridKey(cx, cy)` packs a cell's coordinates into a single
 `Map` key (`cx * GRID_KEY_SCALE + cy`) instead of allocating a string per
-lookup. Safe because `cy` is always clamped into `[0, bounds.height]` by the
-end of `step()` (the hard clamp), so `cy` is always small and non-negative;
-`cx` may be negative (fish spawn slightly left of x=0), which the mixed-radix
-encoding tolerates fine.
+lookup. `cy` is clamped into `[0, bounds.height]` by the hard clamp mid-`step()`,
+so it's small and non-negative going into that frame's grid builds — though
+not with mathematical certainty for the rest of the frame, since the
+overlap-correction pass adds a further delta to `fish.y` afterward without
+re-clamping. Nothing has ever depended on that exactness: `GRID_KEY_SCALE = 1
+<< 20` is astronomically larger than any real cell-coordinate range, so even
+a fish nudged slightly negative can't alias another cell's legitimate key.
+`cx` may be negative outright (fish spawn slightly left of x=0), which the
+mixed-radix encoding tolerates fine.
 
 **Pooling**: `SpatialGrid` reuses its `Map` and its bucket arrays between
 frames rather than allocating fresh ones. The previous shape built a new
@@ -162,10 +167,16 @@ that's largest on a busy day. This applies to `swimCyclePos`, `pitch`,
   finishing, growing `step()`'s per-frame cost until the page stalls. Called
   at the start of a fresh jump so at most one jump's worth of fades is ever
   pending, no matter how fast jumps arrive.
-- Both `finalizeRemovals()` and the end-of-`step()` cleanup filter are
-  guarded (`if (this.fish.some(...))` / `if (anyFaded)`) because an
-  unconditional `filter()` rebuilds the whole (up to ~1200-entry) array
-  every frame just to hand back the same contents.
+- `finalizeRemovals()` and the end-of-`step()` cleanup both route through a
+  shared `_pruneFish(shouldPrune, predicate)` helper that only calls
+  `filter()` when `shouldPrune` is true, because an unconditional `filter()`
+  rebuilds the whole (up to ~1200-entry) array every frame just to hand back
+  the same contents. The two call sites compute `shouldPrune` differently on
+  purpose: `finalizeRemovals()` pays for a dedicated `.some()` scan since it
+  fires rarely (only at the start of a `jumpToDay` resync), while the
+  `step()`-tail call passes in `anyFaded`, a flag set opportunistically
+  while that same loop was already scanning every fish for exits — avoiding
+  a second full-array scan on the hot per-frame path.
 
 ## step() — forces and integration
 
@@ -175,11 +186,19 @@ that's largest on a busy day. This applies to `swimCyclePos`, `pitch`,
   neighborhood's average position. Standard Reynolds terms, weighted by
   `options.separationWeight`/`alignmentWeight`/`cohesionWeight`.
 - Steering force is clamped with `Math.sqrt(x*x + y*y)` rather than
-  `Math.hypot(x, y)` — here and at both speed clamps below. `hypot()` is
+  `Math.hypot(x, y)` — here and at the speed clamp below. `hypot()` is
   specified to avoid intermediate overflow/underflow, which it pays for with
   a scaling pass that makes it several times slower in V8. These are plain
   screen-space magnitudes in the low hundreds, nowhere near the range that
-  protection exists for, and this runs three times per fish per frame.
+  protection exists for, and this runs twice per fish per frame. A third
+  sqrt used to be spent recomputing `Fish.smoothSpeed` from the post-clamp
+  velocity, but that value is fully determined by which clamp branch (if
+  any) just fired — `maxSpeed`, `maxSpeed * 0.4`, or the untouched pre-clamp
+  `speed` — so it's derived instead of recomputed. The same reasoning is why
+  `Fish`'s constructor sets `smoothSpeed` directly from its local `speed`
+  variable rather than `Math.hypot(vx, vy)`: `vx`/`vy` are that `speed`'s
+  own cos/sin decomposition, so hypot would just be re-deriving a number
+  already in scope.
 - **Edge steering** (top/bottom margins, left spawn edge; the right edge is
   intentionally open so fish can exit downstream) is applied *after* the
   flocking force clamp, with its own separate headroom, rather than folded
