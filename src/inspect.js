@@ -44,6 +44,8 @@ const fieldGuideEl = document.getElementById("field-guide");
 const overlaySvg = document.getElementById("anatomy-overlay");
 const inspectPanel = document.getElementById("inspect-panel");
 const inspectBar = document.getElementById("inspect-bar");
+const fieldNotesToggle = document.getElementById("field-notes-toggle");
+const inspectBarToggle = document.getElementById("inspect-bar-toggle");
 
 // The species on show, in the order the panel lists them — largest salmonid
 // first, then down the run to the one that isn't a bony fish at all. The
@@ -157,6 +159,42 @@ new ResizeObserver(([entry]) => {
   );
 }).observe(inspectBar);
 resize();
+
+// Field notes slide in like the river's own plates drawer (see plates.js) —
+// closed by default so the fish fills more of the screen.
+function setFieldNotesOpen(open) {
+  inspectPanel.classList.toggle("open", open);
+  fieldNotesToggle.setAttribute("aria-pressed", String(open));
+  fieldNotesToggle.textContent = open ? "Field Notes ✕" : "Field Notes";
+}
+fieldNotesToggle.addEventListener("click", () =>
+  setFieldNotesOpen(!inspectPanel.classList.contains("open")),
+);
+window.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key !== "Escape" || !inspectPanel.classList.contains("open")) return;
+  setFieldNotesOpen(false);
+  fieldNotesToggle.focus();
+});
+
+// The bottom bar collapses to species selection plus the core view controls,
+// hiding the secondary toggles/turbidity and the length scale/season card
+// behind "Expand" (see #inspect-bar.collapsed, inspect.css). Defaults
+// compact on a small/short viewport (read once at boot, not watched — same
+// one-time-read convention PREFERS_REDUCED_MOTION above uses) so the model
+// reads larger on a phone without an extra tap; desktop opens full.
+function setBarCollapsed(collapsed) {
+  inspectBar.classList.toggle("collapsed", collapsed);
+  inspectBarToggle.setAttribute("aria-pressed", String(collapsed));
+  inspectBarToggle.textContent = collapsed ? "Expand" : "Collapse";
+}
+inspectBarToggle.addEventListener("click", () =>
+  setBarCollapsed(!inspectBar.classList.contains("collapsed")),
+);
+setBarCollapsed(
+  typeof matchMedia === "function" &&
+    matchMedia("(max-width: 700px), (max-height: 560px)").matches,
+);
 
 // The one fish — built from boids.js's real Fish class, then overridden below
 // for a fish that isn't part of a running simulation.

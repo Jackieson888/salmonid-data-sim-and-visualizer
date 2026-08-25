@@ -88,6 +88,28 @@ const speciesCountEls = Object.fromEntries(
 const fishLoadingEl = document.getElementById("fish-loading");
 const noticeEl = document.getElementById("notice");
 
+const reportEl = document.getElementById("report");
+const reportToggle = document.getElementById("report-toggle");
+
+// Collapses #report to the current reading, the day's total and playback —
+// everything else hidden via #report.collapsed in style.css. Defaults
+// collapsed on a small/short viewport (read once at boot, not watched — same
+// one-time-read convention PREFERS_REDUCED_MOTION below uses) so a mobile
+// visitor gets the compact bar without an extra tap; a resize mid-session
+// doesn't yank an already-open bar shut.
+function setReportCollapsed(collapsed) {
+  reportEl.classList.toggle("collapsed", collapsed);
+  reportToggle.setAttribute("aria-pressed", String(collapsed));
+  reportToggle.textContent = collapsed ? "Expand" : "Collapse";
+}
+reportToggle.addEventListener("click", () =>
+  setReportCollapsed(!reportEl.classList.contains("collapsed")),
+);
+setReportCollapsed(
+  typeof matchMedia === "function" &&
+    matchMedia("(max-width: 640px), (max-height: 500px)").matches,
+);
+
 // Surfaces a real failure to the viewer instead of only to the console.
 function showNotice(message, kind = "error") {
   if (!noticeEl) return;

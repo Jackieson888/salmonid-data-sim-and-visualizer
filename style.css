@@ -174,6 +174,111 @@ body {
   overflow-y: auto;
 }
 
+/* Collapse/expand handle — a flex sibling of #report inside #hud, not a
+   child of it, so it isn't clipped by #report's own overflow-y:auto above.
+   align-self:flex-end right-aligns it in #hud's column layout; preceding
+   #report in DOM order is what lands it directly above the bar, since #hud
+   packs its flex children from the end (justify-content: flex-end). */
+#report-toggle {
+  align-self: flex-end;
+  margin-bottom: 6px;
+  pointer-events: auto;
+  padding: 6px 10px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: var(--t-3);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+#report-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+#report-toggle:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Pressed = collapsed, matching #report.collapsed below. */
+#report-toggle[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------
+   Collapsed report — set by setReportCollapsed() in main.js. Shrinks the
+   bar to the current reading, the day's total, and playback, hiding
+   everything else (species table, conditions, run-status, chart/axis).
+   Defaults collapsed on a small/short viewport (read once at boot, same
+   one-time-read convention PREFERS_REDUCED_MOTION uses below in main.js),
+   but the toggle works at any width. Every rule here targets #report.collapsed
+   specifically so its extra ID specificity always wins over the width/height
+   breakpoints further down (which only carry class specificity) — the
+   collapsed view reads the same regardless of which of those is also active.
+   --------------------------------------------------------------------- */
+
+#report.collapsed .report-foot,
+#report.collapsed #masthead .station,
+#report.collapsed #masthead h1,
+#report.collapsed #masthead .reach,
+#report.collapsed #species-breakdown,
+#report.collapsed #conditions,
+#report.collapsed #run-status,
+#report.collapsed #season-chart,
+#report.collapsed #timeline-axis {
+  display: none;
+}
+
+/* display:flex, not left implicit — beats the >=640px/500px breakpoint's
+   own display:grid the same way the selector's specificity does everywhere
+   else in this block. flex-wrap is deliberately left unset so it still
+   falls through to the <=1280px breakpoint's flex-wrap: wrap, letting the
+   three remaining fields drop to a second row on a genuinely narrow phone
+   instead of forcing a single overflowing row. */
+#report.collapsed .report-body {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 8px 12px;
+}
+
+#report.collapsed .field {
+  min-width: 0;
+  border-left: none;
+  padding-left: 0;
+}
+
+#report.collapsed #masthead {
+  flex: 0 1 auto;
+  max-width: none;
+}
+
+#report.collapsed #masthead .readout {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+#report.collapsed #passage {
+  flex: 0 0 auto;
+}
+
+#report.collapsed #passage .field-head {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+#report.collapsed #controls {
+  flex: 1 1 auto;
+}
+
 .report-body {
   display: flex;
   align-items: stretch;
@@ -905,11 +1010,16 @@ body {
    Plates drawer (see src/plates.js) — overlays the canvas, doesn't resize it
    --------------------------------------------------------------------- */
 
-#plates-toggle {
+/* #field-notes-toggle (inspect.html) shares this treatment byte-for-byte —
+   same reasoning as the #fish-viewer-link/#back-link rule above. It never
+   coexists with #plates-toggle (different pages), so the shared top:18px/
+   right:18px corner slot is never contested. */
+#plates-toggle,
+#field-notes-toggle {
   position: absolute;
   top: 18px;
   right: 18px;
-  z-index: 2; /* also the drawer's close control — must paint above #plates */
+  z-index: 2; /* also the drawer's close control — must paint above #plates/#inspect-panel */
   padding: 6px 10px;
   background: var(--ink);
   border: 1px solid var(--line);
@@ -923,12 +1033,14 @@ body {
   transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
-#plates-toggle:hover {
+#plates-toggle:hover,
+#field-notes-toggle:hover {
   color: var(--text);
   border-color: var(--text-dim);
 }
 
-#plates-toggle[aria-pressed="true"] {
+#plates-toggle[aria-pressed="true"],
+#field-notes-toggle[aria-pressed="true"] {
   color: var(--text);
   border-color: var(--accent);
 }

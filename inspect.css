@@ -16,20 +16,47 @@
   transform: translateY(calc(var(--bar-h, 170px) * -0.5));
 }
 
+/* Slides in like the river's own #plates drawer (see plates.js) — closed by
+   default (transform below) so the fish fills more of the screen; opened via
+   #field-notes-toggle (style.css, sharing #plates-toggle's treatment).
+   top:60px clears that button (18px + its own ~28px + a gap) rather than
+   overlapping it. Flush to the right edge (right:0, border-left only) like
+   #plates, so it reaches full-bleed on a narrow phone instead of leaving an
+   18px sliver of canvas down the side.
+
+   bottom:0, not anchored above #inspect-bar via --bar-h: that was tried
+   first, but a viewport short enough to push the bar toward its own 70vh cap
+   left almost no room left for the panel above it, squeezing "Field notes"
+   down to an unreadable sliver whenever both were open together. Running the
+   panel the rest of the way to the true bottom instead — same full-bleed
+   idiom #plates uses on the river page — costs nothing: #inspect-bar comes
+   after this element in inspect.html, so its own opaque background already
+   paints over whatever part of the panel it overlaps. */
 #inspect-panel {
   position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 300px;
-  /* Anchored above #inspect-bar via --bar-h (written in resize(), inspect.js)
-     rather than a fixed distance, so it tracks the bar's own reflow. */
-  bottom: calc(var(--bar-h, 170px) + 14px);
+  top: 60px;
+  right: 0;
+  bottom: 0;
+  width: min(320px, 100vw);
   overflow-y: auto;
   padding: 10px 14px 12px;
   background: var(--ink);
-  border: 1px solid var(--line);
+  border-left: 1px solid var(--line);
   border-top: 2px solid var(--accent);
   color: var(--text);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  pointer-events: auto;
+}
+
+#inspect-panel.open {
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #inspect-panel {
+    transition: none;
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -50,6 +77,16 @@
      recentering translateY both stay correct automatically. */
   max-height: 70vh;
   overflow-y: auto;
+  /* Opaque override of the shared #report/#inspect-bar rule's --ink (12%
+     see-through — tuned for #report sitting over the river's moving water).
+     #inspect-panel now runs full height behind this bar (see its own
+     bottom:0 note above) rather than stopping short above it, so that 12%
+     would otherwise let field-notes text bleed through the seam. Invisible
+     as a change on its own: this page's backdrop is flat near-black, not the
+     river scene, so opaque vs. 0.88 reads the same when nothing sits behind
+     it. Wins the tie with the shared rule (equal ID-only specificity) by
+     coming later — inspect.css loads after style.css in inspect.html. */
+  background: rgb(10, 15, 18);
 }
 
 /* display:flex reasserted (not just flex-wrap): style.css's own narrow
@@ -98,6 +135,134 @@
     flex: 1 1 100%;
     width: auto; /* was a fixed 320px */
   }
+}
+
+/* ---------------------------------------------------------------------
+   Collapse/expand handle — a sibling of #inspect-bar (inspect.html), not a
+   child of it, so it isn't clipped by the bar's own overflow-y:auto (see
+   the height safety net above). Floats off the bar's own measured height
+   (--bar-h, written by the ResizeObserver in inspect.js) so it tracks the
+   bar up or down as it collapses/expands, the same plumbing #inspect-panel's
+   bottom anchor and #fish-canvas's recentering shift already read.
+   --------------------------------------------------------------------- */
+#inspect-bar-toggle {
+  position: absolute;
+  right: 18px;
+  bottom: calc(var(--bar-h, 170px) + 10px);
+  z-index: 1;
+  padding: 6px 10px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: var(--t-3);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), bottom var(--dur-med) var(--ease);
+}
+
+#inspect-bar-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+#inspect-bar-toggle:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Pressed = collapsed, matching #inspect-bar.collapsed below. */
+#inspect-bar-toggle[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #inspect-bar-toggle {
+    transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+}
+
+/* Compacts the bar to species selection plus the core view controls
+   (swim/turntable/reset). Hidden: the secondary toggles, turbidity, and the
+   two data fields (length scale, season card) — comparative info, not
+   controls, and the two tallest things in the bar. Defaults collapsed on a
+   small/short viewport (see setBarCollapsed() in inspect.js) so the model
+   reads larger on a phone without an extra tap; desktop opens full. */
+#inspect-bar.collapsed #labels-toggle,
+#inspect-bar.collapsed #construction-toggle,
+#inspect-bar.collapsed .range-field,
+#inspect-bar.collapsed #length-field,
+#inspect-bar.collapsed #season-field {
+  display: none;
+}
+
+/* Beyond just hiding fields, the two that remain are flattened from stacked
+   columns into single compact rows — the species list's per-row scientific
+   name and the view toggles' vertical stack are what a "compact" bar least
+   needs, since the field-guide/plates-style reading is exactly what Expand
+   is for. Field headers ("Species"/"View") are dropped too — the picker and
+   toggles are self-explanatory as a row of chips/buttons. */
+#inspect-bar.collapsed .field-head {
+  display: none;
+}
+
+#inspect-bar.collapsed .report-body {
+  align-items: center;
+  gap: var(--s3);
+  padding: 8px 12px;
+}
+
+#inspect-bar.collapsed .field + .field {
+  padding-left: var(--s3);
+}
+
+#inspect-bar.collapsed #species-field,
+#inspect-bar.collapsed #view-field {
+  width: auto;
+}
+
+#inspect-bar.collapsed #species-list {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Full border instead of the stacked list's left-edge selection marker —
+   reads as a row of chips, not a truncated list. */
+#inspect-bar.collapsed .species-option {
+  width: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+}
+
+#inspect-bar.collapsed .species-option.selected {
+  border-color: var(--accent);
+}
+
+#inspect-bar.collapsed .species-scientific {
+  display: none;
+}
+
+#inspect-bar.collapsed #view-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#inspect-bar.collapsed #view-field .toggles {
+  flex-direction: row;
+}
+
+#inspect-bar.collapsed .toggle-btn {
+  width: auto;
+}
+
+#inspect-bar.collapsed #reset-view {
+  width: auto;
+  margin-top: 0;
 }
 
 #inspect-panel .field-head {

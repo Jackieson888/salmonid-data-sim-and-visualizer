@@ -44,6 +44,11 @@
 
     <!-- The HUD's report styling: .claude/context/ui.md -->
     <div id="hud">
+      <!-- Collapses #report to the current reading, the day's total, and
+           playback — see setReportCollapsed() in main.js and #report.collapsed
+           in style.css. A flex sibling of #report (not a child), so it isn't
+           clipped by #report's own overflow-y:auto. -->
+      <button id="report-toggle" type="button" aria-pressed="false" aria-controls="report">Collapse</button>
       <section id="report">
         <div class="report-body">
           <!-- 1. Identity and the current reading. -->

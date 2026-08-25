@@ -19,6 +19,17 @@
 
     <a id="back-link" href="/">&larr; Back to river</a>
 
+    <!-- Slides in like the river's own plates drawer (src/plates.js) — closed
+         by default so the fish fills more of the screen. -->
+    <button
+      id="field-notes-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="inspect-panel"
+    >
+      Field Notes
+    </button>
+
     <!-- Styled to match the river view's HUD. Split like the river page: a
          bottom bar for everything but field notes, a side panel for just
          the notes. See .claude/context/ui.md and .claude/context/inspect.md -->
@@ -73,6 +84,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Compacts #inspect-bar to species + core view controls, hiding the
+         length scale/season card/secondary toggles — see setBarCollapsed()
+         in inspect.js and #inspect-bar.collapsed in inspect.css. Positioned
+         off the bar's own measured height (--bar-h, inspect.js), so it isn't
+         clipped by the bar's own overflow-y:auto. -->
+    <button
+      id="inspect-bar-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="inspect-bar"
+    >
+      Collapse
+    </button>
 
     <div id="fish-loading">
       <div class="bar"></div>
