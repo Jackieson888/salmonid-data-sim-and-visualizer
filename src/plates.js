@@ -11,6 +11,7 @@ import {
 } from "./data.js";
 import { seasonFraction } from "./seasonScale.js";
 import { dayOfYear } from "./scene/season.js";
+import { initInsightToast, createInfoButton } from "./insights.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_W = 1000;
@@ -123,11 +124,19 @@ function dayCursor(svg, cursorSetters) {
   });
 }
 
-function figureShell(num, title) {
+// insightText is a string or a function (called only on a cache miss, so a
+// dynamic figure never shows a stale reading once it does run) — see
+// .claude/context/insights.md. insightKey defaults to `num` ("FIG. 3"),
+// which is fine for a figure whose insight never changes; FIG. 1/2 pass
+// their own since their text depends on load state / the day shown.
+function figureShell(num, title, insightText, insightKey = num) {
   const figure = el("figure", { class: "plate" });
   const caption = el("figcaption", { class: "plate-caption" });
   caption.appendChild(el("span", { class: "plate-num", text: num }));
   caption.appendChild(el("span", { class: "plate-title", text: title }));
+  if (insightText) {
+    caption.appendChild(createInfoButton(insightKey, insightText, title));
+  }
   figure.appendChild(caption);
   return figure;
 }
@@ -147,7 +156,20 @@ function note(text) {
 // FIG. 1 — Season passage, with the 2006-2015 daily mean as a ghost line (see plates.md).
 // Returns an `addGhost(history)` hook since run history arrives later than the plate itself.
 function buildPassagePlate(cursorSetters) {
-  const figure = figureShell("FIG. 1", "Season Passage");
+  // Read by the info button below, flipped true once addGhost() lands.
+  let ghostLoaded = false;
+  const figure = figureShell(
+    "FIG. 1",
+    "Season Passage",
+    () =>
+      ghostLoaded
+        ? "The thin ghost line traces the day-by-day average from 2006–2015 — a decade of history laid behind this season's own curve, so a glance shows whether this year is running ahead of or behind the historical norm."
+        : "This is the same curve the bar's own chart shows, drawn full size. A ghost line comparing it to the 2006–2015 average is still loading.",
+    // Two distinct cache entries, not one — the "still loading" and
+    // "loaded" texts are different facts, and once the ghost has actually
+    // loaded there's no going back to the placeholder for this session.
+    () => `fig1:${ghostLoaded ? "loaded" : "loading"}`,
+  );
   const svg = plateSvg();
 
   const counts = runData.map((d) => d.count ?? 0);
@@ -185,6 +207,7 @@ function buildPassagePlate(cursorSetters) {
       ),
     );
     noteEl.textContent += " · ghost line is the 2006–2015 daily mean";
+    ghostLoaded = true;
   }
 
   return { figure, svg, addGhost };
@@ -192,7 +215,26 @@ function buildPassagePlate(cursorSetters) {
 
 // FIG. 2 — Species composition: all eight DART counts stacked, absolute or 100%, plus today's split.
 function buildCompositionPlate(cursorSetters, todayUpdaters) {
-  const figure = figureShell("FIG. 2", "Species Composition");
+  const figure = figureShell(
+    "FIG. 2",
+    "Species Composition",
+    () => {
+      const today = runData[lastDayIndex];
+      const counted = ALL_SPECIES.filter((s) => (today[s.key] ?? 0) > 0);
+      let text =
+        "Only five of these eight counted species actually swim in the " +
+        "water above — sockeye, coho and jack coho are real fish the dam " +
+        "tallies every day, they just aren't rendered in this simulation.";
+      if (counted.length > 0) {
+        const top = counted.reduce((a, b) =>
+          (today[b.key] ?? 0) > (today[a.key] ?? 0) ? b : a,
+        );
+        text += ` On the day shown, ${top.label} makes up the largest share of the count.`;
+      }
+      return text;
+    },
+    () => `fig2:${runYear}:${runData[lastDayIndex].date}`,
+  );
   const svg = plateSvg();
 
   const series = ALL_SPECIES.map((s) => ({
@@ -278,7 +320,16 @@ function buildCompositionPlate(cursorSetters, todayUpdaters) {
 
 // FIG. 3 — Wild vs. hatchery steelhead. wildSteelhead is a subset of steelhead, not an addition (see data.js).
 function buildSteelheadPlate(cursorSetters, todayUpdaters) {
-  const figure = figureShell("FIG. 3", "Wild vs. Hatchery Steelhead");
+  const figure = figureShell(
+    "FIG. 3",
+    "Wild vs. Hatchery Steelhead",
+    () =>
+      "The dam can't ask a steelhead where it was born, but hatchery fish " +
+      "carry a permanent mark: their adipose fin — the small fleshy fin " +
+      "behind the dorsal — is clipped off before release. A wild fish " +
+      'still has that fin intact, so a clipped fin is really the only ' +
+      'thing separating "wild" from "hatchery" in this count.',
+  );
   const svg = plateSvg();
 
   const hasSteelhead = (i) => (runData[i].steelhead ?? 0) > 0;
@@ -321,7 +372,17 @@ function buildSteelheadPlate(cursorSetters, todayUpdaters) {
 
 // FIG. 4 — River conditions. Needs a network round trip; caller shows a placeholder until it resolves.
 function buildConditionsPlate(cursorSetters, rows) {
-  const figure = figureShell("FIG. 4", "River Conditions");
+  const figure = figureShell(
+    "FIG. 4",
+    "River Conditions",
+    () =>
+      "Outflow and spill are both measured in kcfs — thousand cubic feet " +
+      "per second — a sense of how much of the river is moving through " +
+      "and over the dam on a given day. Spilling water re-oxygenates the " +
+      "river but also raises dissolved gas, which can stress fish; the " +
+      "scatter below checks whether water temperature and Chinook " +
+      "passage tend to move together.",
+  );
   const svg = plateSvg();
 
   const byDate = new Map(rows.map((r) => [r.date, r]));
@@ -392,7 +453,16 @@ function buildConditionsPlate(cursorSetters, rows) {
 
 // FIG. 5 — Run history, 2006-2015: per-year totals, plus a day-of-year envelope (see plates.md).
 function buildHistoryPlate(cursorSetters, history) {
-  const figure = figureShell("FIG. 5", "Run History, 2006–2015");
+  const figure = figureShell(
+    "FIG. 5",
+    "Run History, 2006–2015",
+    () =>
+      "Ten years of the same season stacked on top of each other. No two " +
+      "years look alike — a heavy snowpack, a warm ocean, or a " +
+      "hatchery's release schedule can shift a run's size or timing by " +
+      "weeks — which is exactly why one year's count means little " +
+      "without a decade like this one to measure it against.",
+  );
 
   // (a) Per-year stacked totals — the season on screen gets the accent border, others the neutral hairline.
   const barSvg = svgEl("svg", {
@@ -495,7 +565,16 @@ function buildHistoryPlate(cursorSetters, history) {
 
 // FIG. 6 — Lamprey, day vs. night: lamprey pass mostly after dark, salmonids don't (see data.md).
 function buildLampreyPlate(cursorSetters) {
-  const figure = figureShell("FIG. 6", "Lamprey, Day vs. Night");
+  const figure = figureShell(
+    "FIG. 6",
+    "Lamprey, Day vs. Night",
+    () =>
+      "Pacific lamprey overwhelmingly cross the dam after dark, while " +
+      "every other species here passes mostly in daylight. Lamprey have " +
+      "no jaws or scales to fight off a predator with, and the cover of " +
+      "night is thought to be one of their best defenses on a dangerous " +
+      "swim upstream.",
+  );
   const svg = svgEl("svg", {
     viewBox: `0 0 ${VIEW_W} 90`,
     preserveAspectRatio: "none",
@@ -575,6 +654,10 @@ let lastDayIndex = 0;
 let lastAt = null;
 
 export function initPlates() {
+  // Idempotent (no-ops if already built) — main.js calls this too, so
+  // whichever module boots first wins and the other's call is free.
+  initInsightToast();
+
   toggleBtn = document.getElementById("plates-toggle");
   asideEl = document.getElementById("plates");
   scrollEl = document.getElementById("plates-scroll");

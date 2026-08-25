@@ -26,6 +26,7 @@ import { FOG_GLSL } from "./scene/fog.js";
 import { Fish, BODY_VISUAL_SCALE, SPECIES_LENGTH_INCHES } from "./boids.js";
 import { runData, runYear } from "./data.js";
 import { seasonFraction } from "./seasonScale.js";
+import { initInsightToast, createInfoButton } from "./insights.js";
 
 const canvas = document.getElementById("fish-canvas");
 const fishLoadingEl = document.getElementById("fish-loading");
@@ -629,7 +630,18 @@ const LENGTH_FISH_SCALE = 0.5;
 
 function buildLengthScale() {
   const head = el("p", "field-head");
-  head.appendChild(el("span", "label", "Adult length"));
+  const label = el("span", "label", "Adult length");
+  label.appendChild(
+    createInfoButton(
+      "length-scale",
+      "Each silhouette spans that species' full adult size range, traced " +
+        "from this app's own 3D fish models rather than drawn by hand — " +
+        "the comparison you're looking at is the real model geometry, not " +
+        "an illustration of it.",
+      "adult length",
+    ),
+  );
+  head.appendChild(label);
   lengthScaleEl.appendChild(head);
 
   for (const species of SPECIES) {
@@ -751,7 +763,8 @@ function updateSeasonCard(species) {
   seasonCardEl.replaceChildren();
 
   const head = el("p", "field-head");
-  head.appendChild(el("span", "label", `At Lower Granite, ${runYear}`));
+  const headLabel = el("span", "label", `At Lower Granite, ${runYear}`);
+  head.appendChild(headLabel);
   seasonCardEl.appendChild(head);
 
   if (stats.total === 0) {
@@ -761,6 +774,26 @@ function updateSeasonCard(species) {
     );
     return;
   }
+
+  // Only makes sense once there's a real middle-80% window to point at.
+  headLabel.appendChild(
+    createInfoButton(
+      `season-card:${species}:${runYear}`,
+      stats.middleWindow
+        ? `"Middle 80%" is the window by which the 10th and 90th percentile ` +
+          `of this season's total had passed — a more honest answer to ` +
+          `"when does this run happen" than first-to-last sighting, since ` +
+          `one stray fish in an off month can otherwise stretch the whole ` +
+          `season. For ${COMMON_NAMES[species]} in ${runYear}, that's ` +
+          `${formatDate(stats.middleWindow[0])} to ${formatDate(stats.middleWindow[1])}.`
+        : `"Middle 80%" is the window by which the 10th and 90th percentile ` +
+          `of a season's total have passed — a more honest answer to ` +
+          `"when does this run happen" than first-to-last sighting, since ` +
+          `one stray fish in an off month can otherwise stretch the whole ` +
+          `season.`,
+      "this season",
+    ),
+  );
 
   const { svg, rules } = buildSparkline(species, stats);
   seasonCardEl.appendChild(svg);
@@ -1696,6 +1729,7 @@ function renderAnatomyOverlay() {
 
 // Boot the panel — placed here (not beside its functions) because setSpecies()
 // touches labelState, declared just above; earlier placement hit the TDZ.
+initInsightToast();
 buildInspectParticles();
 buildSpeciesList();
 buildLengthScale();

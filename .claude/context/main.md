@@ -878,6 +878,9 @@ missing.
   governor `applyTier()` responds to.
 - `.claude/context/plates.md` — the data-plates drawer `main.js` feeds via
   `setPlatesDay`/`updatePlatesToday`/`rebuildPlatesForYear`.
+- `.claude/context/insights.md` — the `.info-btn`/insight-toast pair
+  `initInsights()` wires into the HUD's passage/conditions/run-status
+  fields and the season chart.
 - `.claude/context/scene/sceneSetup.md` — the fixed camera and composer
   `main.js` resizes and reads `cameraTarget` from.
 - `.claude/context/scene/water-and-caustics.md` — the water sim and caustics

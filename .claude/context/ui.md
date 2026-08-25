@@ -217,6 +217,15 @@ rather than trusting `transitionend`, the same guarantee-over-elegance
 reasoning as `dismissLoadingOverlay` (see `.claude/context/main.md`) — a
 backgrounded tab or reduced motion can mean that event never fires.
 
+**Insight toast (`#insight-toast`, `.info-btn`).** Same top-center slot and
+entrance/exit convention as `#notice` just above (unhide → forced reflow →
+`.shown`; hide removes `.shown` then defers `hidden = true` on a timeout, not
+`transitionend`) — full rationale, including why it's built once in
+`src/insights.js` and shared by both pages rather than duplicated, lives in
+`.claude/context/insights.md`. `.info-btn` is a 14px hairline **square**
+carrying "i", not a rounded badge — the species-key swatches are this app's
+only round-corner exception, and they're squares too.
+
 **Debug panel (`D` key).** Shifted to `top: 56px` (down from the corner) to
 clear `#plates-toggle`, which took the primary top-right spot — this is a
 hidden-by-default dev readout, the toggle is a real control.
@@ -481,3 +490,6 @@ layout, so it can sit exactly on top of the WebGL canvas.
   `MATERIAL_OVERRIDES` the species key colors and turbidity fields key off.
 - `.claude/context/scene/fishAnatomy.md` — the anatomy anchors
   `#anatomy-overlay` renders.
+- `.claude/context/insights.md` — `.info-btn`/`#insight-toast`, styled from
+  this file's tokens and following `#notice`'s own entrance/exit and
+  top-center placement conventions.

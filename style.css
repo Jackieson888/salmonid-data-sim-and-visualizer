@@ -985,6 +985,111 @@ body {
 }
 
 /* ---------------------------------------------------------------------
+   Insight toast (see src/insights.js) — one shared snackbar, top-centre
+   like #notice above, opened by .info-btn buttons scattered through the
+   HUD, the plates drawer, and the fish viewer's bar/panel.
+   --------------------------------------------------------------------- */
+
+.info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+  /* Sans + italic, not the mono numeral font — a bold mono "i" at this size
+     reads as a "1" (both are just a stem with a serif foot). Italic keeps
+     it unambiguous as a letter and matches the conventional info-icon glyph. */
+  font-family: var(--sans);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.info-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.info-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The one open insight — same "current reading" register the accent is
+   otherwise reserved for. */
+.info-btn[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+#insight-toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 3; /* above #plates-toggle (2) / #plates (1) and #notice */
+  max-width: min(48ch, calc(100vw - 36px));
+  padding: 11px 34px 11px 14px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: var(--t-3);
+  line-height: 1.5;
+  transform: translate(-50%, -4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+}
+
+#insight-toast.shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+#insight-toast[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #insight-toast {
+    transition: none;
+  }
+}
+
+.insight-toast-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: var(--t-2);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.insight-toast-close:hover {
+  color: var(--text);
+}
+
+.insight-toast-close:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------
    Debug panel (D key — see main.js)
    --------------------------------------------------------------------- */
 

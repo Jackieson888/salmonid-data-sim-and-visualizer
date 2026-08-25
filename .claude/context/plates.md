@@ -163,3 +163,5 @@ day/night split is kept alongside the combined count).
 - `.claude/context/main.md` — `buildSeasonChart`'s break-the-line
   convention that `areaPath`'s `hasValue` mirrors, and `setYear()`, the
   caller of `rebuildPlatesForYear()`.
+- `.claude/context/insights.md` — the `insightText` parameter `figureShell()`
+  accepts and the shared toast every `FIG.` caption's info button opens.

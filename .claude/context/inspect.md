@@ -565,3 +565,5 @@ fins instead of a glint.
   conventions this page's defaults echo.
 - `.claude/context/ui.md` — `inspect.css`/`inspect.html` layout: the
   `--bar-h` variable, `#fish-canvas`'s shift transform, panel breakpoints.
+- `.claude/context/insights.md` — the info buttons on the length scale and
+  season card headers, and the shared toast they open.

@@ -14,6 +14,7 @@ import {
   updatePlatesToday,
   rebuildPlatesForYear,
 } from "./plates.js";
+import { initInsightToast, createInfoButton } from "./insights.js";
 import { createSceneSetup } from "./scene/sceneSetup.js";
 import {
   buildTerrainMesh,
@@ -1473,9 +1474,149 @@ sceneSetup.renderer.domElement.addEventListener(
   false,
 );
 
+// ---------------------------------------------------------------------
+// Insight toast — layman explanations behind the .info-btn buttons wired
+// into the HUD below. See src/insights.js and .claude/context/insights.md.
+// Each text is a function, not a plain string, so it reads runData/dayIndex
+// fresh at the moment a viewer opens it rather than whatever day it was
+// when the button was built.
+// ---------------------------------------------------------------------
+const INSIGHT_SPECIES_LABELS = {
+  chinook: "Chinook",
+  jackChinook: "Jack Chinook",
+  steelhead: "Steelhead",
+  shad: "Shad",
+  lamprey: "Lamprey",
+  sockeye: "Sockeye",
+  coho: "Coho",
+  jackCoho: "Jack Coho",
+};
+
+function passageInsightText() {
+  const today = runData[dayIndex];
+  const keys = [...SIMULATED_COUNT_KEYS, ...REPORTED_COUNT_KEYS];
+  const counted = keys.filter((key) => (today[key] ?? 0) > 0);
+  let text =
+    "Every adult fish that reaches Lower Granite climbs the dam's fish " +
+    "ladder and is tallied crossing an underwater viewing window — the " +
+    "same style of count the Corps of Engineers has run at Columbia and " +
+    "Snake River dams for decades.";
+  if (counted.length > 0) {
+    const top = counted.reduce((a, b) =>
+      (today[b] ?? 0) > (today[a] ?? 0) ? b : a,
+    );
+    text +=
+      ` Today's count spans ${counted.length} of the eight species DART ` +
+      `tracks here, led by ${INSIGHT_SPECIES_LABELS[top]}.`;
+  }
+  return text;
+}
+
+function conditionsInsightText() {
+  const temp = runData[dayIndex].tempC;
+  let text =
+    "Spilling water over the dam, instead of running it through the " +
+    "turbines, puts oxygen back into the river — but it also whips extra " +
+    "nitrogen into the water, a supersaturated dissolved-gas load that can " +
+    "hurt fish swimming through it. Adult salmon and steelhead also start " +
+    "feeling heat stress somewhere around 20°C (68°F), so water " +
+    "temperature here doubles as a comfort report for the run outside.";
+  if (typeof temp === "number") {
+    text +=
+      temp >= 20
+        ? ` Today's reading is ${temp.toFixed(1)}°C — into that stressful range.`
+        : ` Today's reading is ${temp.toFixed(1)}°C.`;
+  }
+  return text;
+}
+
+function runStatusInsightText() {
+  if (!meanToDate || meanToDate.length !== runData.length) {
+    return (
+      '"Run to date" adds up every fish counted so far this season and ' +
+      "checks it against the same running total averaged over 2006–2015 " +
+      "— that ten-year comparison is still loading."
+    );
+  }
+  const average = meanToDate[dayIndex];
+  const total = seasonToDate[dayIndex];
+  let text = `Through ${runData[dayIndex].date}, ${Math.round(total).toLocaleString()} fish have passed this season.`;
+  if (average > 0) {
+    const delta = ((total - average) / average) * 100;
+    text += ` That's ${Math.abs(delta).toFixed(0)}% ${delta >= 0 ? "above" : "below"} the 2006–2015 average for this same date — `;
+    text +=
+      delta >= 0
+        ? "neither figure says much about the rest of the season on its own."
+        : "not a red flag by itself; runs swing year to year with ocean conditions, snowpack, and hatchery release timing.";
+  }
+  return text;
+}
+
+function seasonChartInsightText() {
+  return (
+    "The passage curve is drawn on a square-root scale, not a straight " +
+    "linear one. Plotted straight, a single 7,000-fish day in September " +
+    "would flatten the rest of the season into a flat line along the " +
+    "bottom — the root keeps that peak in view while still showing the " +
+    "smaller shoulders of the run in spring and fall."
+  );
+}
+
+function initInsights() {
+  initInsightToast();
+
+  // Cache keys thread the season and the exact day shown through, so
+  // yesterday's answer for "today's conditions" is never handed back for
+  // today — see .claude/context/insights.md.
+  const passageLabel = document.querySelector("#passage .field-head .label");
+  if (passageLabel) {
+    passageLabel.appendChild(
+      createInfoButton(
+        () => `passage:${runYear}:${runData[dayIndex].date}`,
+        passageInsightText,
+        "daily adult passage",
+      ),
+    );
+  }
+
+  const conditionsLabel = document.querySelector(
+    "#conditions .field-head .label",
+  );
+  if (conditionsLabel) {
+    conditionsLabel.appendChild(
+      createInfoButton(
+        () => `conditions:${runYear}:${runData[dayIndex].date}`,
+        conditionsInsightText,
+        "conditions",
+      ),
+    );
+  }
+
+  const runStatusLabel = document.querySelector(
+    "#run-status .field-head .label",
+  );
+  if (runStatusLabel) {
+    runStatusLabel.appendChild(
+      createInfoButton(
+        () => `run-status:${runYear}:${runData[dayIndex].date}`,
+        runStatusInsightText,
+        "run to date",
+      ),
+    );
+  }
+
+  const chartCaption = document.querySelector("#season-chart figcaption");
+  if (chartCaption) {
+    chartCaption.appendChild(
+      createInfoButton("season-chart", seasonChartInsightText, "the season chart"),
+    );
+  }
+}
+
 // Boot. Ordered so every `let` above is initialized before anything reads
 // it: build the world, seed the timeline, start the loop, let the fish
 // models load in the background.
+initInsights();
 initPlates();
 createWorld();
 // Same function the year control calls, so boot and a switch can't drift.
