@@ -368,7 +368,18 @@ busy) — the 3D scene itself is handled separately, booted paused in
 `main.js`, since no CSS rule can stop a WebGL render loop.
 
 **Corner nav link (`#fish-viewer-link`/`#back-link`).** Byte-for-byte the
-same treatment on both pages, one shared rule.
+same treatment on both pages, one shared rule. Below each drawer's own
+`min(Npx, 100vw)` width — `#plates` at 400px, `#inspect-panel` at 320px, see
+the drawer section below — the open drawer becomes a full-viewport overlay
+and visually (and per its own `z-index: 1`, functionally) covers this link's
+fixed top-left slot. A `:has()` rule keyed off the same `.open` class
+`drawer.js` already toggles hides the link below that width whenever its
+page's own drawer is open — `#app:has(#plates.open) #fish-viewer-link` /
+`#app:has(#inspect-panel.open) #back-link`, each gated behind its drawer's
+own breakpoint so nothing hides at desktop widths where the two never
+overlap. `:has()` rather than a JS-set class: the existing state
+(`.open`) already says everything needed, so a second signal would just be
+one more thing to keep in sync.
 
 **Failure notice (`#notice`).** Top-center rather than in the report bar:
 it isn't a reading, and has to be legible in the one case where the report

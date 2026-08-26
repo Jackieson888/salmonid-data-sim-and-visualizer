@@ -1175,6 +1175,27 @@ body {
   border-color: var(--text-dim);
 }
 
+/* Below each drawer's own min(Npx, 100vw) width (#plates/#inspect-panel,
+   further down), the open drawer is a full-viewport overlay and visually
+   covers this link's fixed top-left corner slot — the drawer's z-index:1
+   already paints over it, so it's unclickable there too, just invisibly.
+   :has() lets this stay a pure CSS rule keyed off the same .open class
+   drawer.js already toggles, rather than adding a drawer-open signal
+   somewhere JS has to remember to also flip. Each link only shares a page
+   with its own drawer (#fish-viewer-link+#plates on the river, #back-link+
+   #inspect-panel on the fish viewer), so no cross-page interference. */
+@media (max-width: 400px) {
+  #app:has(#plates.open) #fish-viewer-link {
+    display: none;
+  }
+}
+
+@media (max-width: 320px) {
+  #app:has(#inspect-panel.open) #back-link {
+    display: none;
+  }
+}
+
 /* ---------------------------------------------------------------------
    Failure notice (see showNotice in main.js) — top-centre, not in the
    report bar, so it's legible even if the bar itself never populated.

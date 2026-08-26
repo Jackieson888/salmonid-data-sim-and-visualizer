@@ -77,9 +77,28 @@ canvas, so anything tucked below that is spent behind it and never seen.
 
 `VIGNETTE_START = 0.2`, `VIGNETTE_END = 0.78`: where the radial falloff
 starts and reaches full strength, as a distance in uv space from the center
-of frame (the corners are at 0.707). Wide enough that the sides get some of
-it — with a later start the whole effect collapses into four corners, two
-of which the panel hides.
+of frame (the corners are at 0.707, in a square uv space). Wide enough that
+the sides get some of it — with a later start the whole effect collapses
+into four corners, two of which the panel hides.
+
+That uv-space distance is computed in a space that's always square (0-1 on
+both axes) regardless of the render target's actual pixel aspect. On a
+portrait phone the physical width is much smaller than the height, so the
+same uv distance that reaches the left/right edges corresponds to far fewer
+real pixels than the distance that reaches top/bottom — the radial falloff
+hits full strength close to the sides much sooner than intended, reading as
+a fisheye-style pinch rather than the intended broad, even vignette.
+`uAspect` (`camera.aspect`, pushed in every `resize()`, clamped to `<= 1`)
+corrects this by stretching the x term of the centered uv coordinate back
+out before measuring distance — same landscape-untouched/portrait-only
+shape as `verticalFovForAspect` above (nothing changes at aspect >= 1, so
+the desktop/landscape tuning above is exactly as before). The clamp lives on
+the JS side (`Math.min(camera.aspect, 1)`), not in the shader, mirroring
+`verticalFovForAspect`'s own early return for aspect >= 1.
+`vignettePass` (module-level, reassigned inside `buildComposer()`) is what
+lets `resize()` reach the *current* pass's uniform even after
+`applyQuality()` disposes and rebuilds the whole composer — a captured
+reference from the pass's own construction, not a composer traversal.
 
 `GRAIN_AMOUNT = 0.03`: fine per-pixel grain, applied as a proportional
 wobble rather than an additive one so it stays even across the frame instead

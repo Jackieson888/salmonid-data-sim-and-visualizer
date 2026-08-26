@@ -65,12 +65,21 @@ function verticalFovForAspect(aspect) {
 // run as its own pass. Reads/writes `texel`, sampled by the line it replaces.
 const VIGNETTE_GLSL = /* glsl */ `
   {
-    // vUv.y is 0 at the bottom of frame, so radial ramps from full strength
-    // at the bottom to near-zero at the top.
+    // START/END are distances in uv space, which is square regardless of the
+    // render target's actual aspect — on a portrait phone that makes the
+    // radial falloff reach the (physically much closer) left/right edges far
+    // sooner than it reaches top/bottom, pinching the sides like a fisheye
+    // lens. uAspect (camera.aspect, clamped to <=1 so landscape is untouched
+    // — this only ever narrows, never widens) stretches the x term back out
+    // so the same uv distance corresponds to comparable physical distance
+    // on both axes. vUv.y is 0 at the bottom of frame, so radial ramps from
+    // full strength at the bottom to near-zero at the top.
+    vec2 centered = vUv - 0.5;
+    centered.x *= uAspect;
     float radial = smoothstep(
       ${glslFloat(VIGNETTE_START)},
       ${glslFloat(VIGNETTE_END)},
-      length(vUv - 0.5)
+      length(centered)
     );
     float strength = mix(uBottomStrength, uTopStrength, vUv.y);
     float bottom = uBottomEdge
@@ -110,6 +119,9 @@ class VignetteOutputPass extends OutputPass {
       uBottomStrength: { value: VIGNETTE_BOTTOM },
       uBottomEdge: { value: VIGNETTE_BOTTOM_EDGE },
       uGrain: { value: GRAIN_AMOUNT },
+      // Portrait-only correction for the radial falloff below — kept at 1
+      // (a no-op) until resize() pushes camera.aspect in.
+      uAspect: { value: 1 },
       // Bumped every frame (see render below) to decorrelate grain between frames.
       uFrame: { value: 0 },
     });
@@ -129,6 +141,7 @@ class VignetteOutputPass extends OutputPass {
        uniform float uBottomStrength;
        uniform float uBottomEdge;
        uniform float uGrain;
+       uniform float uAspect;
        uniform float uFrame;`,
     );
   }
@@ -293,6 +306,12 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     camera.lookAt(cameraTarget);
   }
 
+  // Kept alongside `composer` so resize() can push uAspect into whichever
+  // pass instance is currently live — applyQuality() below disposes and
+  // rebuilds the whole composer (a new VignetteOutputPass each time), so a
+  // stale reference here would silently stop tracking aspect changes.
+  let vignettePass;
+
   // Post-processing chain: RenderPass -> UnrealBloomPass (tiered full/half/off,
   // see context doc for the cost breakdown) -> OutputPass (tone-mapping/vignette).
   // A function, not inline, since a tier change has to rebuild it.
@@ -313,7 +332,8 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     }
 
     // Last, so the vignette dims the bloom glow too, not just the base image.
-    next.addPass(new VignetteOutputPass());
+    vignettePass = new VignetteOutputPass();
+    next.addPass(vignettePass);
     return next;
   }
 
@@ -332,6 +352,9 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     renderer.setSize(pixelBounds.width, pixelBounds.height);
     camera.aspect = pixelBounds.width / pixelBounds.height;
     camera.fov = verticalFovForAspect(camera.aspect);
+    // Clamped to 1 — same landscape-untouched/portrait-only shape as
+    // verticalFovForAspect above, just applied to the vignette instead of the FOV.
+    vignettePass.uniforms.uAspect.value = Math.min(camera.aspect, 1);
     camera.far = Math.max(worldBounds.width, worldBounds.height) * 5;
     applyFraming(worldBounds);
     camera.updateProjectionMatrix();
