@@ -168,7 +168,7 @@ function resolveInsight(key, getText) {
 export function createInfoButton(key, getText, title) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "info-btn";
+  btn.className = "btn info-btn";
   btn.textContent = "i";
   btn.setAttribute("aria-pressed", "false");
   btn.setAttribute(

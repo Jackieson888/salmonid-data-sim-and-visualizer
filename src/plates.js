@@ -264,7 +264,7 @@ function buildCompositionPlate(cursorSetters, todayUpdaters) {
 
   const toggle = el("button", {
     type: "button",
-    class: "plate-toggle",
+    class: "btn plate-toggle",
     text: "100%",
   });
   toggle.addEventListener("click", () => {

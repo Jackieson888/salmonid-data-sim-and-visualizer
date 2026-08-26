@@ -70,14 +70,32 @@ Token notes:
   scene. The water is green (`RIVER_TINT` in `season.js`), and a
   green-cast panel would read as part of the render instead of as chrome
   laid over it.
-- `--text-dimmer` — one step down from `--text-faint`, needed because the
-  "Also counted" label prefix in the footnote strip has to sit visibly
-  behind the figures next to it.
+- `--text-dimmer` — the dimmest step, used by `.footnote` (the provenance
+  line at the bottom of the report bar) and `.len-axis-row .len-figure`
+  (the fish viewer's length-scale tick numbers). Originally picked purely
+  by eye one step down from `--text-faint`; bumped from `#5c6870` to
+  `#78848c` (2026-08-26) once a contrast pass found the old value read
+  ~3.4:1 against `--ink` — under WCAG AA's 4.5:1 floor for text at the
+  10px size both consumers use. The new value holds ~5:1 while staying
+  visibly the quietest step in the hierarchy (its old "one step down from
+  `--text-faint`" framing — a reference to the pre-Phase-2 footnote, which
+  doubled as an "Also counted" species row before that moved into the
+  plates drawer's FIG. 2/3 — no longer describes what it's for, just how
+  dim it should read).
 - `--accent` ("Engineer red") — the one saturated color in the interface,
   reserved for the current reading, never decorative.
-- `--chinook`/`--jack-chinook`/`--steelhead`/`--shad` — per-species keys,
-  matched to `SPECIES_COLORS` in `scene/fishMesh.js` so the table key and
-  the fish in the water read as the same color.
+- `--chinook`/`--jack-chinook`/`--steelhead`/`--shad` — per-species keys.
+  **Not** matched to `SPECIES_COLORS` in `scene/fishMesh.js` — that used to
+  be the intent, but chinook/steelhead/shad/lamprey are all `NO_TINT`
+  there (each has its own authored GLB skin now, so there's no literal
+  tint color left to mirror; see `.claude/context/scene/fishMesh.md`,
+  "Species tint"). These four are picked purely so the table/plates/species
+  picker read as distinct UI colors from each other and from the neutral
+  `--text-*` grays. `--steelhead` was `#c3d3cc` (a pale gray-green close
+  enough to `--text-dim` that it read as muted UI text rather than a
+  species color) until a 2026-08-26 pass moved it to `#8ab4d1`, a lighter
+  "steel blue" — leaning into the fish's own name rather than staying
+  close to gray.
 - `--sockeye`/`--coho`/`--jack-coho`/`--lamprey` — counted at the dam but
   (mostly) not drawn in the water, in the same muted/desaturated register
   as the swum species but distinct from each other, so the composition
@@ -122,6 +140,67 @@ between days (see `updateFishCountDisplay` in `main.js`).
 `#report` and `#inspect-bar` share one rule (byte-for-byte the same
 treatment) rather than `inspect.css` repeating it — same reasoning as the
 `#fish-viewer-link`/`#back-link` rule.
+
+**`.btn`/`.btn-surface` (theme layer, top of `style.css`).** Every bordered,
+clickable control in the app — `#report-toggle`/`#inspect-bar-toggle`,
+`.transport-btn`/`.speed-btn`, `#play-pause`, `.plate-toggle`,
+`.drawer-close`, `#plates-toggle`/`#field-notes-toggle`,
+`#fish-viewer-link`/`#back-link`, `.info-btn`, and `inspect.css`'s
+`.toggle-btn`/`#reset-view` — used to hand-copy the same hairline-border/
+hover/focus-visible/pressed-state block per selector (ten-plus near-verbatim
+copies). They now carry `class="btn"` in the markup (plus `class="btn-
+surface"` for the ones that float directly over the canvas or an open drawer
+rather than sitting inside an already-`--ink` panel — `#report-toggle`,
+`#inspect-bar-toggle`, `.drawer-close`, `#plates-toggle`/`#field-notes-
+toggle`, `#fish-viewer-link`/`#back-link`), and each selector's own CSS rule
+keeps only what's genuinely unique to it: position, size, its own type
+treatment, and any rest-state color that differs from the shared default
+(`--text-dim`) — `#play-pause` stays `--text` (the row's one primary
+action), `.info-btn`/`.plate-toggle` stay `--text-faint` (quieter, secondary
+controls). The "current reading" pressed state (border flips to `--accent`)
+is `.btn[aria-pressed="true"]` by default; `.plate-toggle` toggles `.active`
+by class instead (`plates.js`), so `.btn.active` carries the identical rule
+too. Adding this to `.plate-toggle` gave it a hover/focus-visible state it
+was previously missing — a deliberate small fix that fell out of unifying
+it with every other button, not a scope change on its own. `#play-pause`
+keeps its own `:active` (filled `--accent` background) as a genuinely
+different "in use" signal from the bordered-only pressed state every other
+`.btn` uses, since it's the row's one primary action. A second shared rule
+right below `.btn` — `#year-listbox, #notice, #insight-toast, #debug-panel`
+— dedupes the plain `background: var(--ink); border: 1px solid var(--line)`
+these four carry outside the report-bar/drawer families (which already
+share their own combined rule, above); each keeps its own border override
+(`#notice`/`#insight-toast`'s accent left-rule, `#debug-panel`'s heavier
+top-rule) in its own selector. See each element's own note further down
+this doc for the layout/positioning rationale that still lives there
+unchanged — only the border/hover/focus/pressed mechanics moved.
+
+**Three more shared shapes, same theme layer, no markup changes needed**
+(every selector below already existed — this only merged their *shared*
+declarations into one combined rule and left each one's own genuinely
+different values, gap/padding/color/font-size, in place):
+- **The "label ⟷ value" row** — `display: flex; align-items: baseline;
+  justify-content: space-between;` — was independently declared on nine
+  selectors: `.field-head`, `#masthead .dam-row`/`.reach-row`,
+  `#conditions`/`#run-status`'s own rows, `#controls .readout`,
+  `#season-chart figcaption p`, `#plates-titleblock p`, `.fg-row`
+  (`inspect.css`), `.range-field label` (`inspect.css`). `.plate-fact` is
+  excluded on purpose — it wraps and isn't space-between, a genuinely
+  different shape, not an oversight.
+- **The 6×6 state/species mark** — `.toggle-mark`, `.species-key`
+  (`inspect.css`), `.plate-legend li i`, `#species-breakdown .key i` all
+  drew the same square at the same size; only `flex: none` +
+  `background: var(--text-faint)` turned out to also be shared between the
+  first two (`.toggle-mark` needed nothing of its own left over and was
+  deleted outright — its pressed-state override rule still targets the
+  class name, unaffected). The other two keep their own `background`
+  (`currentColor` / `var(--species-color)`, functionally different, never
+  merged) and `display: inline-block` (they're not flex items).
+- **The non-scaling SVG stroke** — `stroke-width: 1; vector-effect: non-
+  scaling-stroke;`, needed by every hairline drawn against a stretched
+  (`preserveAspectRatio: none`) viewBox — `.plate-cursor`, `.plate-line`,
+  `.plate-history-current`, `.spark-rule`/`.spark-peak` (`inspect.css`).
+  Each keeps its own `stroke`/`fill`/`stroke-linejoin`.
 
 ## The report bar (`#report` / `#hud`, `index.html`)
 
@@ -499,6 +578,33 @@ instead of text: down at rest ("tap to collapse, push this down"), rotated
 moved from `textContent` (there's no text node left) to a JS-written
 `aria-label` (`setReportCollapsed()`, `main.js`), toggled the same way the
 text used to be.
+
+**Fades at rest, and the collapsed bar itself is now the expand target
+(2026-08-26).** User feedback: sitting at full opacity, the tab's
+`--ink`-filled box read as a solid rectangle floating in open water right
+above the bar — intrusive for a control that's mostly just supposed to be
+*findable*, not constantly prominent. First pass was `opacity: 0.5` at
+rest, `1` on hover/focus/pressed (pressed = collapsed, on the theory that
+once collapsed this tab is the only way back so it should stay fully
+visible) — but the user flagged that this control matters most on mobile,
+where hover doesn't exist, so leaning on a hover-revealed "full opacity"
+state to make it findable doesn't actually help the viewers who need it
+most. The real fix was a different interaction, not a brighter idle state:
+**a collapsed `#report` is now one big "tap to expand" surface**
+(`reportEl`'s own `click` listener in `main.js`, added right after
+`reportToggle`'s), not just the ~40×22px tab. The listener bails via
+`e.target.closest("button, a, input")` so real controls that are still
+visible in the collapsed view — Pause, Peak/Loop, the year picker, an info
+button — keep their own click behavior; a click anywhere else on the
+collapsed bar expands it. `#inspect-bar` (`inspect.js`) gets the identical
+listener for the same reason. With that in place, the tab no longer needs
+to be the one way back, so it stays a secondary, **highly faded** affordance
+at all times — `opacity: 0.35` at rest, `1` only as interaction feedback
+(`:hover`, `:focus-visible`, `:active` — `:active` covers a touch tap,
+since `:hover` alone would never fire on mobile). `#inspect-bar-toggle`
+(`inspect.css`) gets the identical treatment. Plain opacity, no transform,
+so both are left unguarded under `prefers-reduced-motion` per this file's
+own motion-vocabulary rule (see "Token notes" above).
 
 **Season-switch dimming (`.field-loading`).** `setYear()` (`main.js`) adds
 this to `#passage`/`#conditions`/`#run-status`/`#controls` for the duration

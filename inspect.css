@@ -171,44 +171,36 @@
    flex column to center it in) rather than a flow sibling. bottom sits
    flush on --bar-h (no added gap, unlike the old +10px) so it touches the
    bar the same way #report-toggle's margin-bottom:0 does. */
+/* .btn/.btn-surface (style.css) supply border/color/hover/focus/pressed —
+   pressed here means collapsed, matching #inspect-bar.collapsed below.
+   Stays highly faded at rest, same treatment and reasoning as
+   #report-toggle (style.css) — the collapsed bar itself is the "tap to
+   expand" surface now (see the click listener on inspectBar in
+   inspect.js), so this tab is a secondary affordance and doesn't need a
+   pressed-state opacity boost; full opacity is just hover/focus/press
+   feedback. */
 #inspect-bar-toggle {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   bottom: var(--bar-h, 170px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-width: 40px;
   padding: 7px 16px 6px;
-  background: var(--ink);
-  border: 1px solid var(--line);
   border-bottom: none;
-  color: var(--text-dim);
-  cursor: pointer;
   pointer-events: auto;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), bottom var(--dur-med) var(--ease);
+  opacity: 0.35;
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), bottom var(--dur-med) var(--ease);
 }
 
-#inspect-bar-toggle:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-#inspect-bar-toggle:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* Pressed = collapsed, matching #inspect-bar.collapsed below. */
-#inspect-bar-toggle[aria-pressed="true"] {
-  color: var(--text);
-  border-color: var(--accent);
+#inspect-bar-toggle:hover,
+#inspect-bar-toggle:focus-visible,
+#inspect-bar-toggle:active {
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
   #inspect-bar-toggle {
-    transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+    transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
   }
 }
 
@@ -403,11 +395,9 @@
 }
 
 /* Square, not a dot — matching the report bar's species keys. */
+/* Size/flex/background shared with .toggle-mark (style.css theme layer) —
+   this row's own extra nudge is unique to it. */
 .species-key {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  background: var(--text-faint);
   transform: translateY(-1px);
 }
 
@@ -450,50 +440,25 @@
   gap: 4px;
 }
 
-/* Styled after .transport-btn/.speed-btn in style.css, not a native checkbox. */
+/* Styled after .transport-btn/.speed-btn in style.css, not a native
+   checkbox — .btn (style.css) supplies border/color/hover/focus/pressed;
+   this overrides the centering to a left-aligned full-width row. */
 .toggle-btn {
   display: flex;
-  align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
-  background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--line);
-  border-radius: 0;
   padding: 5px 10px;
-  font-family: var(--sans);
   font-size: var(--t-2);
   text-align: left;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-weight: 500;
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
-}
-
-.toggle-btn:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-.toggle-btn:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* Same square device as .species-key, neutral until pressed. */
-.toggle-mark {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  background: var(--text-faint);
-}
-
-.toggle-btn[aria-pressed="true"] {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
+/* Size/flex/background (style.css theme layer) — .toggle-mark needs
+   nothing of its own at rest, only its pressed-state override below. */
 .toggle-btn[aria-pressed="true"] .toggle-mark {
   background: var(--accent);
 }
@@ -506,31 +471,17 @@
   letter-spacing: 0.04em;
 }
 
+/* .btn (style.css) supplies border/color/hover/focus; this overrides the
+   centering to a full-width block. */
 #reset-view {
+  display: flex;
   width: 100%;
   margin-top: 10px;
-  background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--line);
-  border-radius: 0;
   padding: 5px 10px;
-  font-family: var(--sans);
   font-size: var(--t-2);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 500;
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
-}
-
-#reset-view:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-#reset-view:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------------
@@ -544,9 +495,6 @@
 }
 
 .range-field label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   font-size: var(--t-1);
   color: var(--text-faint);
   text-transform: uppercase;
@@ -775,17 +723,15 @@
   fill: var(--species-color);
 }
 
+/* stroke-width/vector-effect shared with the plates drawer's own SVG marks
+   (style.css theme layer). */
 .spark-rule {
   stroke: var(--line-soft);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
 }
 
 /* The one day the whole shape is about. */
 .spark-peak {
   stroke: var(--accent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
 }
 
 /* Positioned from seasonFraction (buildSparkAxis), not spaced evenly —
@@ -808,9 +754,6 @@
 }
 
 .fg-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 10px;
   padding: 2px 0;
   font-size: var(--t-2);

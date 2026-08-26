@@ -17,16 +17,31 @@
   --text: #eef1f2;
   --text-dim: #aab5ba;
   --text-faint: #7e8b91;
-  --text-dimmer: #5c6870;
+  /* Lightened from #5c6870 — that value read ~3.4:1 against --ink, under
+     the 4.5:1 small-text floor (WCAG AA) at the 10px size both its
+     consumers use. #78848c holds the same "dimmest step" hierarchy
+     (still visibly quieter than --text-faint) at ~5:1. */
+  --text-dimmer: #78848c;
 
   /* Engineer red — the one saturated, non-decorative accent color. */
   --accent: #e6484e;
 
-  /* Per-species keys, matching SPECIES_COLORS in scene/fishMesh.js. Bright
-     pastels tuned for contrast against the panel's near-black glass. */
+  /* Per-species keys — bright pastels tuned for contrast against the
+     panel's near-black glass, picked independently of SPECIES_COLORS in
+     scene/fishMesh.js: chinook/steelhead/shad/lamprey are all NO_TINT
+     there (each has its own authored GLB skin, so there's no literal tint
+     color to mirror), so these four just need to read as distinct UI
+     colors, not numerically match a render value. jackChinook is the one
+     exception (it borrows chinook's mesh and gets a real speciesTint()),
+     but that tint is a hue direction fed through a shader multiply, not a
+     value translatable to a flat swatch either. */
   --chinook: #ff7a7a;
   --jack-chinook: #ffb877;
-  --steelhead: #c3d3cc;
+  /* Steel-blue, not the old pale #c3d3cc — that read as a slightly tinted
+     version of the neutral --text-dim grays rather than a distinct species
+     color. Steelhead trout are named for their steely blue-silver sheen,
+     so this leans into that instead of drifting toward gray. */
+  --steelhead: #8ab4d1;
   --shad: #d29bf5;
 
   /* Season chart passage area — the water's own green, not a species color. */
@@ -128,7 +143,12 @@ body {
 #play-pause,
 #fish-loading p,
 #timeline-axis button,
-#season-chart figcaption {
+#season-chart figcaption,
+#plates-toggle,
+#field-notes-toggle,
+#fish-viewer-link,
+#back-link,
+.plate-num {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 500;
@@ -178,6 +198,130 @@ body {
 }
 
 /* ---------------------------------------------------------------------
+   Shared components — theme layer
+
+   Two reusable pieces that used to be hand-copied per selector (border,
+   hover, focus-visible, pressed state repeated near-verbatim across
+   #report-toggle, .transport-btn/.speed-btn, #play-pause, .plate-toggle,
+   .drawer-close, #plates-toggle/#field-notes-toggle, #fish-viewer-link/
+   #back-link, .info-btn, and inspect.css's .toggle-btn/#reset-view/
+   #inspect-bar-toggle — ten-plus copies of the same hairline-button
+   contract). Every one of those selectors now carries `.btn` (plus
+   `.btn-surface` where it floats directly over the canvas/drawer rather
+   than sitting inside an already-`--ink` panel) and keeps only what's
+   actually unique to it: position, size, its own type treatment, and any
+   rest-state color that isn't the default --text-dim (#play-pause stays
+   --text, .info-btn/.plate-toggle stay --text-faint — each still declares
+   that itself, ID/class specificity naturally wins over this shared
+   default). The "current reading" pressed state — border flips to
+   --accent — is `[aria-pressed="true"]` by default; a couple of
+   class-toggled controls (.plate-toggle) use `.active` instead, so both
+   are covered here. --------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text-dim);
+  font-family: var(--sans);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.btn-surface {
+  background: var(--ink);
+}
+
+.btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  color: var(--text-faint);
+  border-color: var(--line-soft);
+  cursor: default;
+}
+
+.btn[aria-pressed="true"],
+.btn.active {
+  color: var(--text);
+}
+
+/* Second shared surface: hairline-bordered --ink panels that aren't part
+   of the report-bar/drawer families above (each of those already shares
+   one rule across both pages — see "The bar" and "Plates drawer" below).
+   Each keeps its own unique border override (#notice/#insight-toast's
+   accent left-rule, #debug-panel's heavier top-rule). */
+#year-listbox,
+#notice,
+#insight-toast,
+#debug-panel {
+  background: var(--ink);
+  border: 1px solid var(--line);
+}
+
+/* Third shared shape: the "label ⟷ value" row — a field-head, a masthead
+   identity line, a conditions/run-status reading, a chart legend line, a
+   field-notes fact, a plates titleblock line, a turbidity label — nine
+   selectors across both files that were all independently declaring the
+   same three properties around their own actual content (gap, padding,
+   color, type size — genuinely different per row, kept on each selector
+   below rather than forced to one value). */
+.field-head,
+#masthead .dam-row,
+#masthead .reach-row,
+#conditions p:not(.field-head),
+#run-status p:not(.field-head),
+#controls .readout,
+#season-chart figcaption p,
+#plates-titleblock p,
+.fg-row,
+.range-field label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+/* Every small square "mark" in the app — a toggle's pressed dot, a species
+   key, a legend swatch, a table key square — is the same 6x6 box; only its
+   background and how it sits in its own layout differ per use, kept on
+   each selector below. */
+.toggle-mark,
+.species-key,
+.plate-legend li i,
+#species-breakdown .key i {
+  width: 6px;
+  height: 6px;
+}
+
+.toggle-mark,
+.species-key {
+  flex: none;
+  background: var(--text-faint);
+}
+
+/* Every hairline SVG stroke drawn against a stretched (preserveAspectRatio:
+   none) viewBox needs the same constant-width fix. */
+.plate-cursor,
+.plate-line,
+.plate-history-current,
+.spark-rule,
+.spark-peak {
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---------------------------------------------------------------------
    The bar
    --------------------------------------------------------------------- */
 
@@ -217,39 +361,37 @@ body {
    #report in DOM order is what lands it directly above the bar, since #hud
    packs its flex children from the end (justify-content: flex-end). See
    .claude/context/ui.md. */
+/* .btn/.btn-surface (theme layer, above) supply border/color/hover/focus/
+   pressed — pressed here means collapsed, matching #report.collapsed below.
+   Stays highly faded at rest, deliberately not boosted just because the
+   bar is collapsed: a collapsed #report is itself one big "tap to expand"
+   surface now (see the click listener on reportEl in main.js), so this tab
+   is a secondary, background affordance rather than the one way back — no
+   longer needs to fight for attention the way it did before that listener
+   existed. Full opacity is purely an interaction acknowledgment
+   (hover/focus/press), which is why it isn't hover-reliant: this control
+   matters most on mobile, where there's no hover at all, so :active covers
+   a touch tap instead. Not guarded under prefers-reduced-motion — opacity-
+   only, same as every other unguarded fade in this file (see the motion-
+   vocabulary note in .claude/context/ui.md). */
 #report-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   align-self: center;
   min-width: 40px;
   margin-bottom: 0;
   pointer-events: auto;
   padding: 7px 16px 6px;
-  background: var(--ink);
-  border: 1px solid var(--line);
   border-bottom: none;
-  color: var(--text-dim);
-  cursor: pointer;
+  opacity: 0.35;
   transition:
+    opacity var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease);
 }
 
-#report-toggle:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-#report-toggle:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* Pressed = collapsed, matching #report.collapsed below. */
-#report-toggle[aria-pressed="true"] {
-  color: var(--text);
-  border-color: var(--accent);
+#report-toggle:hover,
+#report-toggle:focus-visible,
+#report-toggle:active {
+  opacity: 1;
 }
 
 /* Shared chevron for #report-toggle/#inspect-bar-toggle (inspect.css) — down
@@ -488,11 +630,10 @@ body {
   opacity: 0.45;
 }
 
-/* Each field is headed once, so rows beneath don't repeat their unit. */
+/* Each field is headed once, so rows beneath don't repeat their unit.
+   Row shape (display/align-items/justify-content) is shared — see the
+   theme layer above. */
 .field-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 12px;
   margin-bottom: var(--s2);
   padding-bottom: var(--s2);
@@ -551,9 +692,6 @@ body {
    ("LWG") is not (it's set explicitly below, not inherited from this
    container, precisely so it doesn't pick up the label's weight). */
 #masthead .dam-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 10px;
   margin-top: var(--s2);
 }
@@ -578,9 +716,6 @@ body {
    .claude/context/ui.md, "Field 1") once the season control needed its own
    row rather than a word inside one. */
 #masthead .reach-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 10px;
   margin-top: var(--s2);
   font-size: var(--t-4);
@@ -680,8 +815,6 @@ body {
   padding: 2px 0;
   list-style: none;
   overflow-y: auto;
-  background: var(--ink);
-  border: 1px solid var(--line);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--t-2);
@@ -769,8 +902,6 @@ body {
 /* Square, not a dot — see rule 1 at the top of this file. */
 #species-breakdown .key i {
   display: inline-block;
-  width: 6px;
-  height: 6px;
   margin-right: 6px;
   background: currentColor;
   vertical-align: 1px;
@@ -820,9 +951,6 @@ body {
 
 #conditions p:not(.field-head),
 #run-status p:not(.field-head) {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 14px;
   padding: 1px 0; /* tighter than the old 2px — keeps 5 rows level with the species table */
 }
@@ -876,9 +1004,6 @@ body {
    .readout-compact duplicate for the collapsed-mobile view, which needs
    the date sharing a row with .dam-code instead. */
 #controls .readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 12px;
   font-size: var(--t-4);
   letter-spacing: 0.02em;
@@ -916,24 +1041,17 @@ body {
   color: var(--text-faint);
 }
 
-/* Narrower than #play-pause, without its min-width — these are secondary. */
+/* Narrower than #play-pause, without its min-width — these are secondary.
+   .btn supplies border/color/hover/focus/disabled/pressed (Loop's disabled
+   state and the current-pace pressed state both read from it). */
 .transport-btn,
 .speed-btn {
   flex: none;
-  background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--line);
-  border-radius: 0;
   padding: 4px 8px;
-  font-family: var(--sans);
   font-size: var(--t-4);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-weight: 400;
-  cursor: pointer;
-  transition:
-    color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease);
 }
 
 .speed-btn {
@@ -943,31 +1061,6 @@ body {
   padding: 4px 6px;
   min-width: 4ch;
   text-align: center;
-}
-
-.transport-btn:hover,
-.speed-btn:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-.transport-btn:focus-visible,
-.speed-btn:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* Loop is a placeholder — styled but inert until the feature is wired up. */
-.transport-btn:disabled {
-  color: var(--text-faint);
-  border-color: var(--line-soft);
-  cursor: default;
-}
-
-/* The current pace is a current reading — same accent use as the cursor. */
-.speed-btn[aria-pressed="true"] {
-  color: var(--text);
-  border-color: var(--accent);
 }
 
 /* Two label/value rows — series name + key on the left, that series' own
@@ -981,9 +1074,6 @@ body {
 }
 
 #season-chart figcaption p {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 12px;
   padding: 1px 0;
 }
@@ -1044,37 +1134,27 @@ body {
   stroke-linejoin: round;
 }
 
+/* .btn supplies border/cursor/focus-visible; color stays --text (not the
+   shared --text-dim default) since Pause is the one primary action in the
+   row, and :active's filled accent — not .btn's own bordered pressed
+   state — is this button's own "in use" signal. */
 #play-pause {
   flex: none;
   /* Pushed to the far end of #transport — Peak/Loop cluster on the left. */
   margin-left: auto;
-  background: transparent;
   color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 0;
   padding: 5px 10px;
   min-width: 62px;
-  font-family: var(--sans);
   font-size: var(--t-4);
   font-weight: 400;
-  cursor: pointer;
   transition:
     border-color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
 }
 
-#play-pause:hover {
-  border-color: var(--text-dim);
-}
-
 #play-pause:active {
   background: var(--accent);
   border-color: var(--accent);
-}
-
-#play-pause:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* Fully custom — a gauge (hairline track, red cursor bar) instead of the
@@ -1291,29 +1371,16 @@ body {
 /* ---------------------------------------------------------------------
    Corner nav link — shared between the river and fish-viewer pages
    --------------------------------------------------------------------- */
+/* .btn/.btn-surface (theme layer, top of file) + the shared uppercase
+   .label group supply the rest. */
 #fish-viewer-link,
 #back-link {
   position: absolute;
   top: 18px;
   left: 18px;
   padding: 6px 10px;
-  background: var(--ink);
-  border: 1px solid var(--line);
-  color: var(--text-dim);
   font-size: var(--t-3);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 500;
   text-decoration: none;
-  transition:
-    color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease);
-}
-
-#fish-viewer-link:hover,
-#back-link:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
 }
 
 /* Below each drawer's own min(Npx, 100vw) width (#plates/#inspect-panel,
@@ -1348,8 +1415,6 @@ body {
   left: 50%;
   max-width: min(46ch, calc(100vw - 36px));
   padding: 10px 14px;
-  background: var(--ink);
-  border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   color: var(--text);
   font-size: var(--t-4);
@@ -1392,47 +1457,30 @@ body {
    HUD, the plates drawer, and the fish viewer's bar/panel.
    --------------------------------------------------------------------- */
 
+/* .btn supplies border/hover/focus-visible; only the rest color (--text-
+   faint, quieter than .btn's default) and size/type are this button's own. */
 .info-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 14px;
   height: 14px;
   margin-left: 6px;
   padding: 0;
-  background: transparent;
-  border: 1px solid var(--line);
   color: var(--text-faint);
   /* Sans + italic, not the mono numeral font — a bold mono "i" at this size
      reads as a "1" (both are just a stem with a serif foot). Italic keeps
      it unambiguous as a letter and matches the conventional info-icon glyph. */
-  font-family: var(--sans);
   font-size: 11px;
   font-style: italic;
   font-weight: 700;
   line-height: 1;
-  cursor: pointer;
   vertical-align: middle;
-  transition:
-    color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease);
-}
-
-.info-btn:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-.info-btn:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* The one open insight — same "current reading" register the accent is
-   otherwise reserved for. */
+   otherwise reserved for. .btn[aria-pressed="true"] already sets
+   border-color; only the (quieter, --text-faint-at-rest) color needs its
+   own override to reach accent too. */
 .info-btn[aria-pressed="true"] {
   color: var(--accent);
-  border-color: var(--accent);
 }
 
 #insight-toast {
@@ -1447,8 +1495,6 @@ body {
      still fall back to the calc() margin the same as #notice does. */
   width: min(720px, calc(100vw - 48px));
   padding: 12px 34px 12px 14px;
-  background: var(--ink);
-  border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   color: var(--text);
   font-size: var(--t-3);
@@ -1523,8 +1569,6 @@ body {
   right: 18px;
   margin: 0;
   color: var(--text-dim);
-  background: var(--ink);
-  border: 1px solid var(--line);
   border-top: 2px solid var(--line);
   padding: 9px 12px;
   font-family: var(--mono);
@@ -1546,6 +1590,8 @@ body {
    though this is no longer the drawer's close control (that's .drawer-close
    now, a child of the panel with its own z-index:1) — it's what keeps this
    button paintable/clickable above #plates/#inspect-panel while closed. */
+/* .btn/.btn-surface (theme layer, top of file) + the shared uppercase
+   .label group supply border/color/hover/focus/type. */
 #plates-toggle,
 #field-notes-toggle {
   position: absolute;
@@ -1553,24 +1599,8 @@ body {
   right: 18px;
   z-index: 2;
   padding: 6px 10px;
-  background: var(--ink);
-  border: 1px solid var(--line);
-  color: var(--text-dim);
   font-size: var(--t-3);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 500;
-  cursor: pointer;
   pointer-events: auto;
-  transition:
-    color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease);
-}
-
-#plates-toggle:hover,
-#field-notes-toggle:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
 }
 
 /* aria-pressed=true means its drawer is open — hidden rather than styled
@@ -1637,34 +1667,15 @@ body {
    *other* corner's button with room to spare (52px). Off-screen (and out of
    the way) for free whenever its panel is closed, via the parent's own
    transform:translateX(100%) — no separate visibility rule needed. */
+/* .btn/.btn-surface (theme layer, top of file) supply the rest. */
 .drawer-close {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
   padding: 0;
-  background: var(--ink);
-  border: 1px solid var(--line);
-  color: var(--text-dim);
-  cursor: pointer;
-  transition:
-    color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease);
-}
-
-.drawer-close:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-.drawer-close:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .close-icon {
@@ -1773,9 +1784,6 @@ body {
 .plate-num {
   color: var(--text-faint);
   font-size: var(--t-1);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -1787,20 +1795,14 @@ body {
   color: var(--text);
 }
 
+/* .btn supplies border/cursor/hover/focus-visible/.active — the last of
+   those (not aria-pressed; plates.js toggles this one by class) is what
+   marks percent-mode "on". */
 .plate-toggle {
   margin-left: auto;
-  background: transparent;
   color: var(--text-faint);
-  border: 1px solid var(--line);
   padding: 2px 6px;
-  font-family: var(--sans);
   font-size: var(--t-1);
-  cursor: pointer;
-}
-
-.plate-toggle.active {
-  color: var(--text);
-  border-color: var(--accent);
 }
 
 .plate-svg {
@@ -1865,20 +1867,17 @@ body {
   margin-right: var(--s3);
 }
 
-/* vector-effect keeps stroke width constant despite each plate's stretched
-   viewBox (preserveAspectRatio: none throughout, same as #season-chart). */
+/* stroke-width/vector-effect (theme layer, top of file) keep stroke width
+   constant despite each plate's stretched viewBox (preserveAspectRatio:
+   none throughout, same as #season-chart). */
 .plate-cursor {
   stroke: var(--accent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
 }
 
 .plate-line {
   fill: none;
   stroke: var(--text-dim);
-  stroke-width: 1;
   stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
 }
 
 .plate-line-ghost {
@@ -1960,8 +1959,6 @@ body {
 /* 2015's own column in the run-history plate — the accent marks the current reading. */
 .plate-history-current {
   stroke: var(--accent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
 }
 
 .plate-history-year {
@@ -1991,8 +1988,6 @@ body {
 
 .plate-legend li i {
   display: inline-block;
-  width: 6px;
-  height: 6px;
   background: var(--species-color);
   align-self: center;
 }
@@ -2015,9 +2010,6 @@ body {
 }
 
 #plates-titleblock p {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: var(--s3);
   padding: 2px 0;
 }

@@ -59,6 +59,7 @@
            clipped by #report's own overflow-y:auto. -->
         <button
           id="report-toggle"
+          class="btn btn-surface"
           type="button"
           aria-pressed="false"
           aria-controls="report"
@@ -237,12 +238,12 @@
                  (margin-left: auto in style.css) — two groups, not one
                  evenly-spaced row of three. -->
               <div id="transport">
-                <button class="transport-btn" id="to-peak" type="button">
+                <button class="btn transport-btn" id="to-peak" type="button">
                   Peak
                 </button>
                 <!-- Placeholder — not wired up yet. See ui.md. -->
                 <button
-                  class="transport-btn"
+                  class="btn transport-btn"
                   id="loop-toggle"
                   type="button"
                   disabled
@@ -253,7 +254,7 @@
                 </button>
                 <!-- No aria-label — it would override the visible text (the
                    actual state). aria-pressed set from setPlaying(), main.js. -->
-                <button id="play-pause" aria-pressed="false">Pause</button>
+                <button id="play-pause" class="btn" aria-pressed="false">Pause</button>
               </div>
               <div id="timeline-block">
                 <!-- Daily passage as an area, water temp as a line — drawn at
@@ -336,12 +337,13 @@
       <pre id="debug-panel" hidden></pre>
 
       <!-- A single fish up close, running the swim clip in isolation — src/inspect.js -->
-      <a id="fish-viewer-link" href="/inspect.html">Fish viewer &rarr;</a>
+      <a id="fish-viewer-link" class="btn btn-surface" href="/inspect.html">Fish viewer &rarr;</a>
 
       <!-- The plates drawer — closed by default, built lazily on first open.
          See .claude/context/plates.md -->
       <button
         id="plates-toggle"
+        class="btn btn-surface"
         type="button"
         aria-pressed="false"
         aria-controls="plates"
@@ -355,7 +357,7 @@
            way to close. See .claude/context/drawer.md. -->
         <button
           type="button"
-          class="drawer-close"
+          class="btn btn-surface drawer-close"
           id="plates-close"
           aria-label="Close plates"
         >

@@ -24,12 +24,13 @@
          see .claude/context/scene/fishAnatomy.md. Sized to canvas in inspect.js. -->
     <svg id="anatomy-overlay" aria-hidden="true"></svg>
 
-    <a id="back-link" href="/">&larr; Back to river</a>
+    <a id="back-link" class="btn btn-surface" href="/">&larr; Back to river</a>
 
     <!-- Slides in like the river's own plates drawer (src/plates.js) — closed
          by default so the fish fills more of the screen. -->
     <button
       id="field-notes-toggle"
+      class="btn btn-surface"
       type="button"
       aria-pressed="false"
       aria-controls="inspect-panel"
@@ -45,7 +46,7 @@
            above stays a plain "Field Notes" open button, but hides itself
            (CSS, keyed off aria-pressed) while open — this is now the only
            way to close. See .claude/context/drawer.md. -->
-      <button type="button" class="drawer-close" id="field-notes-close" aria-label="Close field notes">
+      <button type="button" class="btn btn-surface drawer-close" id="field-notes-close" aria-label="Close field notes">
         <svg class="close-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M1 1l10 10M11 1L1 11" /></svg>
       </button>
       <!-- Pulled out of #field-guide (updateFieldGuide, src/inspect.js) so
@@ -78,14 +79,14 @@
                Real buttons, not checkboxes; aria-pressed carries state
                (setPressed/isPressed, src/inspect.js). -->
           <div class="toggles">
-            <button type="button" class="toggle-btn" id="playing-toggle" aria-pressed="true"><i class="toggle-mark"></i>Swimming</button>
-            <button type="button" class="toggle-btn" id="rotate-toggle" aria-pressed="false"><i class="toggle-mark"></i>Turntable</button>
-            <button type="button" class="toggle-btn" id="labels-toggle" aria-pressed="true"><i class="toggle-mark"></i>Anatomy labels</button>
+            <button type="button" class="btn toggle-btn" id="playing-toggle" aria-pressed="true"><i class="toggle-mark"></i>Swimming</button>
+            <button type="button" class="btn toggle-btn" id="rotate-toggle" aria-pressed="false"><i class="toggle-mark"></i>Turntable</button>
+            <button type="button" class="btn toggle-btn" id="labels-toggle" aria-pressed="true"><i class="toggle-mark"></i>Anatomy labels</button>
             <!-- Loops through five build stages, crossfading — see
                  applyConstruction/tickConstruction in src/inspect.js. -->
-            <button type="button" class="toggle-btn" id="construction-toggle" aria-pressed="false"><i class="toggle-mark"></i>Construction<b id="construction-stage"></b></button>
+            <button type="button" class="btn toggle-btn" id="construction-toggle" aria-pressed="false"><i class="toggle-mark"></i>Construction<b id="construction-stage"></b></button>
           </div>
-          <button id="reset-view" type="button">Reset view</button>
+          <button id="reset-view" class="btn" type="button">Reset view</button>
 
           <!-- Pushes this material's uFogDensity/uFogColor plus a drifting-
                silt field (buildInspectParticles, src/inspect.js); 0 = no change. -->
@@ -115,6 +116,7 @@
          clipped by the bar's own overflow-y:auto. -->
     <button
       id="inspect-bar-toggle"
+      class="btn btn-surface"
       type="button"
       aria-pressed="false"
       aria-controls="inspect-bar"

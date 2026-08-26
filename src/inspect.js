@@ -210,6 +210,13 @@ function setBarCollapsed(collapsed) {
 inspectBarToggle.addEventListener("click", () =>
   setBarCollapsed(!inspectBar.classList.contains("collapsed")),
 );
+// Same "tap the collapsed bar to expand" surface as the river page's
+// #report — see the matching listener in main.js for the full rationale.
+inspectBar.addEventListener("click", (e) => {
+  if (!inspectBar.classList.contains("collapsed")) return;
+  if (e.target.closest("button, a, input")) return;
+  setBarCollapsed(false);
+});
 setBarCollapsed(
   typeof matchMedia === "function" &&
     matchMedia("(max-width: 700px), (max-height: 560px)").matches,

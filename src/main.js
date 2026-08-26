@@ -120,6 +120,18 @@ function setReportCollapsed(collapsed) {
 reportToggle.addEventListener("click", () =>
   setReportCollapsed(!reportEl.classList.contains("collapsed")),
 );
+// A collapsed bar is one big "tap to expand" surface rather than making a
+// visitor find the small chevron tab precisely — the tab (a sibling, not a
+// descendant, of #report — see the markup comment in index.html) keeps
+// working independently either direction, but only needs to stay a subtle,
+// highly-faded affordance now that it's not the one way back. Anything
+// that's its own control inside the collapsed view (Pause, Peak/Loop, the
+// year picker, an info button) still gets its own click, not this one.
+reportEl.addEventListener("click", (e) => {
+  if (!reportEl.classList.contains("collapsed")) return;
+  if (e.target.closest("button, a, input")) return;
+  setReportCollapsed(false);
+});
 setReportCollapsed(
   typeof matchMedia === "function" &&
     matchMedia("(max-width: 640px), (max-height: 500px)").matches,
