@@ -69,9 +69,12 @@
             <!-- 1. Identity and the current reading. -->
             <header class="field" id="masthead">
               <p class="station">Adult Fish Passage</p>
-              <h1>LWG &middot; Lower Granite Lock &amp; Dam</h1>
+              <h1>
+                <span class="dam-code">LWG</span
+                ><span class="dam-name"> &middot; Lower Granite Lock &amp; Dam</span>
+              </h1>
               <p class="reach">
-                <span>Snake River &middot; Counting Season</span>
+                Snake River &middot; Counting Season
                 <!-- A custom listbox, not a native <select> — Chromium's own
                    select popup ignores color-scheme:dark on Windows and
                    rendered as a stock white listbox over this page's dark
@@ -110,7 +113,8 @@
                and .claude/context/main.md for the simulated/reported split). -->
             <div class="field" id="passage">
               <p class="field-head">
-                <span class="label">Daily adult passage</span>
+                <span class="label label-full">Daily adult passage</span>
+                <span class="label label-short">Count</span>
                 <b id="fish-count">0</b>
               </p>
               <table id="species-breakdown">

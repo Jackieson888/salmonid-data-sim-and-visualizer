@@ -239,6 +239,57 @@ chart/axis, footnote) is hidden. Used to hide `#masthead`'s station/h1/reach
 too, leaving only the readout row — widened to the full identity block since
 a collapsed HUD with no station/title read as anonymous.
 
+**Collapsed-on-mobile drops to just the three things a phone viewer needs
+while the sim runs** (inside the `640px`/`500px` narrow-viewport breakpoint
+below, scoped to `#report.collapsed` there — same class the manual toggle
+uses, just an additional rule set that only binds at that width/height).
+Where the desktop collapsed view keeps the full identity block +
+daily-total line + transport row stacked (above), a phone instead shows
+only `#date-label`, `#fish-count`, and `#play-pause` — plus the dam code as
+a free bonus, since it rides along on the date line at no extra height cost.
+Everything else this scope hides (the season/year picker, the day-ordinal,
+the Peak-seek button, the dam's full name) stays reachable by expanding the
+bar (the chevron tab) into the full mobile view, which is unaffected by any
+of this.
+
+- `.report-body` becomes a single flex row instead of the wrapped flex row
+  the desktop collapsed view uses. `#masthead` grows (`flex: 1 1 auto`) to
+  fill the leading space; `#passage` and `#controls` sit at the trailing
+  edge sized to their own content, so the date, the count, and Pause read
+  as one inline instrument line — `#fish-count` lives in `#passage`, a
+  different field (different DOM parent) than `#masthead`, so this is a
+  layout placement, not a markup move.
+- `#masthead` itself becomes a `flex-wrap: wrap` row for its own children.
+  `.station` and `.reach` (the year-select row) are hidden outright. `h1`
+  shrinks from the title-sized `"LWG · Lower Granite Lock & Dam"` lead down
+  to just the dam code — the split lives in markup (`h1` wraps `"LWG"` in
+  `.dam-code` and the rest in `.dam-name`), and this scope hides
+  `.dam-name` so only the code remains, sharing a row with `.readout`
+  (which drops `#day-ordinal`, keeping only `#date-label`). A
+  `.readout::before` supplies the `·` divider that used to just be the line
+  break between the dam name and the reach text below it.
+- `#passage`'s field-head uses the same full/short label pair as the
+  desktop collapsed view already needed elsewhere: `.label-full`
+  (`"Daily adult passage"`) hidden, `.label-short` (`"Count"`) shown, so
+  the label + `#fish-count` fit inline without widening the row.
+- `#timeline-block` (chart, slider, and axis together) is hidden outright
+  here — a phone viewer who wants to scrub dates has already expanded the
+  bar to reach it, so it isn't worth the row this compact view is built to
+  avoid. That leaves `#controls` down to `#transport` with `#to-peak`
+  hidden too, i.e. just the Pause button — which needs its own override
+  here, since `#controls`'s base rule (`flex: 1 1 auto; min-width: 240px`)
+  is sized for holding the whole transport-row-plus-timeline-stack it
+  normally does; without the override that 240px floor would force this row
+  to wrap or overflow at phone width.
+- `.report-body`'s `gap` (`--field-gap`, 22px — a between-fields gutter
+  sized for a desktop row) is replaced outright with a `column-gap` of a
+  few px plus a small `row-gap` as a wrap fallback, since 22px between
+  three items on one row would blow past this view's width budget.
+
+Measured at 393×852: the collapsed bar comes in around 53px, under the
+~80px target — cutting the timeline bought back more room than expected,
+since Pause no longer needs a row of its own either.
+
 **Collapse animates, not toggles.** Every element the collapsed state hides
 transitions out instead of snapping to `display:none`, via
 `transition-behavior: allow-discrete` + `@starting-style` (the modern way to

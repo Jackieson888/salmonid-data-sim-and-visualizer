@@ -53,7 +53,9 @@ const inspectPanel = document.getElementById("inspect-panel");
 const inspectBar = document.getElementById("inspect-bar");
 const fieldNotesToggle = document.getElementById("field-notes-toggle");
 const fieldNotesClose = document.getElementById("field-notes-close");
-const fieldNotesSpeciesNameEl = document.getElementById("field-notes-species-name");
+const fieldNotesSpeciesNameEl = document.getElementById(
+  "field-notes-species-name",
+);
 const inspectBarToggle = document.getElementById("inspect-bar-toggle");
 
 // The species on show, in the order the panel lists them — largest salmonid
@@ -61,7 +63,7 @@ const inspectBarToggle = document.getElementById("inspect-bar-toggle");
 // river's own tables key off the same five (see SPECIES_KEYS in main.js).
 const SPECIES = [
   "chinook",
-  "jackChinook",
+  // "jackChinook",
   "steelhead",
   "shad",
   "lamprey",
@@ -98,7 +100,9 @@ scene.background = new THREE.Color(BACKDROP_COLOR);
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 5000);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio));
+renderer.setPixelRatio(
+  Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio),
+);
 // Matches sceneSetup.js's grading so the model reads the same as in the river.
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
@@ -198,7 +202,10 @@ createDrawer({
 function setBarCollapsed(collapsed) {
   inspectBar.classList.toggle("collapsed", collapsed);
   inspectBarToggle.setAttribute("aria-pressed", String(collapsed));
-  inspectBarToggle.setAttribute("aria-label", collapsed ? "Expand panel" : "Collapse panel");
+  inspectBarToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Expand panel" : "Collapse panel",
+  );
 }
 inspectBarToggle.addEventListener("click", () =>
   setBarCollapsed(!inspectBar.classList.contains("collapsed")),
@@ -255,7 +262,8 @@ const COMMON_NAMES = {
 // rather than one flat list; a species missing a category simply omits it.
 const SPECIES_FIELD_NOTES = {
   chinook: {
-    intro: "The largest Pacific salmon, and the species this counting season is named for.",
+    intro:
+      "The largest Pacific salmon, and the species this counting season is named for.",
     facts: [
       {
         category: "identification",
@@ -289,7 +297,8 @@ const SPECIES_FIELD_NOTES = {
     source: "/chinook-salmon-field-notes.md",
   },
   jackChinook: {
-    intro: "A “jack” is a precocious male Chinook that returns to spawn a year early, at a much smaller size than a typical adult.",
+    intro:
+      "A “jack” is a precocious male Chinook that returns to spawn a year early, at a much smaller size than a typical adult.",
     facts: [
       {
         category: "life history",
@@ -303,7 +312,8 @@ const SPECIES_FIELD_NOTES = {
     source: "/chinook-salmon-field-notes.md",
   },
   steelhead: {
-    intro: "A sea-run form of rainbow trout. Unlike Pacific salmon, some steelhead survive spawning and return to the ocean to spawn again.",
+    intro:
+      "A sea-run form of rainbow trout. Unlike Pacific salmon, some steelhead survive spawning and return to the ocean to spawn again.",
     facts: [
       {
         category: "identification",
@@ -341,7 +351,8 @@ const SPECIES_FIELD_NOTES = {
     source: "/steelhead-trout-field-notes.md",
   },
   shad: {
-    intro: "Not native to the Columbia Basin — introduced from the Atlantic coast in the 1870s.",
+    intro:
+      "Not native to the Columbia Basin — introduced from the Atlantic coast in the 1870s.",
     facts: [
       {
         category: "identification",
@@ -375,7 +386,8 @@ const SPECIES_FIELD_NOTES = {
     source: "/american-shad-field-notes.md",
   },
   lamprey: {
-    intro: "A jawless fish, not a true fish in the bony-fish sense at all — closer kin to hagfish than to salmon. Parasitic on other fish at sea, then dies after its one spawning run, like Pacific salmon.",
+    intro:
+      "A jawless fish, not a true fish in the bony-fish sense at all — closer kin to hagfish than to salmon. Parasitic on other fish at sea, then dies after its one spawning run, like Pacific salmon.",
     facts: [
       {
         category: "identification",
@@ -425,8 +437,18 @@ const FIELD_NOTE_CATEGORIES = [
   ["conservation", "Conservation"],
 ];
 const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 // All eight DART-counted species (five modelled + three not) — denominator
@@ -508,7 +530,10 @@ function speciesExtraRows(species) {
     }
     // Omitted (not 0%) for seasons with no day/night split published (2006-2008).
     if (day + night > 0) {
-      rows.push(["Passed at night", `${((night / (day + night)) * 100).toFixed(0)}%`]);
+      rows.push([
+        "Passed at night",
+        `${((night / (day + night)) * 100).toFixed(0)}%`,
+      ]);
     }
   }
 
@@ -517,11 +542,15 @@ function speciesExtraRows(species) {
     const byRun = new Map();
     for (const day of runData) {
       if (!day.chinookRun) continue;
-      byRun.set(day.chinookRun, (byRun.get(day.chinookRun) ?? 0) + (day[species] ?? 0));
+      byRun.set(
+        day.chinookRun,
+        (byRun.get(day.chinookRun) ?? 0) + (day[species] ?? 0),
+      );
     }
     const total = [...byRun.values()].reduce((a, b) => a + b, 0);
     if (total > 0) {
-      const share = (name) => Math.round(((byRun.get(name) ?? 0) / total) * 100);
+      const share = (name) =>
+        Math.round(((byRun.get(name) ?? 0) / total) * 100);
       rows.push([
         "Sp / Su / Fa",
         `${share("Spring")} / ${share("Summer")} / ${share("Fall")}%`,
@@ -579,9 +608,12 @@ function buildSpeciesList() {
   // Roving focus: the group is one tab stop and the arrows move within it,
   // which is what a radiogroup is expected to do.
   speciesListEl.addEventListener("keydown", (e) => {
-    const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1
-      : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1
-      : 0;
+    const step =
+      e.key === "ArrowDown" || e.key === "ArrowRight"
+        ? 1
+        : e.key === "ArrowUp" || e.key === "ArrowLeft"
+          ? -1
+          : 0;
     if (step === 0) return;
     e.preventDefault();
     const i = SPECIES.indexOf(currentSpecies);
@@ -720,7 +752,9 @@ function buildSparkline(species, stats) {
   // Rule indices are handed back so axis labels below land at the same fractions.
   const rules = [];
   for (const target of SPARK_AXIS_MONTHS) {
-    const i = runData.findIndex((day) => Number(day.date.slice(5, 7)) === target);
+    const i = runData.findIndex(
+      (day) => Number(day.date.slice(5, 7)) === target,
+    );
     if (i === -1) continue;
     rules.push({ index: i, month: target });
     const rule = document.createElementNS(SVG_NS, "line");
@@ -733,7 +767,8 @@ function buildSparkline(species, stats) {
   }
 
   const d = [`M 0 ${SPARK_H}`];
-  for (let i = 0; i <= last; i++) d.push(`L ${x(i)} ${y(runData[i][species] ?? 0)}`);
+  for (let i = 0; i <= last; i++)
+    d.push(`L ${x(i)} ${y(runData[i][species] ?? 0)}`);
   d.push(`L ${SPARK_W} ${SPARK_H} Z`);
   const area = document.createElementNS(SVG_NS, "path");
   area.setAttribute("class", "spark-area");
@@ -792,16 +827,16 @@ function updateSeasonCard(species) {
       `season-card:${species}:${runYear}`,
       stats.middleWindow
         ? `"Middle 80%" is the window by which the 10th and 90th percentile ` +
-          `of this season's total had passed — a more honest answer to ` +
-          `"when does this run happen" than first-to-last sighting, since ` +
-          `one stray fish in an off month can otherwise stretch the whole ` +
-          `season. For ${COMMON_NAMES[species]} in ${runYear}, that's ` +
-          `${formatDate(stats.middleWindow[0])} to ${formatDate(stats.middleWindow[1])}.`
+            `of this season's total had passed — a more honest answer to ` +
+            `"when does this run happen" than first-to-last sighting, since ` +
+            `one stray fish in an off month can otherwise stretch the whole ` +
+            `season. For ${COMMON_NAMES[species]} in ${runYear}, that's ` +
+            `${formatDate(stats.middleWindow[0])} to ${formatDate(stats.middleWindow[1])}.`
         : `"Middle 80%" is the window by which the 10th and 90th percentile ` +
-          `of a season's total have passed — a more honest answer to ` +
-          `"when does this run happen" than first-to-last sighting, since ` +
-          `one stray fish in an off month can otherwise stretch the whole ` +
-          `season.`,
+            `of a season's total have passed — a more honest answer to ` +
+            `"when does this run happen" than first-to-last sighting, since ` +
+            `one stray fish in an off month can otherwise stretch the whole ` +
+            `season.`,
       "This season",
     ),
   );
@@ -813,7 +848,10 @@ function updateSeasonCard(species) {
   const rows = [
     ["Season total", stats.total.toLocaleString()],
     ["Share of run", `${(stats.share * 100).toFixed(1)}%`],
-    ["Peak day", `${stats.peakValue.toLocaleString()} · ${formatDate(stats.peakDate)}`],
+    [
+      "Peak day",
+      `${stats.peakValue.toLocaleString()} · ${formatDate(stats.peakDate)}`,
+    ],
     [
       "First / last",
       stats.firstDate
@@ -909,7 +947,8 @@ function setSpecies(species) {
     fishAssets = assetsByUrlRef.get(SPECIES_MODEL_URL[species]);
     anatomyParts = resolveAnatomy(species, assetsByUrlRef);
     // Rebuild construction assets only if Construction is actually active/exiting.
-    if (constructionActive || constructionExiting) ensureConstructionAssets(species);
+    if (constructionActive || constructionExiting)
+      ensureConstructionAssets(species);
   }
   // Re-push turbidity — its density scales by body length, which just changed.
   applyTurbidity();
@@ -1041,9 +1080,18 @@ function buildInspectParticles() {
     sizeSeeds[i] = Math.random();
     phases[i] = Math.random() * Math.PI * 2;
   }
-  geometry.setAttribute("aOrigin", new THREE.InstancedBufferAttribute(origins, 3));
-  geometry.setAttribute("aSizeSeed", new THREE.InstancedBufferAttribute(sizeSeeds, 1));
-  geometry.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phases, 1));
+  geometry.setAttribute(
+    "aOrigin",
+    new THREE.InstancedBufferAttribute(origins, 3),
+  );
+  geometry.setAttribute(
+    "aSizeSeed",
+    new THREE.InstancedBufferAttribute(sizeSeeds, 1),
+  );
+  geometry.setAttribute(
+    "aPhase",
+    new THREE.InstancedBufferAttribute(phases, 1),
+  );
   geometry.instanceCount = PARTICLE_COUNT;
 
   const material = new THREE.ShaderMaterial({
@@ -1097,7 +1145,8 @@ function applyTurbidity() {
 
   if (inspectParticles) {
     updateParticleVolume(referenceLength);
-    inspectParticles.material.uniforms.uOpacity.value = t * PARTICLE_MAX_OPACITY;
+    inspectParticles.material.uniforms.uOpacity.value =
+      t * PARTICLE_MAX_OPACITY;
     inspectParticles.material.uniforms.uFogDensity.value = density;
   }
 
@@ -1118,7 +1167,13 @@ turbiditySlider.addEventListener("input", applyTurbidity);
 // Wireframe → Polygons → Texture → Final) by crossfading three objects: the
 // armature, a dedicated wireframe mesh, and fishRenderer's own instanced mesh
 // (see applyConstructionWeights for how one weight set drives all three).
-const CONSTRUCTION_STAGE_NAMES = ["Skeleton", "Wireframe", "Polygons", "Texture", "Final"];
+const CONSTRUCTION_STAGE_NAMES = [
+  "Skeleton",
+  "Wireframe",
+  "Polygons",
+  "Texture",
+  "Final",
+];
 const CONSTRUCTION_STAGE_WEIGHTS = [
   { wArmature: 1, wWireframe: 0, wReal: 0, textureMix: 0, highlightsMix: 0 }, // Skeleton
   { wArmature: 0, wWireframe: 1, wReal: 0, textureMix: 0, highlightsMix: 0 }, // Wireframe
@@ -1145,7 +1200,8 @@ function lerpConstructionWeights(a, b, p) {
     wWireframe: a.wWireframe + (b.wWireframe - a.wWireframe) * eased,
     wReal: a.wReal + (b.wReal - a.wReal) * eased,
     textureMix: a.textureMix + (b.textureMix - a.textureMix) * eased,
-    highlightsMix: a.highlightsMix + (b.highlightsMix - a.highlightsMix) * eased,
+    highlightsMix:
+      a.highlightsMix + (b.highlightsMix - a.highlightsMix) * eased,
   };
 }
 
@@ -1320,11 +1376,19 @@ function updateConstructionPose() {
     let o = 0;
     for (const [i, j] of constructionArmatureEdges) {
       animatedBonePosition(
-        fishAssets, i, previewFish.swimCyclePos, previewFish.wobblePhase, armVecA,
+        fishAssets,
+        i,
+        previewFish.swimCyclePos,
+        previewFish.wobblePhase,
+        armVecA,
       );
       armVecA.applyMatrix4(armMatrix);
       animatedBonePosition(
-        fishAssets, j, previewFish.swimCyclePos, previewFish.wobblePhase, armVecB,
+        fishAssets,
+        j,
+        previewFish.swimCyclePos,
+        previewFish.wobblePhase,
+        armVecB,
       );
       armVecB.applyMatrix4(armMatrix);
       positionAttr.setXYZ(o++, armVecA.x, armVecA.y, armVecA.z);
@@ -1394,10 +1458,15 @@ function tickConstruction(dtMs) {
     const next = (stage + 1) % CONSTRUCTION_STAGE_WEIGHTS.length;
     const p = (withinSlot - CONSTRUCTION_HOLD_MS) / CONSTRUCTION_TRANSITION_MS;
     applyConstructionWeights(
-      lerpConstructionWeights(CONSTRUCTION_STAGE_WEIGHTS[stage], CONSTRUCTION_STAGE_WEIGHTS[next], p),
+      lerpConstructionWeights(
+        CONSTRUCTION_STAGE_WEIGHTS[stage],
+        CONSTRUCTION_STAGE_WEIGHTS[next],
+        p,
+      ),
     );
     // Name by whichever stage the fade is more than halfway toward.
-    constructionStageEl.textContent = CONSTRUCTION_STAGE_NAMES[p < 0.5 ? stage : next];
+    constructionStageEl.textContent =
+      CONSTRUCTION_STAGE_NAMES[p < 0.5 ? stage : next];
   }
   updateConstructionPose();
 }
@@ -1430,7 +1499,11 @@ function tickConstructionLifecycle(dtMs) {
   constructionExitElapsed += dtMs;
   const p = Math.min(1, constructionExitElapsed / CONSTRUCTION_EXIT_MS);
   applyConstructionWeights(
-    lerpConstructionWeights(constructionExitFrom, CONSTRUCTION_STAGE_WEIGHTS[4], p),
+    lerpConstructionWeights(
+      constructionExitFrom,
+      CONSTRUCTION_STAGE_WEIGHTS[4],
+      p,
+    ),
   );
   updateConstructionPose();
   constructionStageEl.textContent = "";
@@ -1477,8 +1550,12 @@ const labelState = new Map();
 
 // True while dragging the camera — damping is skipped, or it reads as unresponsive.
 let orbiting = false;
-controls.addEventListener("start", () => { orbiting = true; });
-controls.addEventListener("end", () => { orbiting = false; });
+controls.addEventListener("start", () => {
+  orbiting = true;
+});
+controls.addEventListener("end", () => {
+  orbiting = false;
+});
 
 function setAttrIfMoved(node, name, value) {
   // Sub-pixel writes are invisible and still dirty the SVG's layout, and
@@ -1645,8 +1722,12 @@ function renderAnatomyOverlay() {
 
   // Sorted on the smoothed height, so the running order of a column does not
   // reshuffle every time two features cross during a stroke.
-  const left = visible.filter((v) => v.onLeft).sort((a, b) => a.layoutY - b.layoutY);
-  const right = visible.filter((v) => !v.onLeft).sort((a, b) => a.layoutY - b.layoutY);
+  const left = visible
+    .filter((v) => v.onLeft)
+    .sort((a, b) => a.layoutY - b.layoutY);
+  const right = visible
+    .filter((v) => !v.onLeft)
+    .sort((a, b) => a.layoutY - b.layoutY);
 
   const bandTop = height * LABEL_BAND_TOP;
   // Never under the bar (same reasoning as rightX); floored so a very short
@@ -1722,7 +1803,10 @@ function renderAnatomyOverlay() {
     }
     if (state.text.firstChild !== state.title || state.label !== v.part.label) {
       state.label = v.part.label;
-      state.text.replaceChildren(state.title, document.createTextNode(v.part.label));
+      state.text.replaceChildren(
+        state.title,
+        document.createTextNode(v.part.label),
+      );
       state.title.textContent = v.part.note;
     }
   }
@@ -1761,7 +1845,8 @@ function loop(t) {
   const dt = lastFrameTime === null ? 0 : t - lastFrameTime;
   lastFrameTime = t;
   simTime += dt;
-  if (inspectParticles) inspectParticles.material.uniforms.uTime.value = simTime * 0.001;
+  if (inspectParticles)
+    inspectParticles.material.uniforms.uTime.value = simTime * 0.001;
 
   controls.update();
 

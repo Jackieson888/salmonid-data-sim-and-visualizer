@@ -5,7 +5,7 @@
   --bg: #061a2e;
 
   /* Panel ink — neutral slate, not a tint of the (green) water. */
-  --ink: rgba(10, 15, 18, 0.88);
+  --ink: rgba(10, 15, 18, 0.65);
   --line: #2c3841;
   --line-soft: #1b242a;
 
@@ -33,7 +33,8 @@
   --lamprey: #746b5c;
 
   --sans: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --mono:
+    ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
 
   /* Type scale — every HUD font-size maps to one of these six steps. */
   --t-1: 0.625rem; /* 10px — micro: axis ticks, chart legend, footnote */
@@ -137,14 +138,30 @@ body {
    mapping by hand in 3+ separate places — the exact kind of drift ui.md
    flags as having broken this table's key colors once already, back when
    they were positional instead of data-driven. */
-[data-species="chinook"] { --species-color: var(--chinook); }
-[data-species="jackChinook"] { --species-color: var(--jack-chinook); }
-[data-species="steelhead"] { --species-color: var(--steelhead); }
-[data-species="shad"] { --species-color: var(--shad); }
-[data-species="sockeye"] { --species-color: var(--sockeye); }
-[data-species="coho"] { --species-color: var(--coho); }
-[data-species="jackCoho"] { --species-color: var(--jack-coho); }
-[data-species="lamprey"] { --species-color: var(--lamprey); }
+[data-species="chinook"] {
+  --species-color: var(--chinook);
+}
+[data-species="jackChinook"] {
+  --species-color: var(--jack-chinook);
+}
+[data-species="steelhead"] {
+  --species-color: var(--steelhead);
+}
+[data-species="shad"] {
+  --species-color: var(--shad);
+}
+[data-species="sockeye"] {
+  --species-color: var(--sockeye);
+}
+[data-species="coho"] {
+  --species-color: var(--coho);
+}
+[data-species="jackCoho"] {
+  --species-color: var(--jack-coho);
+}
+[data-species="lamprey"] {
+  --species-color: var(--lamprey);
+}
 
 /* ---------------------------------------------------------------------
    The bar
@@ -200,7 +217,9 @@ body {
   border-bottom: none;
   color: var(--text-dim);
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 #report-toggle:hover {
@@ -285,20 +304,32 @@ body {
 #timeline-axis {
   overflow: hidden;
   opacity: 1;
-  transition: max-height var(--dur-med) var(--ease), opacity var(--dur-med) var(--ease);
+  transition:
+    max-height var(--dur-med) var(--ease),
+    opacity var(--dur-med) var(--ease);
   transition-behavior: allow-discrete;
 }
 
-.report-foot { max-height: 88px; } /* up to 2 wrapped lines of footnote + source, generously */
-#species-breakdown { max-height: 96px; } /* 4 rows at ~21px each, plus slack */
-#season-chart { max-height: 90px; } /* svg's own fixed 32px + figcaption, which can wrap to 2-3 lines narrow */
-#timeline-axis { max-height: 13px; } /* exact — #timeline-axis's own height below is this same value */
+.report-foot {
+  max-height: 88px;
+} /* up to 2 wrapped lines of footnote + source, generously */
+#species-breakdown {
+  max-height: 96px;
+} /* 4 rows at ~21px each, plus slack */
+#season-chart {
+  max-height: 90px;
+} /* svg's own fixed 32px + figcaption, which can wrap to 2-3 lines narrow */
+#timeline-axis {
+  max-height: 13px;
+} /* exact — #timeline-axis's own height below is this same value */
 
 #conditions,
 #run-status {
   opacity: 1;
   transform: scale(1);
-  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+  transition:
+    opacity var(--dur-med) var(--ease),
+    transform var(--dur-med) var(--ease);
   transition-behavior: allow-discrete;
 }
 
@@ -338,7 +369,10 @@ body {
    #species-breakdown in sync with that table's own collapse, rather than
    snapping the instant the table's display flips. */
 #passage .field-head {
-  transition: margin-bottom var(--dur-med) var(--ease), padding-bottom var(--dur-med) var(--ease), border-color var(--dur-med) var(--ease);
+  transition:
+    margin-bottom var(--dur-med) var(--ease),
+    padding-bottom var(--dur-med) var(--ease),
+    border-color var(--dur-med) var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -414,7 +448,10 @@ body {
    opacity, those two move the divider hairline in space, so the guard below
    trims the rule back to opacity-only under reduced motion. */
 .field {
-  transition: opacity var(--dur-med) var(--ease), padding-left var(--dur-med) var(--ease), border-left-color var(--dur-med) var(--ease);
+  transition:
+    opacity var(--dur-med) var(--ease),
+    padding-left var(--dur-med) var(--ease),
+    border-left-color var(--dur-med) var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -442,6 +479,13 @@ body {
   font-size: var(--t-2);
   color: var(--text-faint);
   white-space: nowrap;
+}
+
+/* The mobile-collapsed alternate to "Daily adult passage" — hidden here,
+   shown only in that one narrow/short-viewport scope (below) where the full
+   label doesn't fit next to the day's count on a shared row. */
+.field-head .label-short {
+  display: none;
 }
 
 .field-head b {
@@ -778,7 +822,9 @@ body {
   letter-spacing: 0.12em;
   font-weight: 500;
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 .speed-btn {
@@ -875,7 +921,9 @@ body {
   font-family: var(--sans);
   font-size: var(--t-2);
   cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
 #play-pause:hover {
@@ -1116,7 +1164,9 @@ body {
   letter-spacing: 0.14em;
   font-weight: 500;
   text-decoration: none;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 #fish-viewer-link:hover,
@@ -1148,7 +1198,9 @@ body {
      in main.js. */
   transform: translate(-50%, -4px);
   opacity: 0;
-  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+  transition:
+    opacity var(--dur-med) var(--ease),
+    transform var(--dur-med) var(--ease);
 }
 
 #notice.shown {
@@ -1199,7 +1251,9 @@ body {
   line-height: 1;
   cursor: pointer;
   vertical-align: middle;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 .info-btn:hover {
@@ -1240,7 +1294,9 @@ body {
   transform: translate(-50%, -4px);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+  transition:
+    opacity var(--dur-med) var(--ease),
+    transform var(--dur-med) var(--ease);
 }
 
 .insight-toast-title {
@@ -1344,7 +1400,9 @@ body {
   font-weight: 500;
   cursor: pointer;
   pointer-events: auto;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 #plates-toggle:hover,
@@ -1432,7 +1490,9 @@ body {
   border: 1px solid var(--line);
   color: var(--text-dim);
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 .drawer-close:hover {
@@ -1525,7 +1585,9 @@ body {
 #plates-scroll > * {
   opacity: 1;
   transform: translateY(0);
-  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+  transition:
+    opacity var(--dur-med) var(--ease),
+    transform var(--dur-med) var(--ease);
 }
 
 #plates-scroll > *.plate-enter {
@@ -1835,8 +1897,6 @@ body {
     flex: 1 0 100%;
     border-left: none;
     padding-left: 0;
-    padding-top: 9px;
-    border-top: 1px solid var(--line-soft);
   }
 }
 
@@ -1907,6 +1967,100 @@ body {
   #speed {
     margin-left: 0;
   }
+
+  /* Collapsed-on-mobile goes past the desktop collapsed bar (identity in
+     full + daily total + transport, see ui.md) down to just the three
+     things a mobile viewer actually needs while the sim is running: the
+     current date, the day's passage count, and a way to pause it — no
+     timeline here, since a viewer wanting to scrub dates has already
+     expanded the bar to reach the slider. The dam code rides along as a
+     compact prefix on the date line since it costs no extra row, but the
+     season/year picker, the day-ordinal, and the Peak-seek button are cut
+     here. Scoped to #report.collapsed so the manual toggle at wider
+     viewports still gets the fuller collapsed view ui.md documents; this is
+     the small/short-viewport case specifically. Everything hidden below
+     stays in the DOM — expanding the bar (the chevron tab) reaches it
+     again.
+     .report-body becomes a single flex row: #masthead grows to fill the
+     leading space (`flex: 1 1 auto`) while #passage and #controls sit at
+     the trailing edge sized to their own content. #controls needs its own
+     override here — its base rule (`flex: 1 1 auto; min-width: 240px`) is
+     sized for holding the whole transport-row-plus-timeline-stack it
+     normally does, and with the timeline cut and #transport's own Peak
+     button hidden too, #controls is down to a single Pause button; without
+     the override that 240px floor would force this row to wrap or overflow
+     at phone width. */
+  #report.collapsed .report-body {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: var(--s3);
+    row-gap: 6px;
+  }
+
+  #report.collapsed #masthead {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 6px;
+  }
+
+  #report.collapsed #controls {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  #report.collapsed #masthead .station,
+  #report.collapsed #masthead .reach,
+  #report.collapsed #day-ordinal,
+  #report.collapsed #passage .field-head .label-full,
+  #report.collapsed #to-peak,
+  #report.collapsed #timeline-block {
+    display: none;
+  }
+
+  #report.collapsed #passage .field-head .label-short {
+    display: inline;
+  }
+
+  /* h1 shrinks from the title-sized "LWG · Lower Granite Lock & Dam" lead to
+     a plain inline prefix sharing a line with the date reading instead of
+     leading its own — the full dam name stays hidden along with .reach
+     (the dam-name span above), since it's the code, not the name, that
+     fits a shared row at real phone widths. */
+  #report.collapsed #masthead h1 {
+    margin: 0;
+    font-size: var(--t-2);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+
+  #report.collapsed #masthead .dam-name {
+    display: none;
+  }
+
+  #report.collapsed #masthead .readout {
+    margin: 0;
+    padding: 0;
+    border-top: none;
+  }
+
+  /* .readout used to follow .reach on its own line, so nothing separated
+     it from the dam code visually beyond the line break; sharing a row
+     with h1 now needs an explicit divider in its place. */
+  #report.collapsed #masthead .readout::before {
+    content: "\00b7";
+    color: var(--text-faint);
+  }
+
+  /* .report-body's --field-gap (22px) is a between-fields gutter sized for
+     a desktop row; this scope replaces it outright with column-gap: --s3 (a
+     few px) plus a small row-gap as a wrap fallback, since 22px between
+     three items on one row would blow past this view's whole height/width
+     budget. */
 }
 
 /* Touch-target growth. (pointer: coarse), not a width breakpoint — a touch
