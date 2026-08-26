@@ -1251,7 +1251,9 @@ function chooseYear(year) {
   setYear(year);
 }
 
-yearSelect.addEventListener("click", () => setYearListboxOpen(!yearListboxOpen));
+yearSelect.addEventListener("click", () =>
+  setYearListboxOpen(!yearListboxOpen),
+);
 
 // ArrowDown/Up from the (closed) trigger opens straight into the list,
 // landing on the loaded season — standard select-replacement behavior, and
@@ -1769,7 +1771,9 @@ function initInsights() {
   initInsightToast();
 
   // Static — nothing here changes day to day, unlike the other three.
-  const panelTitleLabel = document.querySelector("#masthead .panel-title .label");
+  const panelTitleLabel = document.querySelector(
+    "#masthead .panel-title .label",
+  );
   if (panelTitleLabel) {
     panelTitleLabel.appendChild(
       createInfoButton(
@@ -1817,16 +1821,6 @@ function initInsights() {
         runStatusInsightText,
         "Run to date",
       ),
-    );
-  }
-
-  // Moved from #season-chart's own figcaption to #controls's field-head —
-  // matches the other three fields' own label+info-button convention now
-  // that this field has one too. See ui.md.
-  const chartLabel = document.querySelector("#controls .field-head .label");
-  if (chartLabel) {
-    chartLabel.appendChild(
-      createInfoButton("season-chart", seasonChartInsightText, "Season chart"),
     );
   }
 }
