@@ -76,7 +76,7 @@ Token notes:
   stagger, `#notice`'s entrance) gets an explicit `transition: none`
   override, matching `#plates`'s own pre-existing guard.
 
-Shared cross-cutting rules: the `.label`/`.station`/`.reach`/... selector
+Shared cross-cutting rules: the `.label`/`.reach-row`/`.source`/... selector
 group is every piece of non-numeric HUD text, and is most of what makes the
 whole thing read as one document rather than a set of widgets. The
 tabular-numeral group (`#fish-loading p`, `.readout`, etc.) is every number
@@ -89,17 +89,67 @@ treatment) rather than `inspect.css` repeating it — same reasoning as the
 
 ## The report bar (`#report` / `#hud`, `index.html`)
 
-**Field 1 — identity.** `#masthead` was `max-width: 30ch`, which fit the
-reach line exactly until the season became a control at the end of it — at
-30ch, "2015" wrapped alone onto a second line as an orphan under "Counting
-Season"; widened to 34ch. `#masthead .reach` is deliberately **not** a flex
-row: the reach text wraps to two lines in this field, and as a flex
-container the year control becomes a sibling item of the whole wrapped
-block, so it sat baseline-aligned to the *first* line while the text's
-second line ran on underneath it. Left as normal inline flow, the control is
-just another word in the sentence and wraps with it — `display: inline-flex`
-on `#year-select` (below) still participates in that flow as one atomic
-inline box, the same as the `<select>` it replaced.
+**Field 1 — identity.** Rebuilt for the mobile portrait pass around a
+Figma mock (node `12:1109` in the file linked from the project's design
+references) as a stack of label/value rows, replacing the old
+station-line + `h1` + one-sentence-reach structure entirely. `#masthead`
+was `max-width: 30ch`, which fit the reach line exactly until the season
+became a control at the end of it — at 30ch, "2015" wrapped alone onto a
+second line as an orphan under "Counting Season"; widened to 34ch. That
+sizing predates this rebuild and still applies to the field as a whole.
+
+`.panel-title` — the page's own title ("Salmonid Data Simulation"), leading
+`#masthead`. Carries the left accent bar `.station` used to own ("the only
+mark standing in for an agency device — a rule, not a seal") — `.station`
+itself ("Adult Fish Passage") is gone; the mock has no equivalent line, and
+folding its accent mark into the title was the only piece of it worth
+keeping. Gets an info button the same way the other four fields do
+(`initInsights()`, `main.js`), appended into `.panel-title .label` rather
+than pushed to the row's far edge.
+
+`#masthead .dam-row` — "Lower Granite Lock & Dam" ⟷ "LWG" — replaced the old
+`h1` (which combined both into one title-sized line, dam-code first). Same
+bold weight `h1` carried, since it's still the most prominent identity line
+in the field, but now a label/value row like the two `.reach-row`s below it
+rather than a standalone heading.
+
+`#masthead .reach-row` (two of them: "Snake River" + the dam's real
+coordinates, "Counting Season" + the year control) replaced a single
+`#masthead .reach` paragraph that used to read as one wrapping sentence
+("Snake River · Counting Season 2015"). That older paragraph was
+deliberately **not** a flex row: the sentence wrapped to two lines in this
+field, and as a flex container the year control became a sibling item of
+the whole wrapped block, so it sat baseline-aligned to the *first* line
+while the text's second line ran on underneath it. Splitting the content
+into two separate label/value rows (mirroring `#conditions`/`#run-status`'s
+own `p:not(.field-head)` treatment) sidesteps the wrapping problem entirely
+instead of working around it — each row is short enough to never wrap, so
+there's no "sentence" left to break. `#year-select` (below) is now the
+trailing item of its own `.reach-row` rather than a word inline in a
+sentence; its dropdown icon moved to lead the "2015" text (matching the
+mock) rather than trail it — a pure markup reorder, no selector depends on
+child order. `.coords` is real: Lower Granite Dam's own coordinates
+(46°39'38"N 117°25'41"W), not a placeholder.
+
+**The date reading lives in field 5 now, not field 1.** The mock puts
+"2015-03-07 / Day 3 of 302 Tracked" right below the "Season Chart" heading,
+not in the masthead — a real relocation, not a restyle in place. That broke
+`#report.collapsed`'s mobile-compact view, which used to depend on this
+element living *inside* `#masthead` (sharing a row with `h1`'s dam code via
+`.readout::before`'s divider). The fix: `#masthead` keeps a second, normally
+-invisible element, `<p class="readout-compact"><span
+id="date-label-compact"></span></p>` (`display: none` at the base rule),
+fed by the same `setDateReadout()` call in `main.js` that writes the "real"
+`#date-label` in `#controls`. Inside the `640px` collapsed-mobile scope
+(below), `.readout-compact` is switched back to `display: flex` and shares
+a row with `.dam-code` (the full dam name, `.dam-row .label`, is hidden
+there) exactly the way `h1`'s divider trick worked before — same mechanism,
+sourced from a differently-placed but functionally identical element rather
+than moving the "real" one back and forth. Two DOM writes per day change
+instead of one; the alternative (leaving the real reading in `#masthead`
+and accepting the mock mismatch, which an earlier pass at this feature
+did) was rejected once the actual Figma layer tree confirmed the mock
+really did mean a relocation, not a wrapping quirk.
 
 `#year-select`/`#year-listbox` — a hand-built listbox, not a native
 `<select>`. `color-scheme: dark` was tried first (the platform popup's own
@@ -204,14 +254,45 @@ the accent appears — "below average" is styled neutral/dimmed rather than
 alarmed, since a below-average run is the ordinary state of affairs, not an
 error.
 
+`.cond-secondary` (on the dissolved-gas and Chinook-run rows only) drops
+those two at the mobile portrait breakpoint (below), trimming `#conditions`
+to the three rows — water, outflow, spill — the mobile mockup shows; every
+wider breakpoint keeps all five. The hiding rule is `#conditions
+p.cond-secondary`, not the bare class: the base row rule
+(`#conditions p:not(.field-head) { display: flex }`) already carries
+`(1 id, 1 class, 1 type)` specificity from its own `:not()` argument, so a
+bare-class override loses that fight regardless of source order; adding the
+element type to match ties it, and the later media-query position in the
+file then wins on cascade order.
+
 **Field 5 — the season chart and controls.** The only field that grows.
-Laid out as a **column** — transport row, then chart/slider/axis stack —
-not `[button | stack]`, because the stack's three parts must be the same
-width and start at the same x (the red cursor reads against the curve
-above it), and a control column beside them would indent one and not the
-others. Speed controls are pushed to the far end of the transport row via
-`margin-left: auto` so the row reads as two groups (state vs. pace) rather
-than one undivided strip of five buttons. `.speed-btn` is tabular so ½× and
+Laid out as a **column** — field-head, then the date reading, then the
+transport row, then chart/slider/axis stack — not `[button | stack]`,
+because the stack's three parts must be the same width and start at the
+same x (the red cursor reads against the curve above it), and a control
+column beside them would indent one and not the others.
+
+The field-head (`<p class="field-head"><span class="label">Season
+chart</span></p>`) is the same pattern `#passage`/`#conditions`/`#run-status`
+already use — added so this field has one too, and its info button moved
+here from `#season-chart figcaption` (`initInsights()`, `main.js`) to
+match: appended into the field-head label like the other three, rather than
+living in the small legend row where the button used to have no companion
+heading to sit next to. `#controls .readout` (date-label + day-ordinal)
+follows directly under it — moved here from `#masthead`; see "Field 1"
+above for why, and what `#masthead` keeps in its place for the
+collapsed-mobile view.
+
+`#transport` reads as two groups, not one evenly-spaced row of three:
+Peak and Loop cluster together on the left (plain `gap`), Pause is pushed
+to the far right via `margin-left: auto` on `#play-pause` itself.
+`#loop-toggle` is a styled, `disabled` placeholder — no loop-playback
+behavior is wired up yet; `.transport-btn:disabled` just dims it (faint
+text, `--line-soft` border) so it doesn't read as a live control.
+
+`.speed-btn`/`#speed` (referenced by some of the rules below) describe a
+pace-selector control that isn't in the current markup — leftover CSS from
+before it was removed; not touched by this pass. `.speed-btn` is tabular so ½× and
 8× occupy the same width and the group doesn't reflow as the selection
 moves. `#timeline` is fully custom (not the default pill-track/round-thumb
 control, the single most consumer-looking element a page can have) — it's
@@ -231,13 +312,29 @@ and month axis are both inset by half the slider cursor's width
 input's own box, and this is what puts a given date at the same x in all
 three elements.
 
+**`#season-chart figcaption`** is two label/value rows, not one wrapping
+caption string — "Daily passage" (icon+name) ⟷ "Peak {N} / day", "Water °C"
+(icon+name) ⟷ "√Scale {min}–{max} °C". Used to be a single
+`flex-wrap`'d row of three spans ending in `#chart-scale`, a combined
+string (`buildSeasonChart()`, `main.js`) reading "Peak 8,609 / day · √
+scale · 4.5–22.0 °C". Split into `#chart-peak-value`/`#chart-range-value`
+so each half can sit as the trailing value of its own row, matching the
+mock — the underlying numbers (`peak`, `minTemp`/`maxTemp`) were already
+computed in `buildSeasonChart()`, so this was a markup/wiring split, not a
+new calculation. `.chart-stat` wraps each row's label+value pair
+(`display: flex`, tabular `b`).
+
 **Collapsed report (`#report.collapsed`).** Shows identity (`#masthead` in
-full — station, `h1`, reach/year-select, readout) and just the daily-total
-line of field 2 (`#passage .field-head`, not `#species-breakdown`), plus the
-transport row. Everything else (species table, conditions, run-status,
-chart/axis, footnote) is hidden. Used to hide `#masthead`'s station/h1/reach
-too, leaving only the readout row — widened to the full identity block since
-a collapsed HUD with no station/title read as anonymous.
+full — panel-title, dam-row, reach-rows/year-select) and just the
+daily-total line of field 2 (`#passage .field-head`, not
+`#species-breakdown`), plus field 5's transport row (Peak, Loop, Pause —
+the Loop placeholder shows here too, disabled same as everywhere else).
+Field 5's field-head and date reading (`#controls .field-head`/`.readout`)
+are hidden here too, same reduction field 2 gets. Everything else (species
+table, conditions, run-status, chart/axis, footnote) is hidden.
+Used to hide `#masthead`'s station/h1/reach too, leaving only the readout
+row — widened to the full identity block since a collapsed HUD with no
+station/title read as anonymous.
 
 **Collapsed-on-mobile drops to just the three things a phone viewer needs
 while the sim runs** (inside the `640px`/`500px` narrow-viewport breakpoint
@@ -245,12 +342,15 @@ below, scoped to `#report.collapsed` there — same class the manual toggle
 uses, just an additional rule set that only binds at that width/height).
 Where the desktop collapsed view keeps the full identity block +
 daily-total line + transport row stacked (above), a phone instead shows
-only `#date-label`, `#fish-count`, and `#play-pause` — plus the dam code as
-a free bonus, since it rides along on the date line at no extra height cost.
-Everything else this scope hides (the season/year picker, the day-ordinal,
-the Peak-seek button, the dam's full name) stays reachable by expanding the
-bar (the chevron tab) into the full mobile view, which is unaffected by any
-of this.
+only `#date-label-compact`, `#fish-count`, and `#play-pause` — plus the dam
+code as a free bonus, since it rides along on the date line at no extra
+height cost.
+Everything else this scope hides (the panel title, the coordinates/season-
+year rows, the day-ordinal, the Peak-seek and Loop-placeholder buttons, the
+dam's full name) stays reachable by expanding the bar (the chevron tab) into
+the full mobile view, which is unaffected by any of this — including the
+new "Season chart" field-head added to field 5 (above), also hidden here
+rather than adding a fourth thing to this view's already-tight budget.
 
 - `.report-body` becomes a single flex row instead of the wrapped flex row
   the desktop collapsed view uses. `#masthead` grows (`flex: 1 1 auto`) to
@@ -260,14 +360,15 @@ of this.
   different field (different DOM parent) than `#masthead`, so this is a
   layout placement, not a markup move.
 - `#masthead` itself becomes a `flex-wrap: wrap` row for its own children.
-  `.station` and `.reach` (the year-select row) are hidden outright. `h1`
-  shrinks from the title-sized `"LWG · Lower Granite Lock & Dam"` lead down
-  to just the dam code — the split lives in markup (`h1` wraps `"LWG"` in
-  `.dam-code` and the rest in `.dam-name`), and this scope hides
-  `.dam-name` so only the code remains, sharing a row with `.readout`
-  (which drops `#day-ordinal`, keeping only `#date-label`). A
-  `.readout::before` supplies the `·` divider that used to just be the line
-  break between the dam name and the reach text below it.
+  `.panel-title` and both `.reach-row`s (coordinates, then the year-select
+  row) are hidden outright. `.dam-row .label` ("Lower Granite Lock & Dam")
+  is hidden too, leaving just `.dam-code` ("LWG") — `.dam-row` itself stays
+  in the DOM and in flow, but with only one child visible it shrinks to fit
+  that child, becoming a plain compact prefix rather than a label/value row.
+  `.readout-compact` (normally `display: none` — see "Field 1" above) is
+  switched back on here and shares a row with `.dam-code`, its `::before`
+  supplying the `·` divider that a line break provided when this content
+  lived in one wrapping sentence.
 - `#passage`'s field-head uses the same full/short label pair as the
   desktop collapsed view already needed elsewhere: `.label-full`
   (`"Daily adult passage"`) hidden, `.label-short` (`"Count"`) shown, so
@@ -275,12 +376,13 @@ of this.
 - `#timeline-block` (chart, slider, and axis together) is hidden outright
   here — a phone viewer who wants to scrub dates has already expanded the
   bar to reach it, so it isn't worth the row this compact view is built to
-  avoid. That leaves `#controls` down to `#transport` with `#to-peak`
-  hidden too, i.e. just the Pause button — which needs its own override
-  here, since `#controls`'s base rule (`flex: 1 1 auto; min-width: 240px`)
-  is sized for holding the whole transport-row-plus-timeline-stack it
-  normally does; without the override that 240px floor would force this row
-  to wrap or overflow at phone width.
+  avoid. `#controls`'s field-head and date reading are already hidden at
+  every collapsed width (see "Collapsed report," above); this scope adds
+  `#to-peak`/`#loop-toggle` to the hide list too, leaving `#controls` down
+  to just the Pause button — which needs its own override here, since
+  `#controls`'s base rule (`flex: 1 1 auto; min-width: 240px`) is sized for
+  holding the whole field it normally does; without the override that
+  240px floor would force this row to wrap or overflow at phone width.
 - `.report-body`'s `gap` (`--field-gap`, 22px — a between-fields gutter
   sized for a desktop row) is replaced outright with a `column-gap` of a
   few px plus a small `row-gap` as a wrap fallback, since 22px between
@@ -573,6 +675,26 @@ Chromium/WebKit reads the `::-webkit-scrollbar*` pseudo-elements.
   rule hiding every other one — an earlier `display: none` rule fought that
   pass, since a hidden label has a zero-width rect the measurement can't
   reason about.
+
+**Mobile portrait field order.** Within the `640px` grid above, `#masthead`/
+`#controls`/`#passage`/`#conditions`/`#run-status` get explicit `order: 1`
+through `5` — reordering the season chart ahead of the day's counts to match
+the mobile mockup's visual sequence (identity → chart → species → conditions/
+run-to-date) without moving the actual DOM. DOM order is untouched
+specifically so `#report.collapsed`'s own mobile-compact view (below), which
+depends on masthead → passage → controls, doesn't inherit this reordering by
+accident — it sets its own `order: 1`/`2`/`3` on those three to restore that
+sequence, overriding the expanded-view values at equal specificity via later
+source position.
+
+Expanding `#report` from its collapsed state used to leave stale month-axis
+labels overlapping: `thinMonthLabels()` bails out early when
+`#timeline-axis.clientWidth` is `0`, which it is at boot when the phone
+default is collapsed (`#timeline-block` sits under `display: none`), and
+nothing re-ran it afterward — `main.js`'s render loop only calls it on a
+viewport *width* change, and expanding the panel doesn't trigger one.
+`setReportCollapsed()` (`main.js`) now reruns `thinMonthLabels()` on every
+expand for exactly this reason.
 
 ## Fish viewer chrome (`inspect.css`)
 

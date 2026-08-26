@@ -54,11 +54,11 @@ sibling inside `.plate-caption` in `plates.js`) rather than as a fresh flex
 child of the row. `.field-head` is `display:flex; justify-content:
 space-between`, so a button added as a direct flex child would either get
 shoved to the opposite end by that rule (fighting or duplicating whatever
-already occupies that slot — the count in `#passage`, `#chart-scale` in the
-chart caption) or, worse, sit as its own justified item stranded between the
-label and the value with unpredictable spacing. Nesting it inside the label
-span keeps it glued to the text it explains regardless of what else is in
-the row, and reads as "this label has a footnote," which is the intent.
+already occupies that slot — `#passage`'s own `b#fish-count`) or, worse, sit
+as its own justified item stranded between the label and the value with
+unpredictable spacing. Nesting it inside the label span keeps it glued to
+the text it explains regardless of what else is in the row, and reads as
+"this label has a footnote," which is the intent.
 `plates.js`'s `.plate-caption` doesn't use space-between (only
 `.plate-toggle` opts into `margin-left: auto`), so its info button is just
 appended as the next flex child after `.plate-title` — it lands immediately

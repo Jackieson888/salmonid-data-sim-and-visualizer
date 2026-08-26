@@ -54,6 +54,7 @@ import {
 const canvas = document.getElementById("river-canvas");
 
 const dateLabel = document.getElementById("date-label");
+const dateLabelCompact = document.getElementById("date-label-compact");
 const dayOrdinalLabel = document.getElementById("day-ordinal");
 const yearSelect = document.getElementById("year-select");
 const yearSelectValue = document.getElementById("year-select-value");
@@ -111,6 +112,10 @@ function setReportCollapsed(collapsed) {
     "aria-label",
     collapsed ? "Expand panel" : "Collapse panel",
   );
+  // #timeline-axis has clientWidth 0 while collapsed (display:none up the
+  // tree), so thinMonthLabels() bails without measuring anything — expanding
+  // from that state needs a fresh pass once the axis actually has a width.
+  if (!collapsed) requestAnimationFrame(thinMonthLabels);
 }
 reportToggle.addEventListener("click", () =>
   setReportCollapsed(!reportEl.classList.contains("collapsed")),
@@ -167,7 +172,8 @@ const seasonAverageLabel = document.getElementById("season-average");
 const seasonDeltaLabel = document.getElementById("season-delta");
 const chartPassagePath = document.getElementById("chart-passage");
 const chartTempPath = document.getElementById("chart-temp");
-const chartScaleLabel = document.getElementById("chart-scale");
+const chartPeakValue = document.getElementById("chart-peak-value");
+const chartRangeValue = document.getElementById("chart-range-value");
 
 // Writes a number into the HUD, guarded on the rendered string (not the
 // value) to avoid dirtying layout every frame for an unchanged digit.
@@ -349,6 +355,9 @@ function updateRunComparison(idx) {
 // day-of-year — see .claude/context/main.md.
 function setDateReadout(idx) {
   dateLabel.textContent = runData[idx].date;
+  // #masthead's own collapsed-mobile view shares a row with .dam-code —
+  // see the readout-compact markup comment in index.html and ui.md.
+  dateLabelCompact.textContent = runData[idx].date;
   dayOrdinalLabel.textContent =
     `Day ${idx + 1} of ${runData.length} Tracked` +
     (seasonComplete ? "" : " · season in progress");
@@ -421,11 +430,13 @@ function buildSeasonChart() {
   area.push("L 1000 100 Z");
   chartPassagePath.setAttribute("d", area.join(" "));
 
+  chartPeakValue.textContent = `${peak.toLocaleString()} / day`;
+
   const temps = runData
     .map((d) => d.tempC)
     .filter((t) => typeof t === "number");
   if (temps.length < 2) {
-    chartScaleLabel.textContent = `Peak ${peak.toLocaleString()} / day · √ scale`;
+    chartRangeValue.textContent = "—";
     return;
   }
   const minTemp = Math.min(...temps);
@@ -449,9 +460,7 @@ function buildSeasonChart() {
   }
   chartTempPath.setAttribute("d", line.join(" "));
 
-  chartScaleLabel.textContent =
-    `Peak ${peak.toLocaleString()} / day · √ scale · ` +
-    `${minTemp.toFixed(1)}–${maxTemp.toFixed(1)} °C`;
+  chartRangeValue.textContent = `${minTemp.toFixed(1)}–${maxTemp.toFixed(1)} °C`;
 }
 
 function buildTimelineAxis() {
@@ -1672,6 +1681,15 @@ const INSIGHT_SPECIES_LABELS = {
   jackCoho: "Jack Coho",
 };
 
+function panelTitleInsightText() {
+  return (
+    "This scene simulates the Snake River salmonid run past Lower Granite " +
+    "Dam. The fish swimming past are drawn straight from the daily adult " +
+    "passage counts in this panel — real numbers from Columbia Basin " +
+    "Research DART, not a synthetic population."
+  );
+}
+
 function passageInsightText() {
   const today = runData[dayIndex];
   const keys = [...SIMULATED_COUNT_KEYS, ...REPORTED_COUNT_KEYS];
@@ -1745,6 +1763,18 @@ function seasonChartInsightText() {
 function initInsights() {
   initInsightToast();
 
+  // Static — nothing here changes day to day, unlike the other three.
+  const panelTitleLabel = document.querySelector("#masthead .panel-title .label");
+  if (panelTitleLabel) {
+    panelTitleLabel.appendChild(
+      createInfoButton(
+        "panel-title",
+        panelTitleInsightText,
+        "Salmonid Data Simulation",
+      ),
+    );
+  }
+
   // Cache keys thread the season and the exact day shown through, so
   // yesterday's answer for "today's conditions" is never handed back for
   // today — see .claude/context/insights.md.
@@ -1785,9 +1815,12 @@ function initInsights() {
     );
   }
 
-  const chartCaption = document.querySelector("#season-chart figcaption");
-  if (chartCaption) {
-    chartCaption.appendChild(
+  // Moved from #season-chart's own figcaption to #controls's field-head —
+  // matches the other three fields' own label+info-button convention now
+  // that this field has one too. See ui.md.
+  const chartLabel = document.querySelector("#controls .field-head .label");
+  if (chartLabel) {
+    chartLabel.appendChild(
       createInfoButton("season-chart", seasonChartInsightText, "Season chart"),
     );
   }

@@ -25,6 +25,10 @@
 
   /* Season chart passage area — the water's own green, not a species color. */
   --series: #4c6b63;
+  /* The chart's water-temperature line/key, and nowhere else — a cooler,
+     more literally "water" blue than the neutral --text-dim it used to
+     share with everything else in the chart legend. */
+  --water-temp: #39759d;
 
   /* Counted at the dam but not all drawn in the water — see data.js. */
   --sockeye: #d98f95;
@@ -107,8 +111,7 @@ body {
 
 /* Every piece of non-numeric HUD text. */
 .label,
-.station,
-.reach,
+.reach-row,
 .source,
 #species-breakdown .key,
 #play-pause,
@@ -318,7 +321,7 @@ body {
 } /* 4 rows at ~21px each, plus slack */
 #season-chart {
   max-height: 90px;
-} /* svg's own fixed 32px + figcaption, which can wrap to 2-3 lines narrow */
+} /* svg's own fixed 32px + figcaption's two fixed rows, plus slack */
 #timeline-axis {
   max-height: 13px;
 } /* exact — #timeline-axis's own height below is this same value */
@@ -425,6 +428,16 @@ body {
   flex: 1 1 auto;
 }
 
+/* Field 5 collapses to just the transport row, same reduction #passage's
+   field-head/table pair gets above — snap, not animated, matching
+   #masthead's own narrow-viewport hides rather than #season-chart's
+   max-height treatment just above (not worth the extra transition
+   bookkeeping for two small rows). */
+#report.collapsed #controls .field-head,
+#report.collapsed #controls .readout {
+  display: none;
+}
+
 .report-body {
   display: flex;
   align-items: stretch;
@@ -464,19 +477,28 @@ body {
   opacity: 0.45;
 }
 
+/* Flattened weight for the report bar: most text here is regular weight at
+   var(--t-4), not the shared cross-page `.label` group's own font-weight:500
+   (kept as-is for every other page/drawer that reads it). `#masthead
+   .dam-row .label` is the one exception (below), styled explicitly bold —
+   its own selector out-specifies this one. */
+#report .label {
+  font-weight: 400;
+}
+
 /* Each field is headed once, so rows beneath don't repeat their unit. */
 .field-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 7px;
-  padding-bottom: 5px;
+  margin-bottom: var(--s2);
+  padding-bottom: var(--s2);
   border-bottom: 1px solid var(--line-soft);
 }
 
 .field-head .label {
-  font-size: var(--t-2);
+  font-size: var(--t-4);
   color: var(--text-faint);
   white-space: nowrap;
 }
@@ -489,9 +511,8 @@ body {
 }
 
 .field-head b {
-  font-size: var(--t-5);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: var(--t-4);
+  font-weight: 400;
 }
 
 /* ---------------------------------------------------------------------
@@ -503,41 +524,90 @@ body {
   max-width: 34ch; /* was 30ch — "2015" orphaned once the season select joined the reach line */
 }
 
-#masthead .station {
-  /* The only mark standing in for an agency device — a rule, not a seal. */
-  border-left: 3px solid var(--accent);
-  padding-left: 8px;
-  font-size: var(--t-2);
-  color: var(--text-dim);
+/* The panel's own title, above the dam identity — a page-level label, not
+   a field reading. Regular weight now (see #report .label above); the left
+   accent bar is `.station`'s old device ("the only mark standing in for an
+   agency device — a rule, not a seal"), transplanted here now that this is
+   the first thing in the field, and is what still marks it as a heading. */
+.panel-title {
+  margin-bottom: var(--s2);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--line-soft);
 }
 
-#masthead h1 {
-  margin-top: 5px;
-  font-size: var(--t-6);
+.panel-title .label {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+  font-size: var(--t-4);
+  color: var(--text);
+}
+
+/* Dam identity as a label/value row (name, then code) — replaced the old
+   .station + h1 pair (see ui.md, "Field 1"). `.dam-row .label` ("Lower
+   Granite Lock & Dam") is one of the two named exceptions to this field's
+   otherwise-regular type — bold and a step larger than the rest; `.dam-code`
+   ("LWG") is not (it's set explicitly below, not inherited from this
+   container, precisely so it doesn't pick up the label's weight). */
+#masthead .dam-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: var(--s2);
+}
+
+#masthead .dam-row .label {
+  font-size: var(--t-5);
   font-weight: 700;
   letter-spacing: 0.015em;
   text-transform: uppercase;
   line-height: 1.05;
+  color: var(--text);
 }
 
-/* Deliberately not a flex row — see .claude/context/ui.md for why. */
-#masthead .reach {
-  margin-top: 4px;
-  font-size: var(--t-2);
+#masthead .dam-code {
+  flex: none;
+  font-size: var(--t-4);
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* Label/value row — replaced the old single wrapping sentence (see
+   .claude/context/ui.md, "Field 1") once the season control needed its own
+   row rather than a word inside one. */
+#masthead .reach-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: var(--s2);
+  font-size: var(--t-4);
   color: var(--text-dim);
+}
+
+#masthead .reach-row .label {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+#masthead .coords {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 /* The #year-listbox trigger (below) — kept in the same quiet, hairline-
    underline register the old <select> had, but now a real button with a
    chevron: a bare underlined word didn't read as interactive at all (see
-   ui.md). flows as a word in the reach line, same as the control it
-   replaced. */
+   ui.md). Now the trailing item of its own .reach-row rather than a word
+   inline in a sentence. */
 #year-select {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   vertical-align: baseline;
-  margin-left: 4px;
   background: transparent;
   border: 1px solid transparent;
   border-bottom-color: var(--line);
@@ -546,10 +616,17 @@ body {
   color: var(--text);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: var(--t-2);
+  font-size: var(--t-4);
   letter-spacing: 0.04em;
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease);
+}
+
+/* The other named exception (with .dam-row .label, above) — bold and a
+   step larger than this field's otherwise-regular type. */
+#year-select-value {
+  font-size: var(--t-5);
+  font-weight: 700;
 }
 
 #year-select .chevron-icon {
@@ -633,20 +710,12 @@ body {
   color: var(--accent);
 }
 
-#masthead .readout {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line-soft);
-  font-size: var(--t-4);
-  letter-spacing: 0.02em;
-}
-
-#masthead #day-ordinal {
-  font-size: var(--t-3);
-  color: var(--text-dim);
+/* Hidden except in #report.collapsed's mobile-compact view (below) — a
+   duplicate of just the date text, since that view needs it sharing a row
+   with .dam-code and the "real" reading (below) no longer lives in
+   #masthead to share a row with. */
+#masthead .readout-compact {
+  display: none;
 }
 
 /* ---------------------------------------------------------------------
@@ -671,7 +740,8 @@ body {
 
 #species-breakdown .key {
   width: 11.5ch;
-  font-size: var(--t-2);
+  font-size: var(--t-4);
+  font-weight: 400;
   color: var(--text-dim);
   white-space: nowrap;
   padding-right: 6px;
@@ -740,7 +810,7 @@ body {
 
 #conditions p:not(.field-head) .label,
 #run-status p:not(.field-head) .label {
-  font-size: var(--t-2);
+  font-size: var(--t-4);
   color: var(--text-faint);
   white-space: nowrap;
 }
@@ -748,7 +818,7 @@ body {
 #conditions b,
 #run-status b {
   font-size: var(--t-4);
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text);
   white-space: nowrap;
 }
@@ -779,7 +849,25 @@ body {
   min-width: 240px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--s2);
+}
+
+/* The current reading — moved here from #masthead to sit with the chart it
+   describes (see ui.md, "Field 1"/"Field 5"). #masthead keeps its own
+   .readout-compact duplicate for the collapsed-mobile view, which needs
+   the date sharing a row with .dam-code instead. */
+#controls .readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--t-4);
+  letter-spacing: 0.02em;
+}
+
+#controls #day-ordinal {
+  font-size: var(--t-4);
+  color: var(--text-dim);
 }
 
 #timeline-block {
@@ -787,6 +875,8 @@ body {
   min-width: 0;
 }
 
+/* Two groups, not one evenly-spaced row: Peak/Loop cluster on the left
+   (plain gap), Pause pushed to the far right. */
 #transport {
   display: flex;
   align-items: center;
@@ -817,10 +907,10 @@ body {
   border-radius: 0;
   padding: 4px 8px;
   font-family: var(--sans);
-  font-size: var(--t-1);
+  font-size: var(--t-4);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
   transition:
     color var(--dur-fast) var(--ease),
@@ -848,24 +938,41 @@ body {
   outline-offset: 2px;
 }
 
+/* Loop is a placeholder — styled but inert until the feature is wired up. */
+.transport-btn:disabled {
+  color: var(--text-faint);
+  border-color: var(--line-soft);
+  cursor: default;
+}
+
 /* The current pace is a current reading — same accent use as the cursor. */
 .speed-btn[aria-pressed="true"] {
   color: var(--text);
   border-color: var(--accent);
 }
 
+/* Two label/value rows — series name + key on the left, that series' own
+   reading on the right — not one run-on caption string. Matches the
+   mobile mockup; see .claude/context/ui.md. */
 #season-chart figcaption {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  margin-bottom: 4px;
-  font-size: var(--t-1);
+  margin-bottom: var(--s2);
+  font-size: var(--t-4);
+  font-weight: 400;
   color: var(--text-faint);
+}
+
+#season-chart figcaption p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0;
 }
 
 /* Keys drawn as the marks themselves (block for area, rule for line) rather
    than as swatches — quicker to read with only two series. */
-#season-chart figcaption span::before {
+#season-chart .key-passage::before,
+#season-chart .key-temp::before {
   content: "";
   display: inline-block;
   width: 9px;
@@ -880,15 +987,20 @@ body {
 
 #season-chart .key-temp::before {
   height: 0;
-  border-top: 1px solid var(--text-dim);
+  border-top: 1px solid var(--water-temp);
 }
 
-#season-chart #chart-scale {
-  margin-left: auto;
+#season-chart .chart-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
-#season-chart #chart-scale::before {
-  display: none;
+#season-chart .chart-stat b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  color: var(--text-dim);
 }
 
 #season-chart svg {
@@ -905,13 +1017,15 @@ body {
 
 #chart-temp {
   fill: none;
-  stroke: var(--text-dim);
+  stroke: var(--water-temp);
   stroke-width: 1;
   stroke-linejoin: round;
 }
 
 #play-pause {
   flex: none;
+  /* Pushed to the far end of #transport — Peak/Loop cluster on the left. */
+  margin-left: auto;
   background: transparent;
   color: var(--text);
   border: 1px solid var(--line);
@@ -919,7 +1033,8 @@ body {
   padding: 5px 10px;
   min-width: 62px;
   font-family: var(--sans);
-  font-size: var(--t-2);
+  font-size: var(--t-4);
+  font-weight: 400;
   cursor: pointer;
   transition:
     border-color var(--dur-fast) var(--ease),
@@ -1008,12 +1123,16 @@ body {
 
 /* Clicking a month label jumps to its first counted day (delegated handler
    in main.js). Styled as the label it already was, not as a control. */
+/* Padding/letter-spacing kept tight (not the shared uppercase-label group's
+   usual 0.14em) — these are the one label in the app where nine of them
+   have to fit across one narrow track without measured thinning
+   (thinMonthLabels, main.js) hiding every other one; see ui.md. */
 #timeline-axis button {
   position: absolute;
   top: 4px;
   left: 0;
   transform: translateX(-50%);
-  padding: 1px 3px;
+  padding: 1px;
   background: transparent;
   border: none;
   border-radius: 0;
@@ -1021,7 +1140,7 @@ body {
   font-size: var(--t-1);
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.04em;
   color: var(--text-faint);
   white-space: nowrap;
   cursor: pointer;
@@ -1943,8 +2062,8 @@ body {
   .report-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px var(--s3);
-    padding: 9px 12px 8px;
+    gap: var(--s2) var(--s3);
+    padding: var(--s2) var(--s3) var(--s2);
   }
 
   .report-body > .field {
@@ -1964,13 +2083,45 @@ body {
     grid-column: 1 / -1;
   }
 
-  #masthead h1 {
-    font-size: var(--t-5);
+  /* Field-level visual order for the mobile portrait layout — chart before
+     the day's counts, conditions/run-status last. DOM order stays as-is
+     (masthead, passage, conditions, run-status, controls) since desktop's
+     flex row still reads top-to-bottom in source order; only this grid
+     scope reorders. Restored to source order under #report.collapsed
+     below, since that compact view was tuned around masthead → passage →
+     controls specifically.
+     max-width: none — #masthead's own 34ch cap (base rule above) is a
+     desktop sizing concern (keeps the identity field from stretching the
+     whole bar wider on a five-field row). Left in place here it instead
+     stopped the field from filling its own full-width grid column,
+     leaving it narrower than #passage/#conditions beside it. */
+  #masthead {
+    order: 1;
+    max-width: none;
   }
 
-  #masthead .station,
-  #masthead .reach {
-    font-size: var(--t-1);
+  #controls {
+    order: 2;
+  }
+
+  #passage {
+    order: 3;
+  }
+
+  #conditions {
+    order: 4;
+  }
+
+  #run-status {
+    order: 5;
+  }
+
+  /* Trimmed to the three rows the mobile mockup shows — full five-row
+     field at every wider breakpoint. `p.cond-secondary` (not just
+     `.cond-secondary`) to out-specificity the base `#conditions
+     p:not(.field-head) { display: flex }` rule above. */
+  #conditions p.cond-secondary {
+    display: none;
   }
 
   #species-breakdown .count {
@@ -1979,6 +2130,20 @@ body {
 
   /* Month labels are thinned by measurement (thinMonthLabels in main.js), not
      display:none — a hidden label has a zero-width rect the measurement can't use. */
+
+  /* Stacked instead of the desktop side-by-side wrapped row — .source is
+     long enough that sharing a row's width with .footnote pushed it past
+     two lines; the full row width alone isn't quite enough either (see the
+     letter-spacing/font-size trims below), but stacking is the bulk of
+     the fix. */
+  .report-foot {
+    flex-direction: column;
+    gap: var(--s1);
+  }
+
+  .source {
+    margin-left: 0;
+  }
 
   #transport {
     flex-wrap: wrap;
@@ -2019,7 +2184,11 @@ body {
     row-gap: 6px;
   }
 
+  /* Restores masthead → passage → controls, overriding the expanded-view
+     order:1/2/3 set above — this compact view was measured and tuned
+     around that specific sequence (see ui.md). */
   #report.collapsed #masthead {
+    order: 1;
     flex: 1 1 auto;
     min-width: 0;
     max-width: none;
@@ -2029,16 +2198,22 @@ body {
     column-gap: 6px;
   }
 
+  #report.collapsed #passage {
+    order: 2;
+  }
+
   #report.collapsed #controls {
+    order: 3;
     flex: 0 0 auto;
     min-width: 0;
   }
 
-  #report.collapsed #masthead .station,
-  #report.collapsed #masthead .reach,
-  #report.collapsed #day-ordinal,
+  #report.collapsed #masthead .panel-title,
+  #report.collapsed #masthead .reach-row,
+  #report.collapsed #masthead .dam-row .label,
   #report.collapsed #passage .field-head .label-full,
   #report.collapsed #to-peak,
+  #report.collapsed #loop-toggle,
   #report.collapsed #timeline-block {
     display: none;
   }
@@ -2047,32 +2222,35 @@ body {
     display: inline;
   }
 
-  /* h1 shrinks from the title-sized "LWG · Lower Granite Lock & Dam" lead to
-     a plain inline prefix sharing a line with the date reading instead of
-     leading its own — the full dam name stays hidden along with .reach
-     (the dam-name span above), since it's the code, not the name, that
-     fits a shared row at real phone widths. */
-  #report.collapsed #masthead h1 {
-    margin: 0;
+  /* .dam-code shrinks from the title-sized identity line to a plain inline
+     prefix sharing a row with the compact date reading (.readout-compact,
+     below) instead of leading its own — the full dam name stays hidden
+     (.dam-row .label, above), since it's the code, not the name, that fits
+     a shared row at real phone widths. */
+  #report.collapsed #masthead .dam-row {
+    margin-top: 0;
+  }
+
+  #report.collapsed #masthead .dam-code {
     font-size: var(--t-2);
     font-weight: 500;
     letter-spacing: 0.05em;
   }
 
-  #report.collapsed #masthead .dam-name {
-    display: none;
-  }
-
-  #report.collapsed #masthead .readout {
+  /* The compact date duplicate (hidden everywhere else — see the base
+     .readout-compact rule) is what actually shows here, sharing a row with
+     .dam-code now that the "real" date-label/day-ordinal pair lives in
+     #controls instead of #masthead. */
+  #report.collapsed #masthead .readout-compact {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     margin: 0;
-    padding: 0;
-    border-top: none;
   }
 
-  /* .readout used to follow .reach on its own line, so nothing separated
-     it from the dam code visually beyond the line break; sharing a row
-     with h1 now needs an explicit divider in its place. */
-  #report.collapsed #masthead .readout::before {
+  /* Supplies the divider between the dam code and the date that a line
+     break used to provide. */
+  #report.collapsed #masthead .readout-compact::before {
     content: "\00b7";
     color: var(--text-faint);
   }
@@ -2089,10 +2267,9 @@ body {
    not (same signal quality.js already uses for tier detection). Real
    padding growth, not an invisible expanded hit-region: .speed-btn/#transport
    controls sit only 4-8px apart, so a bigger-than-visible catch-area risks
-   stealing a neighbor's tap. #year-select is deliberately excluded — it
-   lives in #masthead .reach's plain-inline-flow wrapped-text layout (see
-   ui.md), and padding it risks reintroducing the wrapping bug that layout
-   was built to avoid. */
+   stealing a neighbor's tap. #year-select is deliberately excluded — it's
+   the trailing item of #masthead .reach-row (a flex label/value row, see
+   ui.md); left out of this pass rather than re-verified against it. */
 @media (pointer: coarse) {
   .transport-btn,
   .speed-btn,

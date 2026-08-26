@@ -66,15 +66,32 @@
         </button>
         <section id="report">
           <div class="report-body">
-            <!-- 1. Identity and the current reading. -->
+            <!-- 1. Identity. The current reading (date/day-ordinal) now
+               lives in field 5, next to "Season chart" — see the note there
+               and .claude/context/ui.md. -->
             <header class="field" id="masthead">
-              <p class="station">Adult Fish Passage</p>
-              <h1>
-                <span class="dam-code">LWG</span
-                ><span class="dam-name"> &middot; Lower Granite Lock &amp; Dam</span>
-              </h1>
-              <p class="reach">
-                Snake River &middot; Counting Season
+              <!-- The panel's own title — an app-level label, not a field
+                 reading. The accent mark reuses .station's old
+                 border-left-as-a-mark device (see ui.md rule 1: no
+                 border-radius) rather than a drawn shape. Info button
+                 appended by initInsights() in main.js. -->
+              <p class="panel-title"><span class="label">Salmonid Data Simulation</span></p>
+              <!-- Dam identity as a label/value row, matching Snake
+                 River/Counting Season below — no separate "Adult Fish
+                 Passage" station line. -->
+              <p class="dam-row">
+                <span class="label">Lower Granite Lock &amp; Dam</span>
+                <span class="dam-code">LWG</span>
+              </p>
+              <!-- Two label/value rows (real dam coordinates, then the
+                 season picker) instead of one wrapping sentence — see
+                 .claude/context/ui.md. -->
+              <p class="reach-row">
+                <span class="label">Snake River</span>
+                <span class="coords">46&deg;39'38"N 117&deg;25'41"W</span>
+              </p>
+              <p class="reach-row">
+                <span class="label">Counting Season</span>
                 <!-- A custom listbox, not a native <select> — Chromium's own
                    select popup ignores color-scheme:dark on Windows and
                    rendered as a stock white listbox over this page's dark
@@ -89,7 +106,6 @@
                   aria-controls="year-listbox"
                   aria-label="Counting season"
                 >
-                  <span id="year-select-value">2015</span>
                   <svg
                     class="chevron-icon"
                     viewBox="0 0 12 8"
@@ -98,13 +114,16 @@
                   >
                     <path d="M1 1l5 5 5-5" />
                   </svg>
+                  <span id="year-select-value">2015</span>
                 </button>
               </p>
-              <!-- Stays a printed reading, not a picker — the season select,
-                 month ticks, slider and arrow keys already reach any date. -->
-              <p class="readout">
-                <span id="date-label">Loading run data…</span>
-                <span id="day-ordinal"></span>
+              <!-- Collapsed-mobile only (see #report.collapsed in style.css)
+                 — a duplicate of just the date text, kept alongside
+                 .dam-code on one shared row when the bar is compact. The
+                 "real" date-label/day-ordinal pair lives in field 5 now;
+                 setDateReadout() (main.js) writes both. -->
+              <p class="readout-compact">
+                <span id="date-label-compact"></span>
               </p>
             </header>
 
@@ -165,10 +184,13 @@
               <p><span class="label">Water</span><b id="water-temp">—</b></p>
               <p><span class="label">Outflow</span><b id="outflow">—</b></p>
               <p><span class="label">Spill</span><b id="spill">—</b></p>
-              <p>
+              <!-- .cond-secondary: dropped at the mobile portrait width to
+                 keep this field to the three rows the mockup shows — still
+                 full-height at every wider breakpoint. See ui.md. -->
+              <p class="cond-secondary">
                 <span class="label">Diss. gas</span><b id="dissolved-gas">—</b>
               </p>
-              <p>
+              <p class="cond-secondary">
                 <span class="label">Chinook run</span><b id="chinook-run">—</b>
               </p>
             </div>
@@ -188,24 +210,62 @@
 
             <!-- 5. The season and its controls — column layout, see ui.md. -->
             <div class="field" id="controls">
+              <!-- Matches the other three fields' own field-head — info
+                 button appended by initInsights() in main.js. -->
+              <p class="field-head"><span class="label">Season chart</span></p>
+              <!-- The "real" date reading — moved here from field 1 to match
+                 the mobile mockup. #masthead keeps a compact duplicate of
+                 just the date for its own collapsed view; see the note
+                 there and .claude/context/ui.md. -->
+              <p class="readout">
+                <span id="date-label">Loading run data&hellip;</span>
+                <span id="day-ordinal"></span>
+              </p>
               <!-- Deliberately short: day-to-day stepping is the arrow keys
-                 and slider, season ends are Home/End. Just run/hold + pace. -->
+                 and slider, season ends are Home/End. Just run/hold + pace.
+                 Peak/Loop cluster left, Pause pushed to the far right
+                 (margin-left: auto in style.css) — two groups, not one
+                 evenly-spaced row of three. -->
               <div id="transport">
-                <!-- No aria-label — it would override the visible text (the
-                   actual state). aria-pressed set from setPlaying(), main.js. -->
-                <button id="play-pause" aria-pressed="false">Pause</button>
                 <button class="transport-btn" id="to-peak" type="button">
                   Peak
                 </button>
+                <!-- Placeholder — not wired up yet. See ui.md. -->
+                <button
+                  class="transport-btn"
+                  id="loop-toggle"
+                  type="button"
+                  disabled
+                  aria-pressed="false"
+                  title="Loop playback — coming soon"
+                >
+                  Loop
+                </button>
+                <!-- No aria-label — it would override the visible text (the
+                   actual state). aria-pressed set from setPlaying(), main.js. -->
+                <button id="play-pause" aria-pressed="false">Pause</button>
               </div>
               <div id="timeline-block">
                 <!-- Daily passage as an area, water temp as a line — drawn at
-                   boot from runData (buildSeasonChart, main.js). -->
+                   boot from runData (buildSeasonChart, main.js). Two
+                   label/value rows (icon+series name, then the reading for
+                   that series) rather than one run-on caption string. -->
                 <figure id="season-chart">
                   <figcaption>
-                    <span class="key-passage">Daily passage</span>
-                    <span class="key-temp">Water &deg;C</span>
-                    <span id="chart-scale"></span>
+                    <p>
+                      <span class="key-passage">Daily passage</span>
+                      <span class="chart-stat">
+                        <span class="label">Peak</span>
+                        <b id="chart-peak-value"></b>
+                      </span>
+                    </p>
+                    <p>
+                      <span class="key-temp">Water &deg;C</span>
+                      <span class="chart-stat">
+                        <span class="label">&radic;Scale</span>
+                        <b id="chart-range-value"></b>
+                      </span>
+                    </p>
                   </figcaption>
                   <svg
                     viewBox="0 0 1000 100"

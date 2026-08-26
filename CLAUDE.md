@@ -1,4 +1,8 @@
-# Salmonid Data Sim & Visualizer — agent guide
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Salmonid Data Sim & Visualizer — agent guide
 
 A Three.js boids flocking simulation styled as a salmon run past Lower
 Granite Dam on the Snake River, driven by real daily passage counts from
@@ -7,6 +11,37 @@ Columbia Basin Research DART. Two entry points share one data layer:
 (`src/inspect.js`) is a single-fish viewer with anatomy labels. There is no
 backend — everything is a static build reading vendored CSV/JSON from
 `public/`.
+
+## Commands
+
+```
+npm install
+npm run dev       # vite dev server
+npm run build     # production build to dist/
+npm run preview   # serve the production build
+```
+
+There is no test suite (see `.claude/context/*` for why, per module). The
+only automated correctness signal is `scripts/screenshot.mjs`, which drives
+the running dev server with Playwright and fails on any console error —
+the sole way to catch a GLSL shader that silently stops drawing:
+
+```
+node scripts/screenshot.mjs out.png --day 250
+node scripts/screenshot.mjs out.png --day 250 --burst 6   # frames over time, catches motion-only defects
+node scripts/screenshot.mjs out.png --url http://localhost:5173/inspect.html
+```
+
+Run it non-headless (the default) for real settle time — headless Chromium
+throttles `requestAnimationFrame` to ~1Hz, so a headless capture is of a
+scene that never filled in. `--headless` exists only for CI. See `README.md`
+for the full flag list and the `--brighten`/multi-year verification workflow.
+
+Other one-off scripts (not part of a normal edit loop):
+- `scripts/fetch-dart.mjs` — regenerates the vendored `public/lwg-*` CSV/JSON
+  snapshots from `data/dart/` archives.
+- `scripts/swim_rig.py` — regenerates a species' `"Swimming"` clip; run
+  inside Blender, not Node.
 
 ## Before editing a file
 
