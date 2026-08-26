@@ -6,6 +6,42 @@ language rather than a consumer overlay — the numbers in the HUD are real
 published DART counts, and the interface is styled to be read as an
 instrument reading them, not a game UI floating over the scene.
 
+**Light "paper" panel pass.** The bar/drawer chrome (`#report`/`#inspect-bar`,
+`#plates`/`#inspect-panel`, `#year-listbox`, `#notice`, `#insight-toast`,
+`#debug-panel`, the corner nav links) was repainted from a dark/glass panel to
+a pale paper one — `--ink` (the shared panel background token) flipped from a
+dark translucent fill to `rgba(253, 253, 251, 0.88)`, and `--text`/`--text-
+dim`/`--text-faint`/`--text-dimmer`/`--line`/`--line-soft` all flipped to
+dark-ink-on-light. `--accent` (Engineer red) and every per-species color are
+unchanged in hue, just darkened enough (see the `:root` comment) to hold
+real contrast as *text* against white rather than a dark ink background —
+the swatch squares alone never needed that, only the colored species labels
+next to them do. The panel is still translucent, not opaque (matches the old
+`--ink`'s own see-through level) — the river stays faintly visible behind it
+on purpose, a deliberate call after an all-opaque first pass read as a plain
+white card losing the "instrument over the water" feel. Font is Roboto
+Condensed (Google Fonts, linked from both HTML pages) with an Arial Narrow/
+Arial fallback chain — a condensed PNW/Corps-report face — at a 14px/500
+(medium) app-wide default (`html, body`), up from an unset browser default.
+Two things needed fixing *because* of the flip, not just a token swap:
+`#season-chart svg` gained its own fixed dark background (`#0d1418`) — the
+chart is a small dark "instrument screen" set into the paper panel, since
+`--series`/`--water-temp` are tuned for a dark backdrop and the panel behind
+it no longer is one; and `#fish-loading` (a scrim over the WebGL canvas, not
+part of this panel chrome) got its two text colors hardcoded to fixed light
+values instead of `--text`/`--text-dim`, which now mean dark-on-light and
+would've gone near-invisible on that overlay's own independently-dark
+background. `#inspect-bar`'s opaque override of `--ink` (`inspect.css`) is
+the same idea it always was, just repointed to the new light RGB — needed
+because `#inspect-panel` runs full height behind the bar, where the shared
+88%-opacity `--ink` would let field-notes text bleed through the seam.
+`.coords` (the dam's real coordinates) needed an explicit `letter-spacing:
+normal` once labels went to the type scale's default medium weight — without
+it, the parent `.reach-row`'s 0.14em label letter-spacing was inherited onto
+the ~22-character coordinate string too, which was enough extra width at
+narrower report widths to overflow `#masthead` into the field beside it (now
+widened to 38ch from 34ch as a second margin of safety).
+
 ## Design system (`style.css` — `:root` and shared rules)
 
 Four rules carry the whole look, and every rule in the file is an
@@ -218,12 +254,31 @@ than a flex row of chips so counts sit in fixed columns and stop shifting
 sideways as they gain/lose digits — this matters more now that they tick
 continuously between days rather than changing once. `table-layout: fixed`
 is what makes the four columns set by the cell widths below rather than by
-whichever species has the longest name today; `width: auto` is
-**deliberate** — under `fixed` the used width is the sum of the column
-widths (what's wanted), whereas `width: 100%` inside a shrink-to-fit flex
-item is circular, and Chromium resolves it to a literal million pixels,
-silently shoving every field to the right of this one off-screen. Key
-colors are keyed off each cell's own `data-species` attribute rather than
+whichever species has the longest name today.
+
+The table is `width: 100%` (per-species report requested filling the field
+rather than sitting at its own tight content width), and `#passage` itself
+is `flex: 1 1 260px; max-width: 460px` rather than `flex: 0 0 auto` — that
+pairing matters, not just the table rule alone. `width: 100%` inside a
+**shrink-to-fit** flex item (what `#passage` used to be, `flex: 0 0 auto`) is
+circular — Chromium used to resolve it to a literal million pixels, silently
+shoving every field to the right of this one off-screen — but a *definite*
+flex-basis (260px, not `auto`) gives `#passage` a size the flex algorithm
+resolves independently of its content, so the table's `width: 100%` now
+resolves against a real number instead of feeding the circularity. The
+`max-width: 460px` cap is a second, separate fix for a second bug the first
+version of this change had: with `flex-grow: 1` and no cap, this field and
+`#controls` (also `flex: 1 1 auto`) split a wide desktop window's leftover
+row width roughly evenly, which squeezed the chart's own figcaption/month
+axis into wrapping — `#controls` is meant to be the row's one dominant
+growing field (see "Field 5" below), so `#passage` caps out and stops
+competing for space past 460px. Both the cap and the flex-basis are reset
+(`min-width: 0; max-width: none`) inside the `640px` grid breakpoint, where
+this field spans the full row on its own line instead of sharing one with
+`#controls` — see that breakpoint's own comment. Don't reintroduce
+`flex: 0 0 auto` here without also reverting the table back to `width: auto`,
+or the old circular-sizing bug comes back. Key colors are keyed off each
+cell's own `data-species` attribute rather than
 row position — they used to be positional
 (`[data-species=chinook] .key:nth-child(3)` meaning "steelhead"), which
 worked only as long as nothing was ever added to or reordered in the table,

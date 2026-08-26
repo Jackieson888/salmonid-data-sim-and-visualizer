@@ -473,6 +473,11 @@ function buildTimelineAxis() {
     // "YYYY-MM-DD"
     const month = Number(runData[i].date.slice(5, 7)) - 1;
     if (month === previousMonth || !MONTH_ABBREVIATIONS[month]) continue;
+    // The axis only ever labels March (2) through November (10) — a
+    // counting season's tail end in December gets no tick, matching the
+    // mock's fixed Mar–Nov axis. Positions still come from real dates via
+    // seasonFraction() below, just the label set is capped.
+    if (month < 2 || month > 10) continue;
     previousMonth = month;
     const percent = (seasonFraction(i, last) * 100).toFixed(3);
     // The <i> is the 1px hairline mark; the button (the label) is the

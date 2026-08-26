@@ -92,16 +92,15 @@
      recentering translateY both stay correct automatically. */
   max-height: 70vh;
   overflow-y: auto;
-  /* Opaque override of the shared #report/#inspect-bar rule's --ink (12%
+  /* Opaque override of the shared #report/#inspect-bar rule's --ink (75%
      see-through — tuned for #report sitting over the river's moving water).
      #inspect-panel now runs full height behind this bar (see its own
-     bottom:0 note above) rather than stopping short above it, so that 12%
-     would otherwise let field-notes text bleed through the seam. Invisible
-     as a change on its own: this page's backdrop is flat near-black, not the
-     river scene, so opaque vs. 0.88 reads the same when nothing sits behind
-     it. Wins the tie with the shared rule (equal ID-only specificity) by
-     coming later — inspect.css loads after style.css in inspect.html. */
-  background: rgb(10, 15, 18);
+     bottom:0 note above) rather than stopping short above it, so that 25%
+     gap would otherwise let field-notes text bleed through the seam. Same
+     RGB as --ink, just without its alpha — wins the tie with the shared
+     rule (equal ID-only specificity) by coming later, since inspect.css
+     loads after style.css in inspect.html. */
+  background: rgb(9, 14, 17);
 }
 
 /* display:flex reasserted (not just flex-wrap): style.css's own narrow
@@ -390,12 +389,12 @@
 }
 
 .species-option:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .species-option.selected {
   border-left-color: var(--accent);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .species-option:focus-visible {

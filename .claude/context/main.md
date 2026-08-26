@@ -134,7 +134,13 @@ DART only publishes rows for the dam's counting season, so this reads "day
 
 Month ticks (`buildTimelineAxis`) are positioned from real dates in `runData`
 rather than spaced evenly, for the same reason: the season starts partway
-through March and the months are not equal fractions of the track.
+through March and the months are not equal fractions of the track. The axis
+only ever labels March–November (`month < 2 || month > 10` is skipped) —
+every season's tail end into December (see `seasonComplete` below) gets no
+tick, a fixed design choice, not a data limitation. Positions still come from
+real per-season dates through `seasonFraction()`, only the label *set* is
+capped, so a short vendored season doesn't stretch/compress the fixed month
+labels to fill the track.
 
 `seasonComplete` (set in `rebuildSeasonTotals()`, read by `setDateReadout()`)
 flags a season whose last record's month isn't December — every one of the

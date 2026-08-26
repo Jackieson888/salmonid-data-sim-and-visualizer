@@ -4,39 +4,45 @@
   /* Page background, seen only before the canvas paints its first frame. */
   --bg: #061a2e;
 
-  /* Panel ink — neutral slate, not a tint of the (green) water. */
-  --ink: rgba(10, 15, 18, 0.65);
-  --line: #2c3841;
-  --line-soft: #1b242a;
+  /* Panel surface — a dark, translucent "instrument glass" laid over the
+     water scene: the river stays visible through it. Darker/more
+     transparent than the original dark theme on purpose (a specific hex the
+     project owner asked for), so every text token below was re-picked for
+     contrast against it rather than reused from the old dark theme
+     verbatim. See .claude/context/ui.md. */
+  --ink: #090e11bf;
+  --line: #3a4750;
+  --line-soft: #212b31;
 
-  --text: #e4e8ea;
-  --text-dim: #8d9aa3;
-  --text-faint: #5f6b73;
-  --text-dimmer: #47525a;
+  --text: #eef1f2;
+  --text-dim: #aab5ba;
+  --text-faint: #7e8b91;
+  --text-dimmer: #5c6870;
 
   /* Engineer red — the one saturated, non-decorative accent color. */
-  --accent: #c1272d;
+  --accent: #e6484e;
 
-  /* Per-species keys, matching SPECIES_COLORS in scene/fishMesh.js. */
-  --chinook: #ff6b6b;
-  --jack-chinook: #ffb066;
-  --steelhead: #b9c9c2;
-  --shad: #c98bf0;
+  /* Per-species keys, matching SPECIES_COLORS in scene/fishMesh.js. Bright
+     pastels tuned for contrast against the panel's near-black glass. */
+  --chinook: #ff7a7a;
+  --jack-chinook: #ffb877;
+  --steelhead: #c3d3cc;
+  --shad: #d29bf5;
 
   /* Season chart passage area — the water's own green, not a species color. */
-  --series: #4c6b63;
+  --series: #5d8378;
   /* The chart's water-temperature line/key, and nowhere else — a cooler,
      more literally "water" blue than the neutral --text-dim it used to
      share with everything else in the chart legend. */
-  --water-temp: #39759d;
+  --water-temp: #5aa6db;
 
   /* Counted at the dam but not all drawn in the water — see data.js. */
-  --sockeye: #d98f95;
-  --coho: #7fa383;
-  --jack-coho: #b0cdb2;
-  --lamprey: #746b5c;
+  --sockeye: #e29da2;
+  --coho: #8fbb96;
+  --jack-coho: #bcdabe;
+  --lamprey: #a0937c;
 
-  --sans: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+  --sans: "Roboto Condensed", "Arial Narrow", Arial, sans-serif;
   --mono:
     ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
 
@@ -59,7 +65,7 @@
 
   /* Rule weights, shared by the plates drawer and the bar's accent rules. */
   --rule: 1px;
-  --rule-heavy: 2px;
+  --rule-heavy: 3px;
 
   /* Motion — every transition in the app maps to one of these two durations
      and this one easing, the same way type/spacing/rules do. Kept simple
@@ -82,6 +88,11 @@ body {
   overflow: hidden;
   background: var(--bg);
   font-family: var(--sans);
+  /* App-wide defaults — var(--t-4) is the 14px step on the type scale
+     above; every element that needs a different size still sets its own
+     var(--t-N), this is just the floor for anything that doesn't. */
+  font-size: var(--t-4);
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -477,15 +488,6 @@ body {
   opacity: 0.45;
 }
 
-/* Flattened weight for the report bar: most text here is regular weight at
-   var(--t-4), not the shared cross-page `.label` group's own font-weight:500
-   (kept as-is for every other page/drawer that reads it). `#masthead
-   .dam-row .label` is the one exception (below), styled explicitly bold —
-   its own selector out-specifies this one. */
-#report .label {
-  font-weight: 400;
-}
-
 /* Each field is headed once, so rows beneath don't repeat their unit. */
 .field-head {
   display: flex;
@@ -499,7 +501,7 @@ body {
 
 .field-head .label {
   font-size: var(--t-4);
-  color: var(--text-faint);
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
@@ -521,14 +523,14 @@ body {
 
 #masthead {
   flex: 0 0 auto;
-  max-width: 34ch; /* was 30ch — "2015" orphaned once the season select joined the reach line */
+  max-width: 38ch; /* was 34ch — the condensed face's heavier (500) label weight needs a touch more room for "2015" not to orphan */
 }
 
 /* The panel's own title, above the dam identity — a page-level label, not
-   a field reading. Regular weight now (see #report .label above); the left
-   accent bar is `.station`'s old device ("the only mark standing in for an
-   agency device — a rule, not a seal"), transplanted here now that this is
-   the first thing in the field, and is what still marks it as a heading. */
+   a field reading. The left accent bar is `.station`'s old device ("the
+   only mark standing in for an agency device — a rule, not a seal"),
+   transplanted here now that this is the first thing in the field, and is
+   what still marks it as a heading. */
 .panel-title {
   margin-bottom: var(--s2);
   padding-bottom: var(--s2);
@@ -594,6 +596,10 @@ body {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
+  /* Not inherited: .reach-row's own uppercase-label letter-spacing (0.14em)
+     otherwise applies to this ~22-character string too, which is what was
+     pushing it past #masthead's width and overlapping the field beside it. */
+  letter-spacing: normal;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -722,14 +728,27 @@ body {
    Field 2 — the day's counts
    --------------------------------------------------------------------- */
 
+/* flex:1 1 260px (not the old 0 0 auto) so this field — and the table inside
+   it — actually stretches past its own tight content width instead of
+   sitting at exactly the sum of its column widths. A definite flex-basis
+   (260px, not auto) is what makes width:100% on the table below safe (see
+   .claude/context/ui.md); flex-grow:1 lets it take a *share* of any extra
+   row width, but max-width caps that share so this field can't out-grow
+   #controls — the chart is still meant to be the row's dominant growing
+   field, and on a wide desktop window an uncapped #passage otherwise won a
+   roughly even split with it, squeezing the chart's own figcaption/axis
+   into wrapping. */
 #passage {
-  flex: 0 0 auto;
+  flex: 1 1 260px;
+  max-width: 460px;
 }
 
-/* Table, not a flex row, so counts sit in fixed columns as digits change. */
+/* Table, not a flex row, so counts sit in fixed columns as digits change.
+   width:100% — safe now that #passage above has a definite flex-resolved
+   size rather than being shrink-to-fit; see .claude/context/ui.md. */
 #species-breakdown {
   border-collapse: collapse;
-  width: auto; /* deliberate — see .claude/context/ui.md for the Chromium gotcha */
+  width: 100%;
   table-layout: fixed;
 }
 
@@ -1003,10 +1022,13 @@ body {
   color: var(--text-dim);
 }
 
+/* A dark "instrument screen" set into the light paper panel, matching the
+   mock — a fixed dark ground independent of --ink (the panel's own light
+   background), since --series/--water-temp are tuned for a dark backdrop. */
 #season-chart svg {
   display: block;
   width: 100%;
-  height: 32px; /* explicit — an unset height lets the 10:1 viewBox drive the whole bar's height */
+  height: 40px; /* explicit — an unset height lets the 10:1 viewBox drive the whole bar's height */
   border-bottom: 1px solid var(--line-soft); /* stretched viewBox keeps x-axis aligned with the slider; see non-scaling-stroke below */
 }
 
@@ -2081,6 +2103,21 @@ body {
   #passage,
   #controls {
     grid-column: 1 / -1;
+  }
+
+  /* #passage's own base-rule max-width:460px (an ID selector) would
+     otherwise beat the `.report-body > .field { min-width: 0 }` reset above
+     on specificity alone regardless of source order — reasserting min-width
+     here, later and at equal ID specificity, is what actually wins. Without
+     it the grid-shrink fix that rule exists for stops applying to this one
+     field. max-width: none too — the desktop cap that protects #controls
+     from a wide-row flex split has nothing to protect here (this field
+     spans the full grid row on its own line), and left in place it would
+     just strand empty space beside a field that should fill its row like
+     every other one in this view. See .claude/context/ui.md. */
+  #passage {
+    min-width: 0;
+    max-width: none;
   }
 
   /* Field-level visual order for the mobile portrait layout — chart before
