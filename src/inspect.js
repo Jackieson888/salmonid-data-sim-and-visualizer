@@ -1,6 +1,4 @@
-// inspect.js — standalone single-fish viewer: species picker, turntable, anatomy-label overlay.
-// Design rationale, invariants, gotchas: .claude/context/inspect.md
-
+// Standalone single-fish viewer: species picker, turntable, anatomy-label overlay.
 import { inject as injectAnalytics } from "@vercel/analytics";
 import { injectSpeedInsights } from "@vercel/speed-insights";
 import { QUALITY } from "./quality.js";
@@ -8,9 +6,7 @@ import { QUALITY } from "./quality.js";
 injectAnalytics();
 injectSpeedInsights();
 
-// Only one instance is ever drawn here, so (unlike the river) this always
-// renders at the richest settings. realCaustics is forced off because this
-// page has no real accumulation texture for it to sample.
+// Only one instance is ever drawn here, so this always renders at the richest settings; realCaustics is forced off since there's no accumulation texture to sample.
 QUALITY.realCaustics = false;
 QUALITY.fishHighlights = true;
 
@@ -58,9 +54,7 @@ const fieldNotesSpeciesNameEl = document.getElementById(
 );
 const inspectBarToggle = document.getElementById("inspect-bar-toggle");
 
-// The species on show, in the order the panel lists them — largest salmonid
-// first, then down the run to the one that isn't a bony fish at all. The
-// river's own tables key off the same five (see SPECIES_KEYS in main.js).
+// The species on show, in the order the panel lists them — largest salmonid first, down to the one that isn't a bony fish at all.
 const SPECIES = [
   "chinook",
   // "jackChinook",
@@ -69,13 +63,10 @@ const SPECIES = [
   "lamprey",
 ];
 
-// Replaces the old `speciesSelect.value` reads. The picker is a list of
-// buttons now, so there is no control holding the current value — this is it.
+// The picker is a list of buttons, so there is no control holding the current value — this is it.
 let currentSpecies = "steelhead";
 
-// The view toggles (playing/rotate/labels) are buttons with aria-pressed
-// rather than checkboxes — these two helpers are the `.checked` read/write
-// every other line in this file used to reach for directly.
+// The view toggles are buttons with aria-pressed rather than checkboxes; these two helpers are the `.checked` read/write.
 function isPressed(btn) {
   return btn.getAttribute("aria-pressed") === "true";
 }
@@ -92,7 +83,7 @@ if (PREFERS_REDUCED_MOTION) {
   setPressed(rotateToggle, false);
 }
 
-// Plain neutral backdrop, no THREE lights (fish material is self-lit — see fishMesh.js).
+// Plain neutral backdrop, no THREE lights, since the fish material is self-lit.
 const scene = new THREE.Scene();
 const BACKDROP_COLOR = 0x0b0f13;
 scene.background = new THREE.Color(BACKDROP_COLOR);
@@ -119,15 +110,10 @@ let grid = null;
 
 // Points the camera/grid at the fish. Called on load/species-change/reset, never per frame.
 function frameCamera(bodyLength) {
-  // bbox center sits half a body length behind the nose (noseOffsetLocal in
-  // fishMesh.js); previewFish is nose-anchored at the origin heading +Z.
+  // bbox center sits half a body length behind the nose; previewFish is nose-anchored at the origin heading +Z.
   const target = new THREE.Vector3(0, 0, -bodyLength / 2);
   controls.target.copy(target);
-  // Backed off ~20% from the original 1.1/0.45/1.3 multipliers, same
-  // direction/framing — a portrait aspect narrows the horizontal FOV more
-  // than the vertical one (fov is vertical, see the camera constructor
-  // above), which clipped a wide-bodied species like steelhead at the
-  // original, tighter distance.
+  // Backed off from tighter multipliers, since a portrait aspect narrows horizontal FOV more than vertical and used to clip a wide-bodied species.
   camera.position.set(
     target.x + bodyLength * 1.3,
     target.y + bodyLength * 0.55,
@@ -142,8 +128,7 @@ function frameCamera(bodyLength) {
     grid.geometry.dispose();
     grid.material.dispose();
   }
-  // Colors matched to style.css's --line/--line-soft so the grid reads as
-  // this page's own chrome rather than an arbitrary three.js default.
+  // Colors matched to style.css's --line/--line-soft so the grid reads as this page's own chrome.
   grid = new THREE.GridHelper(bodyLength * 5, 20, 0x2c3841, 0x1b242a);
   grid.position.y = target.y - bodyLength * 0.35;
   scene.add(grid);
@@ -153,7 +138,7 @@ let lastBodyLength = 0;
 
 resetViewBtn.addEventListener("click", () => {
   if (lastBodyLength > 0) frameCamera(lastBodyLength);
-  // Camera jumps instantly, so labels must too — see snapLabelLayout.
+  // Camera jumps instantly, so labels must too.
   snapLabelLayout();
 });
 
@@ -167,9 +152,7 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
-// #inspect-panel's height is pinned to #inspect-bar's real box via --bar-h
-// (inspect.css) rather than a resize listener, since the bar's own height
-// depends on content this script fills in after first paint.
+// #inspect-panel's height is pinned to #inspect-bar's real box via --bar-h rather than a resize listener, since the bar's height depends on content this script fills in after first paint.
 new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty(
     "--bar-h",
@@ -178,27 +161,14 @@ new ResizeObserver(([entry]) => {
 }).observe(inspectBar);
 resize();
 
-// Field notes is the same drawer component as the river's own plates
-// drawer (see drawer.js/plates.js) — open/close, Escape-to-close and toggle
-// button state all come from there rather than a second hand-kept-in-sync
-// copy. Closed by default so the fish fills more of the screen; no
-// shortcutKey, unlike Plates' "p" — createDrawer() takes that as opt-in.
-// fieldNotesToggle stays a plain "Field Notes" open button always (static
-// markup, not JS-driven); fieldNotesClose is the dedicated icon inside the
-// panel itself.
+// Field notes uses the same drawer component as the river's own plates drawer; closed by default so the fish fills more of the screen.
 createDrawer({
   panel: inspectPanel,
   toggle: fieldNotesToggle,
   closeButton: fieldNotesClose,
 });
 
-// The bottom bar collapses to just species selection (see
-// #inspect-bar.collapsed, inspect.css). Defaults compact on a small/short
-// viewport (read once at boot, not watched — same one-time-read convention
-// PREFERS_REDUCED_MOTION above uses) so the model reads larger on a phone
-// without an extra tap; desktop opens full.
-// inspectBarToggle carries a static chevron icon (inspect.html), not text —
-// its accessible name comes from aria-label, not textContent.
+// The bottom bar collapses to just species selection; defaults compact on a small/short viewport, read once at boot, so the model reads larger on a phone.
 function setBarCollapsed(collapsed) {
   inspectBar.classList.toggle("collapsed", collapsed);
   inspectBarToggle.setAttribute("aria-pressed", String(collapsed));
@@ -210,8 +180,7 @@ function setBarCollapsed(collapsed) {
 inspectBarToggle.addEventListener("click", () =>
   setBarCollapsed(!inspectBar.classList.contains("collapsed")),
 );
-// Same "tap the collapsed bar to expand" surface as the river page's
-// #report — see the matching listener in main.js for the full rationale.
+// Same "tap the collapsed bar to expand" surface as the river page's #report.
 inspectBar.addEventListener("click", (e) => {
   if (!inspectBar.classList.contains("collapsed")) return;
   if (e.target.closest("button, a, input")) return;
@@ -222,30 +191,27 @@ setBarCollapsed(
     matchMedia("(max-width: 700px), (max-height: 560px)").matches,
 );
 
-// The one fish — built from boids.js's real Fish class, then overridden below
-// for a fish that isn't part of a running simulation.
+// The one fish — built from boids.js's real Fish class, then overridden below for a fish that isn't part of a running simulation.
 let previewFish = null;
 
 function makePreviewFish(species) {
   const fish = new Fish(0, 0, species);
-  // Forces past the spawn-fade window (Fish.opacity ramps via age; nothing here steps a Flock).
+  // Forces past the spawn-fade window; nothing here steps a Flock.
   fish.age = 999;
   // Depth wander is a flocking concern; pin flat instead of a random depth.
   fish.depth = 0;
   fish.depthTarget = 0;
-  // Heading fixed to +Z (matches frameCamera) so a species change doesn't spin the fish.
+  // Heading fixed to +Z, matching frameCamera, so a species change doesn't spin the fish.
   fish.vx = 0;
   fish.vy = 1;
-  // Natural cruise speed/full stroke, not a tunable (1.2 matches BASE_MAX_SPEED in main.js).
+  // Natural cruise speed/full stroke, matching BASE_MAX_SPEED in main.js.
   fish.smoothSpeed = 1.2;
   fish.swimAmplitude = 1;
   return fish;
 }
 
 let fishRenderer = null;
-// assetsByUrlRef is the full Map loadFishAssets() resolves to; fishAssets is
-// the current species' own entry (resolveAnatomy wants the Map, swim-bend
-// sampling wants one entry directly).
+// assetsByUrlRef is the full Map loadFishAssets() resolves to; fishAssets is the current species' own entry.
 let assetsByUrlRef = null;
 let fishAssets = null;
 let anatomyParts = [];
@@ -264,9 +230,7 @@ const COMMON_NAMES = {
   shad: "American Shad",
   lamprey: "Pacific Lamprey",
 };
-// Field notes for the panel's "Field notes" section, paraphrased from
-// public/*-field-notes.md (`source`). Grouped by category (FIELD_NOTE_CATEGORIES)
-// rather than one flat list; a species missing a category simply omits it.
+// Field notes for the panel's "Field notes" section, paraphrased from public/*-field-notes.md; grouped by category.
 const SPECIES_FIELD_NOTES = {
   chinook: {
     intro:
@@ -433,8 +397,7 @@ const SPECIES_FIELD_NOTES = {
   },
 };
 
-// Fixed display order/labels for the fact categories above (same order every
-// species), roughly following how a field guide itself progresses.
+// Fixed display order/labels for the fact categories above, roughly following how a field guide itself progresses.
 const FIELD_NOTE_CATEGORIES = [
   ["identification", "Identification"],
   ["range", "Range & habitat"],
@@ -458,12 +421,10 @@ const MONTH_NAMES = [
   "Dec",
 ];
 
-// All eight DART-counted species (five modelled + three not) — denominator
-// for "share of run" below, so the figure is a share of everything counted.
+// All eight DART-counted species — denominator for "share of run" below, so the figure is a share of everything counted.
 const ALL_COUNTED = [...SPECIES, "sockeye", "coho", "jackCoho"];
 
-// Per-day DART counts for one species (see data.js) — everything the panel
-// reports comes from this one pass.
+// Per-day DART counts for one species; everything the panel reports comes from this one pass.
 function seasonStatsFor(species) {
   let total = 0;
   let peakValue = -1;
@@ -487,8 +448,7 @@ function seasonStatsFor(species) {
     }
   }
 
-  // Dates by which 10%/90% of the season's fish had passed — more honest than
-  // first-to-last, which one stray fish in February can stretch across the year.
+  // Dates by which 10%/90% of the season's fish had passed — more honest than first-to-last, which a stray fish can stretch across the year.
   let running = 0;
   let tenth = null;
   let ninetieth = null;
@@ -522,7 +482,7 @@ function speciesExtraRows(species) {
       wild += day.wildSteelhead ?? 0;
       all += day.steelhead ?? 0;
     }
-    // A SUBSET of the steelhead count, not an addition (Stlhd already includes both).
+    // A subset of the steelhead count, not an addition — Stlhd already includes both.
     if (all > 0) {
       rows.push(["Wild (unclipped)", `${((wild / all) * 100).toFixed(1)}%`]);
     }
@@ -545,7 +505,7 @@ function speciesExtraRows(species) {
   }
 
   if (species === "chinook" || species === "jackChinook") {
-    // Corps run schedule per date (CHINOOK_RUN_NAMES in dart/parseAdultDaily.js), not per-fish.
+    // Corps run schedule per date, not per-fish.
     const byRun = new Map();
     for (const day of runData) {
       if (!day.chinookRun) continue;
@@ -587,9 +547,7 @@ function labelledRow(label, value) {
   return row;
 }
 
-// ---------------------------------------------------------------------
 // The species picker.
-// ---------------------------------------------------------------------
 const speciesButtons = new Map();
 
 function buildSpeciesList() {
@@ -599,8 +557,7 @@ function buildSpeciesList() {
     btn.setAttribute("role", "radio");
     btn.dataset.species = species;
 
-    // The key square carries the species' water tint, so the panel and the
-    // fish in the river are keyed the same colour.
+    // The key square carries the species' water tint, so the panel and the fish in the river are keyed the same colour.
     btn.appendChild(el("i", "species-key"));
     const names = el("span", "species-names");
     names.appendChild(el("span", "species-common", COMMON_NAMES[species]));
@@ -612,8 +569,7 @@ function buildSpeciesList() {
     speciesButtons.set(species, btn);
   }
 
-  // Roving focus: the group is one tab stop and the arrows move within it,
-  // which is what a radiogroup is expected to do.
+  // Roving focus: the group is one tab stop and the arrows move within it, as a radiogroup is expected to do.
   speciesListEl.addEventListener("keydown", (e) => {
     const step =
       e.key === "ArrowDown" || e.key === "ArrowRight"
@@ -635,16 +591,12 @@ function markSpeciesSelection() {
     const selected = species === currentSpecies;
     btn.setAttribute("aria-checked", String(selected));
     btn.classList.toggle("selected", selected);
-    // Only the selected option is in the tab order — the rest are reached
-    // with the arrows.
+    // Only the selected option is in the tab order; the rest are reached with the arrows.
     btn.tabIndex = selected ? 0 : -1;
   }
 }
 
-// Fish silhouettes for the length scale, traced from the real GLB models
-// (scripts/render-fish-silhouettes.mjs) into public/silhouettes/*.png, applied
-// as a CSS mask (.len-fish in inspect.css). jackChinook rides chinook's PNG,
-// same as it rides chinook's GLB in the river (SPECIES_MODEL_URL, fishMesh.js).
+// Fish silhouettes for the length scale, traced from the real GLB models and applied as a CSS mask; jackChinook rides chinook's PNG.
 const SILHOUETTE_IMAGE_KEY = {
   chinook: "chinook",
   jackChinook: "chinook",
@@ -659,13 +611,12 @@ function buildFishSilhouette(species) {
   return fish;
 }
 
-// Adult length, all five species on one scale — built once, only re-marked on
-// species change (the silhouettes themselves never change).
+// Adult length, all five species on one scale — built once, only re-marked on species change.
 const LENGTH_AXIS_MAX = 48; // inches; clears the longest Chinook
 const LENGTH_AXIS_TICKS = [0, 12, 24, 36, 48];
 const lengthRows = new Map();
 
-// Short row labels — full common names don't fit this column (picker above has the full names).
+// Short row labels — full common names don't fit this column.
 const SHORT_NAMES = {
   chinook: "Chinook",
   jackChinook: "Jack",
@@ -674,8 +625,7 @@ const SHORT_NAMES = {
   lamprey: "Lamprey",
 };
 
-// Scales all silhouettes down together (aspect-ratio ties height to width in
-// inspect.css); the real min-max span underneath is unaffected.
+// Scales all silhouettes down together; the real min-max span underneath is unaffected.
 const LENGTH_FISH_SCALE = 0.5;
 
 function buildLengthScale() {
@@ -703,8 +653,7 @@ function buildLengthScale() {
     // The silhouette spans the real min-max range, not a single figure.
     const track = el("span", "len-track");
     const fish = buildFishSilhouette(species);
-    // margin-left (not absolute left) keeps .len-fish in normal flow so its
-    // aspect-ratio height sizes .len-track (see .len-fish in inspect.css).
+    // margin-left, not absolute left, keeps .len-fish in normal flow so its aspect-ratio height sizes .len-track.
     fish.style.marginLeft = `${(min / LENGTH_AXIS_MAX) * 100}%`;
     fish.style.width = `${((max - min) / LENGTH_AXIS_MAX) * 100 * LENGTH_FISH_SCALE}%`;
     track.appendChild(fish);
@@ -715,8 +664,7 @@ function buildLengthScale() {
     lengthRows.set(species, row);
   }
 
-  // Axis reuses the row layout (blank cells + a real track) so ticks land
-  // exactly on their inch marks instead of using hand-guessed margins.
+  // Axis reuses the row layout so ticks land exactly on their inch marks instead of using hand-guessed margins.
   const axisRow = el("div", "len-row len-axis-row");
   axisRow.appendChild(el("span", "len-name"));
   const axisTrack = el("span", "len-track len-axis-track");
@@ -736,12 +684,11 @@ function markLengthSelection() {
   }
 }
 
-// This species' season at the dam. The sparkline shares seasonScale.js's
-// x-axis and √ scale with the river chart and every plate in the drawer.
+// This species' season at the dam; the sparkline shares seasonScale.js's x-axis and √ scale with the river chart.
 const SPARK_W = 300;
 const SPARK_H = 46;
 const SVG_NS = "http://www.w3.org/2000/svg";
-// Quarter-year rules, looked up per season (not every season reaches all three).
+// Quarter-year rules, looked up per season; not every season reaches all three.
 const SPARK_AXIS_MONTHS = [4, 7, 10];
 
 function buildSparkline(species, stats) {
@@ -881,12 +828,7 @@ function updateSeasonCard(species) {
 function updateFieldGuide(species) {
   fieldGuideEl.replaceChildren();
 
-  // Names the species explicitly since the bar may be scrolled out of view.
-  // #field-notes-head lives outside #field-guide now (inspect.html), sharing
-  // the panel's top row with .drawer-close — it doesn't get replaceChildren'd
-  // or fadeContent'd along with the rest, just a plain text swap, same as
-  // #masthead's identity block not fading through the river's own
-  // season-switch dim (ui.md).
+  // Names the species explicitly since the bar may be scrolled out of view; a plain text swap, not replaceChildren'd/fadeContent'd.
   fieldNotesSpeciesNameEl.textContent = COMMON_NAMES[species];
 
   const notes = SPECIES_FIELD_NOTES[species];
@@ -912,15 +854,8 @@ function updateFieldGuide(species) {
   fieldGuideEl.appendChild(link);
 }
 
-// Dips an element's own content to opacity 0 (.content-fading in
-// inspect.css), swaps it while invisible, then lets it fade back in — used
-// below for the two panels that replaceChildren() wholesale on a species
-// switch (the length scale and species list only ever toggle a class, so a
-// plain CSS transition already covers them). Keyed by element in case a
-// fast arrow-key rove through the species list calls this again before a
-// pending swap has landed: the stale timeout is cancelled so only the
-// last-requested species ever actually applies, and the panel stays dimmed
-// through the rove instead of flickering up and down each step.
+// Dips an element's content to opacity 0, swaps it while invisible, then fades it back in. Keyed by element so a fast
+// arrow-key rove cancels the stale timeout and only the last-requested species ever actually applies.
 const CONTENT_FADE_MS = 120; // matches --dur-fast in style.css
 const pendingContentFade = new WeakMap();
 
@@ -957,7 +892,7 @@ function setSpecies(species) {
     if (constructionActive || constructionExiting)
       ensureConstructionAssets(species);
   }
-  // Re-push turbidity — its density scales by body length, which just changed.
+  // Re-push turbidity, since its density scales by body length, which just changed.
   applyTurbidity();
 }
 
@@ -974,14 +909,13 @@ labelsToggle.addEventListener("click", () => {
   setPressed(labelsToggle, !isPressed(labelsToggle));
 });
 
-// Turbidity — pushes the fish material's own uFogDensity/uFogColor (see
-// setBounds in scene/fishMesh.js for what normally drives those on the river).
+// Turbidity: pushes the fish material's own uFogDensity/uFogColor.
 const BACKDROP_THREE = new THREE.Color(BACKDROP_COLOR);
 // Deliberately its own muddy tone, not a reuse of the river's blue-green FOG_COLOR.
 const TURBID_COLOR = new THREE.Color(0x332c1e);
 const inspectFogColor = new THREE.Color();
 
-// Scales by body length so falloff isn't tuned in raw world units (lamprey vs. Chinook).
+// Scales by body length so falloff isn't tuned in raw world units.
 const TURBIDITY_DENSITY_K = 0.85;
 
 const TURBIDITY_LABELS = [
@@ -999,17 +933,13 @@ function turbidityLabel(value) {
   return label;
 }
 
-// Silt — a small particle field parallel to scene/particles.js's river field,
-// but purpose-built (no `bounds`/caustics texture on this page). Origins live
-// in a unit cube ([-0.5, 0.5]^3), scaled by uVolumeMin/uVolumeSize each frame,
-// so updateParticleVolume() can resize for a new species via four uniforms
-// rather than rebuilding the instance buffers.
+// Silt: a small particle field parallel to scene/particles.js's, but purpose-built with no `bounds`/caustics texture here.
+// Origins live in a unit cube, scaled by uVolumeMin/uVolumeSize each frame, so resizing for a new species just updates uniforms.
 const PARTICLE_COUNT = 240;
 const PARTICLE_COLOR = new THREE.Color(0x9c8a63);
 // Full-turbidity ceiling — silt should read as texture, not individual specks.
 const PARTICLE_MAX_OPACITY = 0.5;
-// Field reach and mote size as fractions of referenceLength (applyTurbidity),
-// so scale matches whichever fish is on screen.
+// Field reach and mote size as fractions of referenceLength, so scale matches whichever fish is on screen.
 const PARTICLE_VOLUME_SPAN_FRAC = 2.6;
 const PARTICLE_VOLUME_HEIGHT_FRAC = 1.6;
 const PARTICLE_MIN_SIZE_FRAC = 0.012;
@@ -1031,17 +961,15 @@ const particleVertexShader = () => /* glsl */ `
 
   void main() {
     vec3 drifted = uVolumeMin + (aOrigin + 0.5) * uVolumeSize;
-    // Gentle drift/churn in absolute world units (not scaled by volume) —
-    // see scene/particles.js's DRIFT_X/BOB_AMPLITUDE for the fuller version.
+    // Gentle drift/churn in absolute world units, not scaled by volume.
     drifted.x += uTime * 6.0;
     drifted.y += sin(uTime * 0.3 + aPhase) * 2.5;
     drifted = mod(drifted - uVolumeMin, uVolumeSize) + uVolumeMin;
 
-    // Biased toward small motes, same reasoning as scene/particles.js.
+    // Biased toward small motes.
     float size = mix(uMinSize, uMaxSize, aSizeSeed * aSizeSeed);
 
-    // Billboard toward the camera — corners offset along the view matrix's
-    // own right/up axes, same technique scene/particles.js uses.
+    // Billboard toward the camera: corners offset along the view matrix's own right/up axes.
     vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
     vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
     vec3 worldPos = drifted + (right * position.x + up * position.y) * size;
@@ -1060,8 +988,7 @@ const particleFragmentShader = /* glsl */ `
   varying vec3 vWorldPos;
 
   void main() {
-    // Soft round mote — a hard-edged quad reads as a square this close to
-    // the camera.
+    // Soft round mote — a hard-edged quad reads as a square this close to the camera.
     float r = length(vQuad) * 2.0;
     float alpha = (1.0 - smoothstep(0.35, 1.0, r)) * uOpacity;
     alpha *= 1.0 - fogAmount(vWorldPos);
@@ -1162,18 +1089,15 @@ function applyTurbidity() {
     const uniforms = child.material?.uniforms;
     if (!uniforms?.uFogDensity) return;
     uniforms.uFogDensity.value = density;
-    // Shared across every species' material (see FOG_COLOR's own note in
-    // scene/fog.js) — mutating it via any one of them reaches all of them.
+    // Shared across every species' material; mutating it via any one of them reaches all of them.
     uniforms.uFogColor.value.copy(inspectFogColor);
   });
 }
 
 turbiditySlider.addEventListener("input", applyTurbidity);
 
-// Construction — loops the fish through five build stages (Skeleton →
-// Wireframe → Polygons → Texture → Final) by crossfading three objects: the
-// armature, a dedicated wireframe mesh, and fishRenderer's own instanced mesh
-// (see applyConstructionWeights for how one weight set drives all three).
+// Construction: loops the fish through five build stages (Skeleton → Wireframe → Polygons → Texture → Final) by
+// crossfading three objects: the armature, a dedicated wireframe mesh, and fishRenderer's own instanced mesh.
 const CONSTRUCTION_STAGE_NAMES = [
   "Skeleton",
   "Wireframe",
@@ -1188,8 +1112,7 @@ const CONSTRUCTION_STAGE_WEIGHTS = [
   { wArmature: 0, wWireframe: 0, wReal: 1, textureMix: 1, highlightsMix: 0 }, // Texture
   { wArmature: 0, wWireframe: 0, wReal: 1, textureMix: 1, highlightsMix: 1 }, // Final
 ];
-// Transition doubled from an original 650ms, which (lerped linearly) read as
-// a pop rather than a fade — see easeConstructionP. Full loop ≈ 10.75s.
+// Transition doubled from an original 650ms, which lerped linearly read as a pop rather than a fade. Full loop ≈ 10.75s.
 const CONSTRUCTION_HOLD_MS = 850;
 const CONSTRUCTION_TRANSITION_MS = 1300;
 // Fade back to Final when Construction is turned off mid-loop.
@@ -1217,8 +1140,7 @@ let constructionExiting = false;
 let constructionExitFrom = CONSTRUCTION_STAGE_WEIGHTS[4];
 let constructionExitElapsed = 0;
 let constructionElapsed = 0;
-// The weights applyConstructionWeights last actually set (needed to fade FROM
-// when Construction is turned off mid-loop).
+// The weights applyConstructionWeights last actually set, needed to fade from when Construction is turned off mid-loop.
 let lastConstructionWeights = CONSTRUCTION_STAGE_WEIGHTS[4];
 let constructionArmature = null;
 let constructionArmatureEdges = null;
@@ -1231,7 +1153,7 @@ const armVecB = new THREE.Vector3();
 const armMatrix = new THREE.Matrix4();
 const wireframeMatrix = new THREE.Matrix4();
 
-// A function for the same reason fishMesh.js's own shaders are — see there.
+// A function so its interpolated constant resolves at build time, same as fishMesh.js's own shaders.
 const wireframeVertexShader = () => /* glsl */ `
   attribute float aVertexIndex;
   uniform sampler2D uVat;
@@ -1250,8 +1172,7 @@ const wireframeVertexShader = () => /* glsl */ `
     return texture2D(uVat, uv).xyz;
   }
 
-  // Stable per-vertex pseudo-random value, off the REST position (not
-  // animated, or the reveal pattern itself would swim).
+  // Stable per-vertex pseudo-random value, off the rest position, not animated, or the reveal pattern itself would swim.
   float hash(vec3 p) {
     return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
   }
@@ -1274,10 +1195,8 @@ const wireframeVertexShader = () => /* glsl */ `
 
 const wireframeFragmentShader = /* glsl */ `
   uniform vec3 uLightDir;
-  // Fraction of edges revealed (0-1), NOT a plain opacity — alpha blending
-  // compounds across overlapping edges (measured: ~4% opacity already reads
-  // as ~85%+ coverage), so each edge is fully drawn or not, decided by its
-  // own vReveal against this fraction with a narrow soft band at the threshold.
+  // Fraction of edges revealed (0-1), not a plain opacity, since alpha blending compounds across overlapping edges;
+  // each edge is fully drawn or not, decided by its own vReveal against this fraction.
   uniform float uRevealFraction;
   varying vec3 vNormal;
   varying float vReveal;
@@ -1310,9 +1229,7 @@ function disposeConstructionAssets() {
   constructionAssetSpecies = null;
 }
 
-// Builds the armature + wireframe mesh for `species`, on demand (when
-// Construction is switched on, or on a species change while it's running)
-// rather than kept alive the whole time Construction is off.
+// Builds the armature + wireframe mesh for `species` on demand, rather than kept alive the whole time Construction is off.
 function ensureConstructionAssets(species) {
   if (!assetsByUrlRef || constructionAssetSpecies === species) return;
   disposeConstructionAssets();
@@ -1328,7 +1245,7 @@ function ensureConstructionAssets(species) {
     "position",
     new THREE.BufferAttribute(new Float32Array(edges.length * 2 * 3), 3),
   );
-  // Matches style.css's --accent (repeated here — no way to read a CSS var from JS).
+  // Matches style.css's --accent, repeated here since there's no way to read a CSS var from JS.
   const armMaterial = new THREE.LineBasicMaterial({
     color: 0xc1272d,
     transparent: true,
@@ -1369,9 +1286,7 @@ function ensureConstructionAssets(species) {
   constructionAssetSpecies = species;
 }
 
-// Re-samples the armature/wireframe off the current swim pose — rides
-// fishRenderer's own computed transform rather than re-deriving the
-// tailbeat/roll physics (same approach as updateGhostOverlay in fishMesh.js).
+// Re-samples the armature/wireframe off the current swim pose, riding fishRenderer's own computed transform rather than re-deriving the tailbeat/roll physics.
 function updateConstructionPose() {
   if (!fishAssets || !fishRenderer) return;
   const instanceMesh = fishRenderer.meshForSpecies(currentSpecies);
@@ -1413,8 +1328,7 @@ function updateConstructionPose() {
   }
 }
 
-// Applies one weight set to all three participants; fishRenderer's mesh is
-// transparent only mid-crossfade, opaque/depth-writing at the ends.
+// Applies one weight set to all three participants; fishRenderer's mesh is transparent only mid-crossfade, opaque at the ends.
 function applyConstructionWeights(w) {
   // Recorded so turning Construction off mid-loop has a real starting point to fade from.
   lastConstructionWeights = w;
@@ -1423,10 +1337,7 @@ function applyConstructionWeights(w) {
     constructionArmature.material.opacity = w.wArmature;
   }
   if (wireframeMesh) {
-    // Drives uRevealFraction (see the note on that uniform above). Squashed
-    // further by this power curve — a connected mesh fills in faster than
-    // the raw fraction suggests, since any edge with either endpoint below
-    // threshold shows at least partially.
+    // Drives uRevealFraction; squashed further since a connected mesh fills in faster than the raw fraction suggests.
     const reveal = Math.pow(w.wWireframe, 1.8);
     wireframeMesh.visible = reveal > 0.001;
     wireframeMesh.material.uniforms.uRevealFraction.value = reveal;
@@ -1448,8 +1359,7 @@ function applyConstructionWeights(w) {
   mesh.visible = w.wReal > 0.001;
 }
 
-// Advances the loop by dtMs — a pure function of accumulated elapsed time, so
-// it can't drift out of sync the way a hand-rolled phase/countdown could.
+// Advances the loop by dtMs — a pure function of accumulated elapsed time, so it can't drift the way a hand-rolled countdown could.
 function tickConstruction(dtMs) {
   constructionElapsed += dtMs;
   const slotMs = CONSTRUCTION_HOLD_MS + CONSTRUCTION_TRANSITION_MS;
@@ -1520,12 +1430,10 @@ function tickConstructionLifecycle(dtMs) {
   }
 }
 
-// Anatomy overlay — leader lines from the projected screen position of the
-// resolved anchors (scene/fishAnatomy.js). Held still against the tailbeat by
-// fixed gutters, y-damping, column hysteresis, and a two-pass vertical settle.
+// Anatomy overlay: leader lines from the projected screen position of the resolved anchors. Held still against the tailbeat
+// by fixed gutters, y-damping, column hysteresis, and a two-pass vertical settle.
 
-// Gutter distance is deliberately modest — pushing columns further out makes
-// leaders long and flat, which lies across the body worse than a close label would.
+// Gutter distance is deliberately modest — pushing columns further out makes leaders long and flat, lying across the body worse than a close label would.
 const LABEL_GUTTER_FRACTION = 0.22;
 const LABEL_GUTTER_MAX = 230;
 // Wider than needed for text alone — spreads the column enough for steep leader angles.
@@ -1541,8 +1449,7 @@ const LABEL_EDGE_MARGIN = 130;
 // Fraction of remaining distance closed per frame — swallows the tailbeat without visibly crawling.
 const LABEL_DAMPING = 0.18;
 
-// Leader endpoint = ANIMATED vertex (must be exact); layout input = REST
-// vertex under the same transform (tracks camera/body, not the tailbeat).
+// Leader endpoint is the animated vertex; layout input is the rest vertex under the same transform (tracks camera/body, not the tailbeat).
 // Distance past midline before a label changes sides — prevents tailbeat-driven flicker.
 const COLUMN_HYSTERESIS_PX = 40;
 
@@ -1565,8 +1472,7 @@ controls.addEventListener("end", () => {
 });
 
 function setAttrIfMoved(node, name, value) {
-  // Sub-pixel writes are invisible and still dirty the SVG's layout, and
-  // there are ~33 of them a frame.
+  // Sub-pixel writes are invisible and still dirty the SVG's layout, and there are ~33 of them a frame.
   const next = value.toFixed(1);
   if (node.getAttribute(name) !== next) node.setAttribute(name, next);
 }
@@ -1617,8 +1523,7 @@ function resetLabelLayout() {
   labelState.clear();
 }
 
-// Drops remembered positions so the next frame snaps instead of easing
-// (needed after an instant camera jump like Reset view).
+// Drops remembered positions so the next frame snaps instead of easing, needed after an instant camera jump like Reset view.
 function snapLabelLayout() {
   for (const state of labelState.values()) {
     state.labelY = null;
@@ -1642,9 +1547,7 @@ function renderAnatomyOverlay() {
   const height = window.innerHeight;
   // Computed here because shiftPx needs it first; reused below for the bandBottom/ceiling clamps.
   const barRect = inspectBar.getBoundingClientRect();
-  // #fish-canvas is shifted up by this amount (inspect.css); the un-shifted
-  // overlay subtracts it from every fish-tracking coordinate, but not label
-  // text positions (already bounded by the fan below).
+  // #fish-canvas is shifted up by this amount; the un-shifted overlay subtracts it from every fish-tracking coordinate.
   const shiftPx = barRect.height / 2;
   instanceMesh.getMatrixAt(0, tmpMatrix);
 
@@ -1659,9 +1562,7 @@ function renderAnatomyOverlay() {
     );
     tmpVec.applyMatrix4(tmpMatrix);
 
-    // Facing test only for paired lateral features (|part.side| > 0.5) — a
-    // midline fin's face normal points sideways even on the midline, so this
-    // test would make it blink out for half of every rotation.
+    // Facing test only for paired lateral features — a midline fin's normal points sideways even on the midline.
     const screen = tmpVec.clone().project(camera);
     if (Math.abs(part.side) > 0.5) {
       tmpNormal.copy(part.restNormal).transformDirection(tmpMatrix);
@@ -1687,12 +1588,8 @@ function renderAnatomyOverlay() {
     });
   }
 
-  // The panel used to be avoided with a per-anchor test; that broke once the
-  // panel grew to nearly full height (it captured the whole right half). Now
-  // the right column's x is just clamped clear of the panel once, below.
+  // The right column's x is clamped clear of the panel once, below; barRect clips the bottom the same way.
   const panelRect = inspectPanel.getBoundingClientRect();
-  // barRect (measured above) clips the bottom the same way panelRect clips
-  // the right — see bandBottom/ceiling below.
 
   // The two columns, fixed for the frame and derived from the viewport, not any anchor.
   const gutter = Math.min(width * LABEL_GUTTER_FRACTION, LABEL_GUTTER_MAX);
@@ -1700,19 +1597,14 @@ function renderAnatomyOverlay() {
   const rightX = Math.min(
     width / 2 + gutter,
     width - LABEL_EDGE_MARGIN,
-    // Never under the panel — rightX is where text STARTS, so it needs the
-    // full LABEL_EDGE_MARGIN, not a hairline gap (a smaller gap once let
-    // "Second Dorsal Fin" render on top of the panel).
+    // Never under the panel — rightX is where text starts, so it needs the full margin, not a hairline gap.
     panelRect.left - LABEL_EDGE_MARGIN,
   );
 
-  // Falls back to one column below 120px between the two, or (second clause)
-  // when the panel has pulled rightX in far enough to sit too close to center
-  // even though it technically still fits two columns.
+  // Falls back to one column below 120px between the two, or when the panel has pulled rightX too close to center.
   const singleColumn = rightX - leftX < 120 || width - leftX - rightX > 80;
 
-  // Column assignment, with hysteresis against whichever side each part was
-  // on last frame. A part with no history takes the plain midline test.
+  // Column assignment, with hysteresis against whichever side each part was on last frame.
   for (const v of visible) {
     const previous = labelState.get(v.part.id);
     const wasLeft = previous?.onLeft;
@@ -1727,8 +1619,7 @@ function renderAnatomyOverlay() {
     }
   }
 
-  // Sorted on the smoothed height, so the running order of a column does not
-  // reshuffle every time two features cross during a stroke.
+  // Sorted on the smoothed height, so the running order of a column doesn't reshuffle every time two features cross.
   const left = visible
     .filter((v) => v.onLeft)
     .sort((a, b) => a.layoutY - b.layoutY);
@@ -1737,8 +1628,7 @@ function renderAnatomyOverlay() {
     .sort((a, b) => a.layoutY - b.layoutY);
 
   const bandTop = height * LABEL_BAND_TOP;
-  // Never under the bar (same reasoning as rightX); floored so a very short
-  // viewport can't invert the band.
+  // Never under the bar; floored so a very short viewport can't invert the band.
   const bandBottom = Math.max(
     bandTop + 60,
     Math.min(height * LABEL_BAND_BOTTOM, barRect.top - 12),
@@ -1747,8 +1637,7 @@ function renderAnatomyOverlay() {
   for (const column of [left, right]) {
     if (column.length === 0) continue;
 
-    // Fan: pulls each label from its anchor height toward an even share of
-    // the band, keeping higher features above lower ones so leaders never cross.
+    // Fan: pulls each label from its anchor height toward an even share of the band, keeping higher features above lower ones.
     const span = bandBottom - bandTop;
     column.forEach((v, i) => {
       const slot =
@@ -1764,8 +1653,7 @@ function renderAnatomyOverlay() {
       v.labelY = Math.max(v.labelY, previousY + LABEL_MIN_GAP);
       previousY = v.labelY;
     }
-    // Up-pass: undoes the down-pass's one-way drift, which would otherwise
-    // walk a crowded column off the bottom.
+    // Up-pass: undoes the down-pass's one-way drift, which would otherwise walk a crowded column off the bottom.
     let ceiling = Math.min(height - LABEL_EDGE_MARGIN / 4, barRect.top - 12);
     for (let i = column.length - 1; i >= 0; i--) {
       column[i].labelY = Math.min(column[i].labelY, ceiling);
@@ -1831,17 +1719,13 @@ function renderAnatomyOverlay() {
   }
 }
 
-// Boot the panel — placed here (not beside its functions) because setSpecies()
-// touches labelState, declared just above; earlier placement hit the TDZ.
+// Boot the panel — placed here, not beside its functions, since setSpecies() touches labelState, declared just above.
 initInsightToast();
 buildInspectParticles();
 buildSpeciesList();
 buildLengthScale();
 setSpecies(currentSpecies);
 
-// ---------------------------------------------------------------------
-// Animation loop
-// ---------------------------------------------------------------------
 let simTime = 0;
 let lastFrameTime = null;
 
@@ -1858,9 +1742,7 @@ function loop(t) {
   controls.update();
 
   if (fishRenderer && previewFish) {
-    // dt in 60fps-frame units (matches main.js) — fishMesh.js accumulates the
-    // tailbeat per call, so an unconverted dt would make stroke rate
-    // refresh-rate dependent. Clamped against a backgrounded tab's huge delta.
+    // dt in 60fps-frame units, matching main.js, or stroke rate would be refresh-rate dependent; clamped against a backgrounded tab's huge delta.
     fishRenderer.update(
       [previewFish],
       simTime,
@@ -1884,9 +1766,7 @@ loadFishAssets()
     fishRenderer = createFishInstancedMesh(assetsByUrl, 1);
     scene.add(fishRenderer.mesh);
 
-    // River's uCausticsStrength assumes depth/fog dimming this page doesn't
-    // have, so it'd read as flat green blotches — overridden directly rather
-    // than adding a new buildSpeciesRenderer param.
+    // River's uCausticsStrength assumes depth/fog dimming this page doesn't have, so it's overridden directly here.
     fishRenderer.mesh.traverse((child) => {
       if (child.material?.uniforms?.uCausticsStrength) {
         child.material.uniforms.uCausticsStrength.value = 3;

@@ -1,21 +1,14 @@
-// terrain.js
-// Design rationale, invariants, gotchas: .claude/context/scene/environment.md
-// The riverbed: a flat plane below the water surface, drawing a color, a
-// little mottling, and a fog falloff. Still the caustics *receiver* — see
-// environment.md before deleting it from the environment map.
-
+// The riverbed: a flat plane below the water surface, drawing a color, mottling, and fog falloff — also the caustics receiver.
 import * as THREE from "three";
 import { EDGE_FADE_GLSL, glslFloat as f } from "./glsl.js";
 import { FOG_GLSL, FOG_COLOR, fogDensity, fogDepthRate } from "./fog.js";
 import { seasonForDay } from "./season.js";
 import { waterWorldSize, waterSizeMultiplier } from "./water.js";
 
-// Floor depth below the water surface, as a fraction of bounds.height. Was
-// 0.5; see environment.md for why the bed was brought into the near field.
+// Floor depth below the water surface, as a fraction of bounds.height.
 export const RIVER_DEPTH_FRAC = 0.34;
 
-// Constant blend toward the fog color, applied after the distance falloff —
-// unlike applyFog this never fully resolves, even under the camera.
+// Constant blend toward the fog color that never fully resolves, even under the camera.
 const TERRAIN_HAZE = 0.86;
 
 // Fine per-fragment mottling, deliberately near-invisible.
@@ -30,9 +23,7 @@ const TERRAIN_VERTEX_SHADER = /* glsl */ `
   varying vec3 vWorldPos;
 
   void main() {
-    // Geometry is already translated into world space at build time (see
-    // buildTerrainMesh) and this mesh never itself moves, so the raw position
-    // IS the world position the fog and edge fade need.
+    // Geometry is already translated into world space at build time and never moves.
     vWorldPos = position;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
@@ -70,12 +61,10 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
       + ${f(SILT_NOISE_STRENGTH)} * silt);
 
     color = applyFog(color, vWorldPos);
-    // fogColorAt(), not uFogColor: the bed is the deepest surface in the
-    // scene, so it never resolves out of the depth ramp's dark end.
+    // fogColorAt(), not uFogColor: the bed is the deepest surface, so it stays at the depth ramp's dark end.
     color = mix(color, fogColorAt(vWorldPos), ${f(TERRAIN_HAZE)});
 
-    // Alpha fade, not opaque — kept in the transparent queue. See
-    // environment.md for why an opaque bed was tried and reverted.
+    // Alpha fade, not opaque, so the edge dissolves rather than cutting off hard.
     float edgeFade =
       planeEdgeFade(vWorldPos.xz, center, planeHalfSize, coreFrac);
 
@@ -84,20 +73,16 @@ const TERRAIN_FRAGMENT_SHADER = /* glsl */ `
 `;
 
 export function buildTerrainMesh(bounds) {
-  // Oversized and re-centered on bounds, like buildWaterMesh (see water.js),
-  // so the edge dissolves into fog instead of cutting off as a hard line.
+  // Oversized and re-centered on bounds, like buildWaterMesh, so the edge dissolves into fog.
   const depth = riverDepth(bounds);
   const { width: planeWidth, height: planeHeight } = waterWorldSize(bounds);
   const centerX = bounds.width / 2;
   const centerZ = bounds.height / 2;
 
-  // Two triangles — see environment.md for why this used to be ~23,000
-  // vertices and no longer needs to be.
   const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 1, 1);
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(centerX, -depth, centerZ);
-  // Nothing samples a texture here; the caustics environment pass reads
-  // position only.
+  // Nothing samples a texture here; the caustics environment pass reads position only.
   geometry.deleteAttribute("uv");
   geometry.deleteAttribute("normal");
 
@@ -112,8 +97,7 @@ export function buildTerrainMesh(bounds) {
       planeHalfSize: {
         value: new THREE.Vector2(planeWidth / 2, planeHeight / 2),
       },
-      // t-value where the real river bounds end; matches buildWaterMesh's
-      // uCoreFrac so both surfaces fade at the same real-world edge.
+      // Matches buildWaterMesh's uCoreFrac so both surfaces fade at the same edge.
       coreFrac: { value: 1 / waterSizeMultiplier() },
     },
     vertexShader: TERRAIN_VERTEX_SHADER,
@@ -127,8 +111,7 @@ export function buildTerrainMesh(bounds) {
   return mesh;
 }
 
-// Ties the riverbed's color to the same season driving the sky, water, and
-// fish (see season.js's floorColor derivation).
+// Ties the riverbed's color to the same season driving the sky, water, and fish.
 export function setTerrainSeason(terrainMesh, dayOfYear) {
   const season = seasonForDay(dayOfYear);
   terrainMesh.material.uniforms.floorColor.value.copy(season.floorColor);

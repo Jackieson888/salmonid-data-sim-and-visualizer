@@ -1,11 +1,8 @@
-// fishAnatomy.js
-// Hand-placed anatomy anchors for the fish viewer's labeled plate (src/inspect.js), snapped to the nearest real vertex per species/model.
-// Design rationale, invariants, gotchas: .claude/context/scene/fishAnatomy.md
-//
-// Part coordinates are fractions of the model's local-space extent (body along Z, nose at +Z; x lateral, y vertical):
-// t = nose(0)..tail(1), x = fraction of half-width, y = fraction of half-height.
+// Hand-placed anatomy anchors for the fish viewer's labeled plate, snapped to the nearest real vertex per species/model.
 import * as THREE from "three";
 import { SPECIES_MODEL_URL, PHASE_TO_CYCLE } from "./fishMesh.js";
+
+// Coordinates are fractions of local-space extent: t = nose(0)..tail(1), x/y = fraction of half-width/half-height.
 
 // Salmonids: chinook, jack chinook (same mesh as chinook), steelhead — has an adipose fin, unlike shad/lamprey below.
 const SALMONID_PARTS = [

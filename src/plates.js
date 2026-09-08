@@ -1,7 +1,4 @@
-// plates.js
-// The slide-in drawer of data plates the bar itself has no room for. Built
-// lazily on first open, not at boot.
-// Design rationale, invariants, gotchas: .claude/context/plates.md
+// The slide-in drawer of data plates the bar itself has no room for; built lazily on first open, not at boot.
 import {
   runData,
   runYear,
@@ -17,7 +14,7 @@ import { createDrawer } from "./drawer.js";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_W = 1000;
 
-// Last record index of the CURRENT season — a `let` because runData swaps underneath this module (see plates.md).
+// Last record index of the current season; a `let` because runData swaps underneath this module.
 let LAST = runData.length - 1;
 
 function syncYear() {
@@ -55,8 +52,7 @@ function x(i) {
   return (seasonFraction(i, LAST) * VIEW_W).toFixed(2);
 }
 
-// Filled area under a per-day curve. `hasValue` (default: always) lets a gappy series (e.g.
-// temperature) break the line instead of bridging it — see buildSeasonChart in main.js.
+// Filled area under a per-day curve; `hasValue` lets a gappy series (e.g. temperature) break the line instead of bridging it.
 function areaPath(height, yFor, hasValue = () => true) {
   const d = [];
   let pen = false;
@@ -88,8 +84,7 @@ function linePath(yFor, hasValue = () => true) {
   return d.join(" ");
 }
 
-// One filled band per series, stacked bottom to top. `totalFor(i)` is the denominator each day
-// scales against — a fixed peak or that day's own sum — so this draws both modes of FIG. 2.
+// One filled band per series, stacked bottom to top; `totalFor(i)` (a fixed peak or the day's own sum) drives both modes of FIG. 2.
 function stackedAreaPaths(height, series, totalFor) {
   const below = new Float64Array(LAST + 1);
   return series.map(({ getValue }) => {
@@ -125,11 +120,7 @@ function dayCursor(svg, cursorSetters) {
   });
 }
 
-// insightText is a string or a function (called only on a cache miss, so a
-// dynamic figure never shows a stale reading once it does run) — see
-// .claude/context/insights.md. insightKey defaults to `num` ("FIG. 3"),
-// which is fine for a figure whose insight never changes; FIG. 1/2 pass
-// their own since their text depends on load state / the day shown.
+// insightText is a string or a function (called only on a cache miss); insightKey defaults to `num`, but FIG. 1/2 pass their own since their text depends on load state.
 function figureShell(num, title, insightText, insightKey = num) {
   const figure = el("figure", { class: "plate" });
   const caption = el("figcaption", { class: "plate-caption" });
@@ -154,8 +145,7 @@ function note(text) {
   return el("p", { class: "plate-note", text });
 }
 
-// FIG. 1 — Season passage, with the 2006-2015 daily mean as a ghost line (see plates.md).
-// Returns an `addGhost(history)` hook since run history arrives later than the plate itself.
+// FIG. 1 — Season passage, with the 2006-2015 daily mean as a ghost line; returns an addGhost(history) hook since history arrives later.
 function buildPassagePlate(cursorSetters) {
   // Read by the info button below, flipped true once addGhost() lands.
   let ghostLoaded = false;
@@ -166,9 +156,7 @@ function buildPassagePlate(cursorSetters) {
       ghostLoaded
         ? "The thin ghost line traces the day-by-day average from 2006–2015 — a decade of history laid behind this season's own curve, so a glance shows whether this year is running ahead of or behind the historical norm."
         : "This is the same curve the bar's own chart shows, drawn full size. A ghost line comparing it to the 2006–2015 average is still loading.",
-    // Two distinct cache entries, not one — the "still loading" and
-    // "loaded" texts are different facts, and once the ghost has actually
-    // loaded there's no going back to the placeholder for this session.
+    // Two distinct cache entries — "still loading" and "loaded" are different facts, and there's no going back once loaded.
     () => `fig1:${ghostLoaded ? "loaded" : "loading"}`,
   );
   const svg = plateSvg();
@@ -274,8 +262,7 @@ function buildCompositionPlate(cursorSetters, todayUpdaters) {
   });
   figure.querySelector(".plate-caption").appendChild(toggle);
 
-  // Today's split — a single wide bar, one segment per species, updated
-  // every HUD tick the same way the old #secondary-counts rows were.
+  // Today's split — a single wide bar, one segment per species, updated every HUD tick.
   const barSvg = svgEl("svg", {
     viewBox: `0 0 ${VIEW_W} 28`,
     preserveAspectRatio: "none",
@@ -319,7 +306,7 @@ function buildCompositionPlate(cursorSetters, todayUpdaters) {
   return figure;
 }
 
-// FIG. 3 — Wild vs. hatchery steelhead. wildSteelhead is a subset of steelhead, not an addition (see data.js).
+// FIG. 3 — Wild vs. hatchery steelhead; wildSteelhead is a subset of steelhead, not an addition.
 function buildSteelheadPlate(cursorSetters, todayUpdaters) {
   const figure = figureShell(
     "FIG. 3",
@@ -452,7 +439,7 @@ function buildConditionsPlate(cursorSetters, rows) {
   return figure;
 }
 
-// FIG. 5 — Run history, 2006-2015: per-year totals, plus a day-of-year envelope (see plates.md).
+// FIG. 5 — Run history, 2006-2015: per-year totals, plus a day-of-year envelope.
 function buildHistoryPlate(cursorSetters, history) {
   const figure = figureShell(
     "FIG. 5",
@@ -513,8 +500,7 @@ function buildHistoryPlate(cursorSetters, history) {
     note(`Season totals by species. ${runYear} outlined in red.`),
   );
 
-  // (b) Day-of-year envelope — its x-axis is day-of-year, not record index (see plates.md), so it
-  // gets its own cursor setter rather than sharing the seasonFraction() one the rest of the drawer uses.
+  // (b) Day-of-year envelope — its x-axis is day-of-year, not record index, so it gets its own cursor setter.
   const envelope = history.dailyEnvelope;
   const doyMin = envelope[0].doy;
   const doyMax = envelope[envelope.length - 1].doy;
@@ -530,7 +516,7 @@ function buildHistoryPlate(cursorSetters, history) {
   band.push("Z");
   envSvg.appendChild(svgEl("path", { class: "plate-envelope-band", d: band.join(" ") }));
 
-  // Built by hand rather than via linePath() — that helper's x-positions are record-index, not day-of-year.
+  // Built by hand, not via linePath(), since that helper's x-positions are record-index, not day-of-year.
   const doyToCount = new Map(runData.map((d) => [dayOfYear(d.date), d.count ?? 0]));
   const trace = [];
   let pen = false;
@@ -564,7 +550,7 @@ function buildHistoryPlate(cursorSetters, history) {
   return figure;
 }
 
-// FIG. 6 — Lamprey, day vs. night: lamprey pass mostly after dark, salmonids don't (see data.md).
+// FIG. 6 — Lamprey, day vs. night: lamprey pass mostly after dark, salmonids don't.
 function buildLampreyPlate(cursorSetters) {
   const figure = figureShell(
     "FIG. 6",
@@ -640,9 +626,6 @@ function unavailablePlate(num, title) {
   return figure;
 }
 
-// ---------------------------------------------------------------------
-// Public surface
-// ---------------------------------------------------------------------
 let toggleBtn = null;
 let asideEl = null;
 let scrollEl = null;
@@ -655,8 +638,7 @@ let lastDayIndex = 0;
 let lastAt = null;
 
 export function initPlates() {
-  // Idempotent (no-ops if already built) — main.js calls this too, so
-  // whichever module boots first wins and the other's call is free.
+  // Idempotent — main.js calls this too, so whichever module boots first wins and the other's call is free.
   initInsightToast();
 
   toggleBtn = document.getElementById("plates-toggle");
@@ -665,11 +647,7 @@ export function initPlates() {
   const closeBtn = document.getElementById("plates-close");
   if (!toggleBtn || !asideEl || !scrollEl) return;
 
-  // Escape-key ordering, lazy-build-on-first-open: see drawer.md. "p" is
-  // this drawer's own shortcut — the fish viewer's field-notes drawer has
-  // none, since createDrawer() takes it as an opt-in. toggleBtn stays a
-  // plain "Plates" open button always (its label is static markup now, not
-  // JS-driven); closeBtn is the dedicated icon living inside the panel.
+  // "p" is this drawer's own shortcut; closeBtn is the dedicated icon living inside the panel.
   drawer = createDrawer({
     panel: asideEl,
     toggle: toggleBtn,
@@ -681,17 +659,8 @@ export function initPlates() {
   });
 }
 
-// Fades a plate in (.plate-enter in style.css) rather than letting it pop in
-// at full opacity the instant it lands in the DOM. staggered=true (the
-// initial batch in build(), below) spaces each plate ~28ms behind the last,
-// so the drawer reveals as one cascade rather than all six figures snapping
-// in together; the two async replacements pass staggered=false since they
-// each arrive independently over the network, not as part of one batch.
-//
-// Double rAF, not a single one: appending el and adding .plate-enter happen
-// in the same synchronous call here, so without waiting a full extra frame
-// the browser can coalesce the "hidden" state away entirely and jump
-// straight to the revealed one instead of animating between them.
+// Fades a plate in rather than popping in at full opacity; staggered=true spaces each plate ~28ms behind the last for a cascade.
+// Double rAF: appending el and adding .plate-enter happen in the same call, so a single rAF risks the browser coalescing the states.
 function revealPlate(el, staggered = true) {
   let index = 0;
   if (staggered) index = plateRevealIndex++;
@@ -709,10 +678,10 @@ function appendPlate(el) {
   revealPlate(el);
 }
 
-// Reset at the top of every build() — see revealPlate() above.
+// Reset at the top of every build().
 let plateRevealIndex = 0;
 
-// Incremented on every build; the two async plates below drop their result if it has moved on (see plates.md).
+// Incremented on every build; the two async plates below drop their result if it has moved on.
 let buildToken = 0;
 
 function build() {
@@ -748,7 +717,7 @@ function build() {
     .catch((err) => {
       if (token !== buildToken) return;
       console.warn(`River conditions plate unavailable for ${year}:`, err);
-      // Names the missing year rather than a bare "unavailable" (see plates.md).
+      // Names the missing year rather than a bare "unavailable".
       const missing = unavailablePlate("FIG. 4", "River Conditions");
       missing.querySelector(".plate-note").textContent =
         `No river-environment record vendored for ${year}. ` +
@@ -778,7 +747,7 @@ function build() {
   if (lastAt) updatePlatesToday(lastAt);
 }
 
-// Called from main.js's setYear(). Rebuilds immediately if open; deferred (lazy) if closed — see plates.md.
+// Called from main.js's setYear(). Rebuilds immediately if open; deferred if closed.
 export function rebuildPlatesForYear() {
   syncYear();
   if (!scrollEl) return;

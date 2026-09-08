@@ -1,15 +1,12 @@
-// parseAdultDaily.js
-// Pure parser for DART's adult_daily.php CSV export. No fetch, no browser
-// globals — shared by data.js (browser) and scripts/fetch-dart.mjs (Node).
-// Design rationale, invariants, gotchas: .claude/context/data.md
+// Pure parser for DART's adult_daily.php CSV export; shared by data.js (browser) and scripts/fetch-dart.mjs (Node).
 
-// DART's negative values are corrections, not real counts — floored to 0 (see data.md).
+// DART's negative values are corrections, not real counts — floored to 0.
 function parseCount(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-// Keeps "not published" distinguishable from "zero" (see data.md — temperature is the reason).
+// Keeps "not published" distinguishable from "zero".
 function parseMeasurement(value) {
   if (value === undefined) return null;
   const trimmed = value.trim();
@@ -18,23 +15,21 @@ function parseMeasurement(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-// DART's Chinook-run-schedule abbreviations, not a per-fish determination (see data.md).
+// DART's Chinook-run-schedule abbreviations, not a per-fish determination.
 const CHINOOK_RUN_NAMES = { Sp: "Spring", Su: "Summer", Fa: "Fall" };
 
-// Parses by header name, not column index — see data.md for why. `project`
-// defaults to "Lower Granite" but is a parameter so a second dam is a data
-// change, not a code change.
+// Parses by header name, not column index, so column order/additions don't break it.
 export function parseAdultDailyCsv(csvText, project = "Lower Granite") {
   const lines = csvText.split("\n");
   const header = lines[0].split(",").map((name) => name.trim());
 
-  // Always-present columns — a missing one throws rather than quietly reporting zeros (see data.md).
+  // Always-present columns — a missing one throws rather than quietly reporting zeros.
   const col = (name) => {
     const i = header.indexOf(name);
     if (i === -1) throw new Error(`DART CSV missing expected column "${name}"`);
     return i;
   };
-  // Enrichment columns — resolve to -1 when absent rather than throwing (see data.md).
+  // Enrichment columns — resolve to -1 when absent rather than throwing.
   const optionalCol = (name) => header.indexOf(name);
 
   const dateCol = col("Date");
@@ -77,21 +72,20 @@ export function parseAdultDailyCsv(csvText, project = "Lower Granite") {
     data.push({
       date: fields[dateCol],
 
-      // Deliberately still only these five species (see data.md).
+      // Deliberately still only these five species.
       count: chinook + jackChinook + steelhead + shad + lamprey,
       chinook,
       jackChinook,
       steelhead,
       shad,
       lamprey,
-      // Kept alongside the combined figure above — the day/night split is itself the interesting fact (see data.md).
       lampreyDay,
       lampreyNight,
 
-      // A SUBSET of `steelhead`, not an addition to it (see data.md).
+      // A SUBSET of `steelhead`, not an addition to it.
       wildSteelhead: parseCount(fields[wildSteelheadCol]),
 
-      // Counted at the dam but not modelled in the water (see data.md).
+      // Counted at the dam but not modelled in the water.
       sockeye: parseCount(fields[sockeyeCol]),
       coho: parseCount(fields[cohoCol]),
       jackCoho: parseCount(fields[jackCohoCol]),
@@ -101,7 +95,7 @@ export function parseAdultDailyCsv(csvText, project = "Lower Granite") {
       chum: parseCount(fields[chumCol]),
       pink: parseCount(fields[pinkCol]),
 
-      // Degrees Celsius; null on days DART published none (see parseMeasurement).
+      // Degrees Celsius; null on days DART published none.
       tempC: parseMeasurement(fields[tempCol]),
 
       // Null outside the runs' scheduled windows (most of the winter).

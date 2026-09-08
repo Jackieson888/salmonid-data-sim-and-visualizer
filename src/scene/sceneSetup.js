@@ -1,6 +1,4 @@
-// sceneSetup.js — renderer, fixed camera, sky sphere, bloom/tone-mapping composer.
-// Design rationale, invariants, gotchas: .claude/context/scene/sceneSetup.md
-
+// Renderer, fixed camera, sky sphere, bloom/tone-mapping composer.
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -17,15 +15,13 @@ const SUN_DISC_STRENGTH = 1.2;
 const SUN_HALO_EXPONENT = 6;
 const SUN_HALO_STRENGTH = 0.12;
 
-// Widens Snell's window for the sky sphere's own murk path so the seasonal
-// sky actually reads (see fragment shader below); purely artistic.
+// Widens Snell's window for the sky sphere's own murk path so the seasonal sky actually reads; purely artistic.
 const SKY_FOG_SCALE = 0.62;
 
 // Below this much upward tilt, treat a view ray as never reaching the surface.
 const MIN_UPWARD_COMPONENT = 0.001;
 
-// Vignette + grain (see VIGNETTE_GLSL below). Deliberately asymmetric —
-// see context doc for why, and for the linear-light-fraction gotcha.
+// Vignette + grain, deliberately asymmetric top vs. bottom.
 const VIGNETTE_TOP = 0.25;
 const VIGNETTE_BOTTOM = 1.1;
 
@@ -43,15 +39,8 @@ const GRAIN_AMOUNT = 0.03;
 const FOV = 90;
 const NEAR = 1;
 
-// Portrait-only correction: FOV above is a *vertical* value tuned for a
-// landscape composition ("broadside... fish spread across the frame so the
-// count reads directly" — see context doc). At aspect >= 1 that's untouched.
-// Below aspect 1, holding the vertical FOV constant would keep collapsing
-// the *horizontal* FOV as phones get taller, cropping the school into a
-// narrow column. Instead grow the vertical FOV so horizontal FOV holds near
-// its aspect=1 value (90deg), clamped so very narrow aspects (foldables,
-// split-screen) can't run into fisheye territory.
-const PORTRAIT_FOV_CAP = 105; // tune by eye
+// Portrait-only correction: grows vertical FOV below aspect 1 so horizontal FOV holds near its landscape value, capped against fisheye.
+const PORTRAIT_FOV_CAP = 105;
 
 function verticalFovForAspect(aspect) {
   if (aspect >= 1) return FOV;
@@ -61,19 +50,10 @@ function verticalFovForAspect(aspect) {
   return Math.min(correctedDeg, PORTRAIT_FOV_CAP);
 }
 
-// Spliced into OutputPass's shader (see VignetteOutputPass below) rather than
-// run as its own pass. Reads/writes `texel`, sampled by the line it replaces.
+// Spliced into OutputPass's shader rather than run as its own pass; reads/writes `texel`, sampled by the line it replaces.
 const VIGNETTE_GLSL = /* glsl */ `
   {
-    // START/END are distances in uv space, which is square regardless of the
-    // render target's actual aspect — on a portrait phone that makes the
-    // radial falloff reach the (physically much closer) left/right edges far
-    // sooner than it reaches top/bottom, pinching the sides like a fisheye
-    // lens. uAspect (camera.aspect, clamped to <=1 so landscape is untouched
-    // — this only ever narrows, never widens) stretches the x term back out
-    // so the same uv distance corresponds to comparable physical distance
-    // on both axes. vUv.y is 0 at the bottom of frame, so radial ramps from
-    // full strength at the bottom to near-zero at the top.
+    // uAspect stretches the x term so uv distance corresponds to comparable physical distance on a portrait screen.
     vec2 centered = vUv - 0.5;
     centered.x *= uAspect;
     float radial = smoothstep(
@@ -87,7 +67,7 @@ const VIGNETTE_GLSL = /* glsl */ `
 
     texel.rgb *= 1.0 - clamp(radial * strength + bottom, 0.0, 1.0);
 
-    // Same hash terrain.js uses for silt; proportional so it centers on 1.0.
+    // Proportional grain, centered on 1.0, dithering banding in dark gradients.
     float grain = fract(
       sin(dot(gl_FragCoord.xy + uFrame, vec2(127.1, 311.7))) * 43758.5453123
     );
@@ -95,9 +75,7 @@ const VIGNETTE_GLSL = /* glsl */ `
   }
 `;
 
-// OutputPass with the vignette/grain spliced ahead of its tone-mapping ladder.
-// Subclassed (not reimplemented) so OutputPass keeps owning its tone-mapping
-// defines. The splice is asserted at construction — see the throw below.
+// OutputPass with the vignette/grain spliced ahead of its tone-mapping ladder; subclassed so it keeps owning tone-mapping defines.
 class VignetteOutputPass extends OutputPass {
   constructor() {
     super();
@@ -112,17 +90,15 @@ class VignetteOutputPass extends OutputPass {
       );
     }
 
-    // Same uniforms object OutputPass's material holds — mutating it here
-    // reaches the material too, before the shader is ever compiled.
+    // Same uniforms object OutputPass's material holds — mutating it here reaches the material before the shader compiles.
     Object.assign(this.uniforms, {
       uTopStrength: { value: VIGNETTE_TOP },
       uBottomStrength: { value: VIGNETTE_BOTTOM },
       uBottomEdge: { value: VIGNETTE_BOTTOM_EDGE },
       uGrain: { value: GRAIN_AMOUNT },
-      // Portrait-only correction for the radial falloff below — kept at 1
-      // (a no-op) until resize() pushes camera.aspect in.
+      // No-op until resize() pushes camera.aspect in.
       uAspect: { value: 1 },
-      // Bumped every frame (see render below) to decorrelate grain between frames.
+      // Bumped every frame to decorrelate grain between frames.
       uFrame: { value: 0 },
     });
 
@@ -147,7 +123,7 @@ class VignetteOutputPass extends OutputPass {
   }
 
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-    // Wrapped at 1024 so the grain hash never climbs into float-precision loss.
+    // Wrapped at 1024 to avoid float-precision loss in the grain hash.
     this.uniforms.uFrame.value = (this.uniforms.uFrame.value + 1) % 1024;
     super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
   }
@@ -156,17 +132,13 @@ class VignetteOutputPass extends OutputPass {
 // Sky sphere scale, as a fraction of camera.far.
 const SKY_RADIUS_FRAC = 0.9;
 
-// Camera framing, expressed as fractions of world bounds (worldX=downstream,
-// worldZ=across-river, worldY=up). Broadside to the run, not down it — see
-// context doc for the framing rationale and the EYE_FRAC.x/.y constraints.
+// Camera framing as fractions of world bounds (worldX=downstream, worldZ=across-river, worldY=up), broadside to the run.
 const EYE_FRAC = { x: 0.648, y: -0.2, z: 0.853 };
 const TARGET_FRAC = { x: 0.4, y: -0.075, z: 0.22 };
 
-// pixelBounds = physical on-screen size; worldBounds = the (smaller) size
-// the scene's content is built against. See context doc for the split.
+// pixelBounds = physical on-screen size; worldBounds = the smaller size the scene's content is built against.
 export function createSceneSetup(canvas, pixelBounds, worldBounds) {
-  // antialias/depth/stencil off deliberately — everything draws through
-  // EffectComposer, which never touches the default framebuffer's MSAA/depth.
+  // antialias/depth/stencil off deliberately — everything draws through EffectComposer instead.
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: false,
@@ -178,17 +150,14 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio),
   );
 
-  // ACES applied once globally via OutputPass (see composer below), since
-  // hand-written ShaderMaterials never pick up renderer.toneMapping directly.
+  // ACES applied once globally via OutputPass, since hand-written ShaderMaterials never pick up renderer.toneMapping directly.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.55;
 
-  // No scene.fog — hand-written ShaderMaterials never pick it up. All visible
-  // fog comes from FOG_GLSL's applyFog(), called explicitly per-material.
+  // No scene.fog — all visible fog comes from FOG_GLSL's applyFog(), called explicitly per-material.
   const scene = new THREE.Scene();
 
-  // Overwritten by the first setSeason() call; starting values just let the
-  // material compile.
+  // Overwritten by the first setSeason() call; starting values just let the material compile.
   const skyUniforms = {
     uSkyColor: { value: new THREE.Color("#1a56a8") },
     uHorizonColor: { value: new THREE.Color("#e8896b") },
@@ -203,9 +172,7 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     uFogDepthRate: { value: fogDepthRate(worldBounds) },
   };
 
-  // Sky sphere (not scene.background) so it can gradient by world Y and stay
-  // centered on the camera. Tessellation deliberately not scaled by tier —
-  // see context doc.
+  // Sky sphere, not scene.background, so it can gradient by world Y and stay centered on the camera.
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
     new THREE.ShaderMaterial({
@@ -236,13 +203,11 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
           // Warm horizon tone, scaled by how low the season's sun sits.
           vec3 horizonTone = mix(uSkyColor, uHorizonColor, uHorizonStrength);
 
-          // Refraction compresses the sky into a ~97-degree cone, so the
-          // horizon band lands well above dir.y = 0, not at it.
+          // Refraction compresses the sky into a ~97-degree cone, so the horizon band lands well above dir.y = 0.
           float up = clamp(dir.y, 0.0, 1.0);
           vec3 above = mix(horizonTone, uSkyColor, smoothstep(0.15, 0.8, up));
 
-          // Sun disc + halo, faded out through the waterline so it doesn't
-          // also appear mirrored below the horizon.
+          // Sun disc + halo, faded through the waterline so it doesn't also appear mirrored below the horizon.
           float sunDot = max(dot(dir, uSunDirection), 0.0);
           float sun = pow(sunDot, ${glslFloat(SUN_DISC_EXPONENT)}) * ${glslFloat(SUN_DISC_STRENGTH)}
             + pow(sunDot, ${glslFloat(SUN_HALO_EXPONENT)}) * ${glslFloat(SUN_HALO_STRENGTH)};
@@ -255,9 +220,7 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
 
           vec3 color = mix(below, above, smoothstep(-0.02, 0.02, dir.y));
 
-          // Path length to the surface (cameraDepth/dir.y); level-or-down
-          // rays never escape, so it's pure murk. Keeps this background
-          // fading at least as fast as the fogged geometry in front of it.
+          // Path length to the surface; level-or-down rays never escape, so it's pure murk.
           float cameraDepth = max(-cameraPosition.y, 0.0);
           float murk = 1.0;
           if (dir.y > ${glslFloat(MIN_UPWARD_COMPONENT)}) {
@@ -266,8 +229,7 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
             murk = 1.0 - exp(-d * d);
           }
 
-          // Depth-graded murk color, sampled one fog length along the ray
-          // (a background ray has no surface to take a depth from otherwise).
+          // Depth-graded murk color, sampled one fog length along the ray since a background ray has no surface depth.
           vec3 murkPoint = cameraPosition + dir / uFogDensity;
           gl_FragColor =
             vec4(mix(color, fogColorAt(murkPoint), clamp(murk, 0.0, 1.0)), 1.0);
@@ -284,14 +246,12 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
 
   const camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, 1000);
 
-  // No THREE lights — every material is a hand-written ShaderMaterial that
-  // never reads them. Sun color/direction/intensity reach shaders as uniforms.
+  // No THREE lights — every material is a hand-written ShaderMaterial that reads sun uniforms directly.
 
-  // Kept around (not a local) since main.js's debug readout reads it too.
+  // Kept around, not a local, since main.js's debug readout reads it too.
   const cameraTarget = new THREE.Vector3();
 
-  // Places the camera at EYE_FRAC looking at TARGET_FRAC, both scaled to
-  // the given bounds. Called from resize(), which runs once at startup too.
+  // Places the camera at EYE_FRAC looking at TARGET_FRAC, both scaled to the given bounds.
   function applyFraming(b) {
     camera.position.set(
       b.width * EYE_FRAC.x,
@@ -306,15 +266,10 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     camera.lookAt(cameraTarget);
   }
 
-  // Kept alongside `composer` so resize() can push uAspect into whichever
-  // pass instance is currently live — applyQuality() below disposes and
-  // rebuilds the whole composer (a new VignetteOutputPass each time), so a
-  // stale reference here would silently stop tracking aspect changes.
+  // Kept alongside `composer` so resize() tracks whichever pass instance applyQuality() most recently rebuilt.
   let vignettePass;
 
-  // Post-processing chain: RenderPass -> UnrealBloomPass (tiered full/half/off,
-  // see context doc for the cost breakdown) -> OutputPass (tone-mapping/vignette).
-  // A function, not inline, since a tier change has to rebuild it.
+  // RenderPass -> UnrealBloomPass (tiered full/half/off) -> OutputPass (tone-mapping/vignette); a function since a tier change rebuilds it.
   function buildComposer(b) {
     const next = new EffectComposer(renderer);
     next.addPass(new RenderPass(scene, camera));
@@ -340,20 +295,16 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
   // Bloom's targets are sized off actual pixel resolution, not world content.
   let composer = buildComposer(pixelBounds);
 
-  // Resizes the renderer/camera and re-applies the fixed framing. Takes both
-  // bounds: pixelBounds for anything matching the physical screen, worldBounds
-  // for anything about how big the river itself is. See context doc.
+  // Resizes the renderer/camera and re-applies the fixed framing.
   function resize(pixelBounds, worldBounds) {
-    // Re-read devicePixelRatio: a monitor change fires resize but leaves the
-    // old screen's ratio set otherwise.
+    // Re-read devicePixelRatio: a monitor change fires resize but leaves the old screen's ratio set otherwise.
     renderer.setPixelRatio(
       Math.min(window.devicePixelRatio || 1, QUALITY.pixelRatio),
     );
     renderer.setSize(pixelBounds.width, pixelBounds.height);
     camera.aspect = pixelBounds.width / pixelBounds.height;
     camera.fov = verticalFovForAspect(camera.aspect);
-    // Clamped to 1 — same landscape-untouched/portrait-only shape as
-    // verticalFovForAspect above, just applied to the vignette instead of the FOV.
+    // Clamped to 1, same landscape-untouched/portrait-only shape as verticalFovForAspect, applied to the vignette instead.
     vignettePass.uniforms.uAspect.value = Math.min(camera.aspect, 1);
     camera.far = Math.max(worldBounds.width, worldBounds.height) * 5;
     applyFraming(worldBounds);
@@ -363,12 +314,9 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     skyUniforms.uFogDepthRate.value = fogDepthRate(worldBounds);
   }
 
-  // The expensive half of a resize (~13 GPU allocations rebuilding bloom's
-  // mip chain), split out to run on a debounce while resize() stays on every
-  // event. See context doc for why.
+  // The expensive half of a resize (rebuilding bloom's mip chain), split out to run on a debounce.
   function resizeComposer(pixelBounds) {
-    // EffectComposer caches the renderer's pixel ratio at construction, so
-    // this has to be re-pushed on every DPI/tier change.
+    // EffectComposer caches the renderer's pixel ratio at construction, so this has to be re-pushed on every change.
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(pixelBounds.width, pixelBounds.height);
   }
@@ -376,9 +324,7 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
   resize(pixelBounds, worldBounds);
   resizeComposer(pixelBounds);
 
-  // Manual reset so renderer.info accumulates across the composer's several
-  // passes per frame instead of resetting after the last one (what the debug
-  // panel wants).
+  // Manual reset so renderer.info accumulates across the composer's several passes, as the debug panel wants.
   renderer.info.autoReset = false;
 
   function render() {
@@ -386,15 +332,12 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     composer.render();
   }
 
-  // Sky sphere is centered on the camera every frame (see material above).
+  // Sky sphere is centered on the camera every frame.
   function updateCamera() {
     sky.position.copy(camera.position);
   }
 
-  // Blends the sky sphere toward the season's look. Uniforms are mutated in
-  // place, not reassigned — the material already holds these Color/Vector3
-  // references. uFogColor needs no update: it points at the shared FOG_COLOR
-  // instance (see fog.js).
+  // Blends the sky sphere toward the season's look; uFogColor needs no update since it points at the shared FOG_COLOR instance.
   function setSeason(dayOfYear) {
     const season = seasonForDay(dayOfYear);
     skyUniforms.uSkyColor.value.copy(season.skyColor);
@@ -404,25 +347,20 @@ export function createSceneSetup(canvas, pixelBounds, worldBounds) {
     skyUniforms.uSunColor.value.copy(season.sunColor);
     skyUniforms.uSunIntensity.value = season.sunIntensity;
     skyUniforms.uHorizonStrength.value = season.horizonStrength;
-    // uSunDirection deliberately absent — pushed every frame by
-    // setSunDirection() instead, since the sun also moves within the day.
+    // uSunDirection deliberately absent — pushed every frame by setSunDirection() since the sun also moves within the day.
   }
 
-  // Called every frame with the same vector that drives the caustics, so the
-  // sky disc and the bed's light net are always the same sun.
+  // Called every frame with the same vector driving the caustics, so the sky disc and the bed's light net stay the same sun.
   function setSunDirection(direction) {
     skyUniforms.uSunDirection.value.copy(direction);
   }
 
-  // Re-applies everything here that's fixed at construction from QUALITY,
-  // after the governor steps the tier down (see quality.js). Composer is
-  // disposed/rebuilt rather than adjusted since bloom's shape is
-  // constructor-only.
+  // Re-applies everything fixed at construction from QUALITY after the governor steps the tier down.
   function applyQuality(pixelBounds, worldBounds) {
     composer.dispose();
     composer = buildComposer(pixelBounds);
 
-    // Both halves — the reallocation is the point on a tier change.
+    // Both halves — reallocation is the point on a tier change.
     resize(pixelBounds, worldBounds);
     resizeComposer(pixelBounds);
   }

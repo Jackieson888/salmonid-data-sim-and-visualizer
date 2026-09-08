@@ -1,11 +1,7 @@
-// season.js
-// Design rationale, invariants, gotchas: .claude/context/scene/season.md
-// Maps a calendar date to a blended seasonal palette (sky, sun, fog, water,
-// riverbed, caustics) plus the sun's position and daily arc.
+// Maps a calendar date to a blended seasonal palette plus the sun's position and daily arc.
 import * as THREE from "three";
 
-// Depth stops along the skyColor -> depthsColor ramp for each derived
-// underwater surface. Bigger = deeper = darker and further from the sky.
+// Depth stops along the skyColor -> depthsColor ramp; bigger = deeper = darker and further from the sky.
 const FLOOR_DEPTH = 0.42;
 const FOG_DEPTH = 0.52;
 const WATER_DEPTH = 0.86;
@@ -14,15 +10,11 @@ const WATER_DEPTH = 0.86;
 const SILT_COLOR = new THREE.Color("#6b5c44");
 const SILT_MIX = 0.3;
 
-// The Snake River's own green — pulls every derived underwater color off
-// the sky's blue and onto the river's actual color family. See season.md
-// for the tuning history behind these two values.
+// The Snake River's own green, pulling derived underwater colors off the sky's blue onto the river's family.
 const RIVER_TINT = new THREE.Color("#3f9068");
 const RIVER_TINT_MIX = 0.55;
 
-// Lerping THREE.Color's linear-sRGB values drives midpoints darker than the
-// eye expects; the depth stops above were chosen by eye against sRGB blends,
-// so derivation rounds through sRGB to match (see season.md).
+// Lerping in linear-sRGB drives midpoints darker than expected, so derivation rounds through sRGB to match.
 const _mixA = new THREE.Color();
 const _mixB = new THREE.Color();
 function mixSRGB(a, b, t) {
@@ -31,15 +23,13 @@ function mixSRGB(a, b, t) {
   return _mixA.lerp(_mixB, t).convertSRGBToLinear().clone();
 }
 
-// Warm horizon band strength from the sun's elevation; 0.3 floor keeps it
-// from vanishing entirely when the sun is near-overhead.
+// Warm horizon band strength from the sun's elevation; 0.3 floor stops it vanishing when near-overhead.
 function horizonStrength(sunDirection) {
   const elevation = sunDirection.clone().normalize().y;
   return 0.3 + 0.55 * (1 - Math.max(0, elevation));
 }
 
-// One underwater surface: descend the season's sky->depths ramp to `depth`,
-// then pull the result toward the river's own green (see RIVER_TINT).
+// Descend the season's sky->depths ramp to `depth`, then pull toward the river's own green.
 function underwater(def, depth) {
   return mixSRGB(
     mixSRGB(def.skyColor, def.depthsColor, depth),
@@ -48,8 +38,7 @@ function underwater(def, depth) {
   );
 }
 
-// Fills in every derived value from the three hand-picked colors, so a
-// keyframe below only has to declare the look, not restate the family.
+// Fills in every derived value so a keyframe below only has to declare the look, not restate the family.
 function deriveSeason(def) {
   return {
     ...def,
@@ -109,8 +98,7 @@ const AUTUMN = deriveSeason({
   causticsColor2: new THREE.Color("#33301c"),
 });
 
-// Approximate equinox/solstice days-of-year. WINTER repeats at day 365 to
-// close the loop, so every day falls between two real keyframes.
+// Approximate equinox/solstice days-of-year; WINTER repeats at day 365 to close the loop.
 const KEYFRAMES = [
   { day: 0, ...WINTER },
   { day: 80, ...SPRING },
@@ -123,8 +111,7 @@ function smoothstep(t) {
   return t * t * (3 - 2 * t);
 }
 
-// Every THREE.Color on a keyframe, so seasonForDay() can lerp them all in
-// one loop instead of naming each one twice (once here, once in scratch).
+// Every THREE.Color on a keyframe, so seasonForDay() can lerp them all in one loop.
 const COLOR_KEYS = [
   "skyColor",
   "horizonColor",
@@ -137,8 +124,7 @@ const COLOR_KEYS = [
   "causticsColor2",
 ];
 
-// Reused across calls — copy values out (e.g. Color.copy(), Vector3.copy())
-// if you need to hold onto them past the next seasonForDay() call.
+// Reused across calls — copy values out if you need to hold onto them past the next call.
 const scratch = {
   sunDirection: new THREE.Vector3(),
   sunIntensity: 0,
@@ -172,25 +158,16 @@ export function seasonForDay(dayOfYear) {
   return scratch;
 }
 
-// ---------------------------------------------------------------------
-// Diurnal sweep — walks the season's peak sun through a rise/peak/set arc
-// each day. Drives the caustics net (causticsGenerator.js) and everything
-// that reads it (godRays.js, water.js, fishMesh.js); see season.md for why
-// elevation (not azimuth) does most of the work here.
-// ---------------------------------------------------------------------
+// Diurnal sweep — walks the season's peak sun through a rise/peak/set arc each day, driving the caustics net.
 const SUN_SWEEP_ELEVATION_ARC = 0.34;
 const SUN_SWEEP_AZIMUTH_ARC = 0.38;
 
-// Seconds for one full rise-peak-set-return. Deliberately not tied to the
-// timeline's day rate (FRAMES_PER_DAY in main.js) — see season.md.
+// Seconds for one full rise-peak-set-return, deliberately not tied to the timeline's day rate.
 const SUN_SWEEP_PERIOD = 120;
 
-// Floor on how low the sun may get, in radians (~17 degrees) — below this
-// the net smears off the far side of the river; see season.md.
+// Floor on how low the sun may get, in radians (~17 degrees) — below this the net smears off the river.
 const MIN_SUN_ELEVATION = 0.3;
 
-// Base (season's peak) and swept sun. Held here rather than in main.js for
-// the same reason fog.js holds FOG_COLOR — see season.md.
 const _sweptSun = new THREE.Vector3(0, 1, 0);
 let azimuth = 0;
 let elevation = Math.PI / 2;
@@ -201,12 +178,10 @@ export function setSunSeason(dayOfYear) {
   elevation = Math.atan2(sun.y, Math.hypot(sun.x, sun.z));
 }
 
-// The current sun, `seconds` into the day's arc. Returns a shared vector —
-// copy out of it if you need to keep the value.
+// The current sun, `seconds` into the day's arc. Returns a shared vector — copy out to keep the value.
 export function sweptSunDirection(seconds) {
   const phase = (seconds / SUN_SWEEP_PERIOD) * Math.PI * 2;
-  // (1 - cos), not sin: phase 0 is the peak, and the sun only ever descends
-  // from the season's own elevation, never climbs above it.
+  // (1 - cos), not sin: phase 0 is the peak, and the sun only ever descends, never climbs above it.
   const sweptElevation = Math.max(
     MIN_SUN_ELEVATION,
     elevation - SUN_SWEEP_ELEVATION_ARC * (1 - Math.cos(phase)),
@@ -221,22 +196,19 @@ export function sweptSunDirection(seconds) {
   );
 }
 
-// The sun direction as seen from under the surface (Snell's window) — the
-// top-lit read the whole underwater scene depends on. See season.md.
+// The sun direction as seen from under the surface (Snell's window), the top-lit read the scene depends on.
 const WATER_IOR = 1.333;
 
 export function refractedSunDirection(sun, target = new THREE.Vector3()) {
   const out = target.copy(sun).normalize();
 
-  // Angle from straight up, as cosine/sine. Clamped at 0 because a sun at or
-  // below the horizon transmits nothing to refract.
+  // Angle from straight up; clamped at 0 since a sun at or below the horizon transmits nothing to refract.
   const cosAir = Math.min(1, Math.max(0, out.y));
   const sinAir = Math.sqrt(Math.max(0, 1 - cosAir * cosAir));
   const sinWater = Math.min(1, sinAir / WATER_IOR);
   const cosWater = Math.sqrt(Math.max(0, 1 - sinWater * sinWater));
 
-  // Same azimuth, steeper descent: rescale the horizontal part to the new
-  // sine, set the vertical part to the new cosine. Stays unit length.
+  // Same azimuth, steeper descent: rescale the horizontal part to the new sine, set vertical to the new cosine.
   const horizontal = Math.hypot(out.x, out.z);
   if (horizontal > 1e-6) {
     const scale = sinWater / horizontal;
@@ -247,9 +219,7 @@ export function refractedSunDirection(sun, target = new THREE.Vector3()) {
   return out;
 }
 
-// `dateStr` is "YYYY-MM-DD" (see data.js), parsed as UTC midnight. Guarded
-// against NaN dates, whose failure otherwise is silent and total — see
-// season.md.
+// `dateStr` is "YYYY-MM-DD", parsed as UTC midnight; guarded against NaN dates, which otherwise fail silently.
 export function dayOfYear(dateStr) {
   const date = new Date(dateStr + "T00:00:00Z");
   const time = date.getTime();

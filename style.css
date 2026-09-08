@@ -1,15 +1,8 @@
-/* Design rationale, invariants, gotchas: .claude/context/ui.md */
-
 :root {
   /* Page background, seen only before the canvas paints its first frame. */
   --bg: #061a2e;
 
-  /* Panel surface — a dark, translucent "instrument glass" laid over the
-     water scene: the river stays visible through it. Darker/more
-     transparent than the original dark theme on purpose (a specific hex the
-     project owner asked for), so every text token below was re-picked for
-     contrast against it rather than reused from the old dark theme
-     verbatim. See .claude/context/ui.md. */
+  /* Panel surface — a dark, translucent "instrument glass" laid over the water scene; every text token below was re-picked for contrast against it. */
   --ink: #090e11bf;
   --line: #3a4750;
   --line-soft: #212b31;
@@ -17,38 +10,22 @@
   --text: #eef1f2;
   --text-dim: #aab5ba;
   --text-faint: #7e8b91;
-  /* Lightened from #5c6870 — that value read ~3.4:1 against --ink, under
-     the 4.5:1 small-text floor (WCAG AA) at the 10px size both its
-     consumers use. #78848c holds the same "dimmest step" hierarchy
-     (still visibly quieter than --text-faint) at ~5:1. */
+  /* Lightened from #5c6870, which read under the 4.5:1 WCAG AA floor at 10px; #78848c holds ~5:1 while staying the dimmest step. */
   --text-dimmer: #78848c;
 
   /* Engineer red — the one saturated, non-decorative accent color. */
   --accent: #e6484e;
 
-  /* Per-species keys — bright pastels tuned for contrast against the
-     panel's near-black glass, picked independently of SPECIES_COLORS in
-     scene/fishMesh.js: chinook/steelhead/shad/lamprey are all NO_TINT
-     there (each has its own authored GLB skin, so there's no literal tint
-     color to mirror), so these four just need to read as distinct UI
-     colors, not numerically match a render value. jackChinook is the one
-     exception (it borrows chinook's mesh and gets a real speciesTint()),
-     but that tint is a hue direction fed through a shader multiply, not a
-     value translatable to a flat swatch either. */
+  /* Per-species keys — bright pastels tuned for contrast against the panel's near-black glass, picked independently of the render's own species tints. */
   --chinook: #ff7a7a;
   --jack-chinook: #ffb877;
-  /* Steel-blue, not the old pale #c3d3cc — that read as a slightly tinted
-     version of the neutral --text-dim grays rather than a distinct species
-     color. Steelhead trout are named for their steely blue-silver sheen,
-     so this leans into that instead of drifting toward gray. */
+  /* Steel-blue, not the old pale #c3d3cc, which read as a tinted neutral gray; steelhead trout are named for their steely blue-silver sheen. */
   --steelhead: #8ab4d1;
   --shad: #d29bf5;
 
   /* Season chart passage area — the water's own green, not a species color. */
   --series: #5d8378;
-  /* The chart's water-temperature line/key, and nowhere else — a cooler,
-     more literally "water" blue than the neutral --text-dim it used to
-     share with everything else in the chart legend. */
+  /* The chart's water-temperature line/key, and nowhere else — a cooler, more literally "water" blue than the neutral --text-dim. */
   --water-temp: #5aa6db;
 
   /* Counted at the dam but not all drawn in the water — see data.js. */
@@ -82,10 +59,7 @@
   --rule: 1px;
   --rule-heavy: 3px;
 
-  /* Motion — every transition in the app maps to one of these two durations
-     and this one easing, the same way type/spacing/rules do. Kept simple
-     (ease, no springy custom curves) to match the instrument-panel register:
-     motion should read as acknowledgment, not decoration. */
+  /* Motion — every transition maps to one of these two durations and this one easing; kept simple to read as acknowledgment, not decoration. */
   --dur-fast: 120ms;
   --dur-med: 220ms;
   --ease: ease;
@@ -103,9 +77,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   font-family: var(--sans);
-  /* App-wide defaults — var(--t-4) is the 14px step on the type scale
-     above; every element that needs a different size still sets its own
-     var(--t-N), this is just the floor for anything that doesn't. */
+  /* App-wide default; every element that needs a different size still sets its own var(--t-N). */
   font-size: var(--t-4);
   font-weight: 500;
   -webkit-font-smoothing: antialiased;
@@ -139,6 +111,7 @@ body {
 .label,
 .reach-row,
 .source,
+.attribution,
 #species-breakdown .key,
 #play-pause,
 #fish-loading p,
@@ -165,13 +138,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Per-species color, set once from data-species and read everywhere a
-   species needs its own tint (the day's-counts table below, the plates
-   drawer, and inspect.css's species picker/length scale/season sparkline).
-   Previously each consumer re-derived the same chinook/steelhead/etc.
-   mapping by hand in 3+ separate places — the exact kind of drift ui.md
-   flags as having broken this table's key colors once already, back when
-   they were positional instead of data-driven. */
+/* Per-species color, set once from data-species and read everywhere a species needs its own tint. */
 [data-species="chinook"] {
   --species-color: var(--chinook);
 }
@@ -197,26 +164,8 @@ body {
   --species-color: var(--lamprey);
 }
 
-/* ---------------------------------------------------------------------
-   Shared components — theme layer
-
-   Two reusable pieces that used to be hand-copied per selector (border,
-   hover, focus-visible, pressed state repeated near-verbatim across
-   #report-toggle, .transport-btn/.speed-btn, #play-pause, .plate-toggle,
-   .drawer-close, #plates-toggle/#field-notes-toggle, #fish-viewer-link/
-   #back-link, .info-btn, and inspect.css's .toggle-btn/#reset-view/
-   #inspect-bar-toggle — ten-plus copies of the same hairline-button
-   contract). Every one of those selectors now carries `.btn` (plus
-   `.btn-surface` where it floats directly over the canvas/drawer rather
-   than sitting inside an already-`--ink` panel) and keeps only what's
-   actually unique to it: position, size, its own type treatment, and any
-   rest-state color that isn't the default --text-dim (#play-pause stays
-   --text, .info-btn/.plate-toggle stay --text-faint — each still declares
-   that itself, ID/class specificity naturally wins over this shared
-   default). The "current reading" pressed state — border flips to
-   --accent — is `[aria-pressed="true"]` by default; a couple of
-   class-toggled controls (.plate-toggle) use `.active` instead, so both
-   are covered here. --------------------------------------------------- */
+/* Shared components — theme layer. `.btn` is the hairline-button contract (border, hover, focus-visible, pressed) every button in
+   the app carries, plus `.btn-surface` where it floats directly over the canvas/drawer rather than an already-`--ink` panel. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -257,11 +206,7 @@ body {
   color: var(--text);
 }
 
-/* Second shared surface: hairline-bordered --ink panels that aren't part
-   of the report-bar/drawer families above (each of those already shares
-   one rule across both pages — see "The bar" and "Plates drawer" below).
-   Each keeps its own unique border override (#notice/#insight-toast's
-   accent left-rule, #debug-panel's heavier top-rule). */
+/* Second shared surface: hairline-bordered --ink panels outside the report-bar/drawer families; each keeps its own border override. */
 #year-listbox,
 #notice,
 #insight-toast,
@@ -270,13 +215,7 @@ body {
   border: 1px solid var(--line);
 }
 
-/* Third shared shape: the "label ⟷ value" row — a field-head, a masthead
-   identity line, a conditions/run-status reading, a chart legend line, a
-   field-notes fact, a plates titleblock line, a turbidity label — nine
-   selectors across both files that were all independently declaring the
-   same three properties around their own actual content (gap, padding,
-   color, type size — genuinely different per row, kept on each selector
-   below rather than forced to one value). */
+/* Third shared shape: the "label ⟷ value" row, shared across a field-head, masthead line, chart legend, field-notes fact, and more. */
 .field-head,
 #masthead .dam-row,
 #masthead .reach-row,
@@ -292,10 +231,7 @@ body {
   justify-content: space-between;
 }
 
-/* Every small square "mark" in the app — a toggle's pressed dot, a species
-   key, a legend swatch, a table key square — is the same 6x6 box; only its
-   background and how it sits in its own layout differ per use, kept on
-   each selector below. */
+/* Every small square "mark" in the app — a toggle's pressed dot, a species key, a legend swatch — is the same 6x6 box. */
 .toggle-mark,
 .species-key,
 .plate-legend li i,
@@ -321,12 +257,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-/* ---------------------------------------------------------------------
-   The bar
-   --------------------------------------------------------------------- */
-
-/* Shared with #inspect-bar (the fish viewer's bottom bar) rather than
-   duplicated in inspect.css. */
+/* The bar. Shared with #inspect-bar (the fish viewer's bottom bar) rather than duplicated in inspect.css. */
 #report,
 #inspect-bar {
   pointer-events: auto;
@@ -337,43 +268,14 @@ body {
   color: var(--text);
 }
 
-/* Height safety net, mirroring #inspect-bar's identical rule (inspect.css):
-   on a landscape phone the compact HUD's stacked fields (#masthead/#passage/
-   #controls each span the full grid row even in 2-column mode) can still add
-   up to more than the viewport's own height. Without this, #hud's inset:0 +
-   flex layout lets #report overflow past the top edge with no way to reach
-   the clipped content. Unconditional — on desktop #report is a single row,
-   well under 70vh of any reasonable window, so this never binds there. */
+/* Height safety net: on a landscape phone the compact HUD's stacked fields can add up to more than the viewport's own height. */
 #report {
   max-height: 70vh;
   overflow-y: auto;
 }
 
-/* Collapse/expand handle — a flex sibling of #report inside #hud, not a
-   child of it, so it isn't clipped by #report's own overflow-y:auto above.
-   Redesigned from a right-aligned "Collapse"/"Expand" text button into a
-   small tab centered on the bar's own top edge (align-self:center) with a
-   chevron icon instead of a word — reads as a handle attached to the panel
-   rather than an unrelated floating control, the same idea as a bottom
-   sheet's own drag handle. No bottom border + margin-bottom:0 is what
-   welds it visually onto the bar: it sits flush against #report's own
-   accent top border rather than floating above it with a gap. Preceding
-   #report in DOM order is what lands it directly above the bar, since #hud
-   packs its flex children from the end (justify-content: flex-end). See
-   .claude/context/ui.md. */
-/* .btn/.btn-surface (theme layer, above) supply border/color/hover/focus/
-   pressed — pressed here means collapsed, matching #report.collapsed below.
-   Stays highly faded at rest, deliberately not boosted just because the
-   bar is collapsed: a collapsed #report is itself one big "tap to expand"
-   surface now (see the click listener on reportEl in main.js), so this tab
-   is a secondary, background affordance rather than the one way back — no
-   longer needs to fight for attention the way it did before that listener
-   existed. Full opacity is purely an interaction acknowledgment
-   (hover/focus/press), which is why it isn't hover-reliant: this control
-   matters most on mobile, where there's no hover at all, so :active covers
-   a touch tap instead. Not guarded under prefers-reduced-motion — opacity-
-   only, same as every other unguarded fade in this file (see the motion-
-   vocabulary note in .claude/context/ui.md). */
+/* Collapse/expand handle — a flex sibling of #report inside #hud, not a child, so it isn't clipped by #report's own overflow-y:auto. */
+/* A small tab centered on the bar's own top edge with a chevron, reading as a handle attached to the panel. Stays highly faded at rest, since the collapsed bar is itself the "tap to expand" surface. */
 #report-toggle {
   align-self: center;
   min-width: 40px;
@@ -394,10 +296,7 @@ body {
   opacity: 1;
 }
 
-/* Shared chevron for #report-toggle/#inspect-bar-toggle (inspect.css) — down
-   at rest ("tap to collapse, push this down"), rotated to point up once
-   collapsed ("tap to expand, pull this up"), matching a bottom sheet's own
-   handle convention for a bottom-anchored panel. */
+/* Shared chevron for #report-toggle/#inspect-bar-toggle — down at rest, rotated to point up once collapsed. */
 .chevron-icon {
   width: 12px;
   height: 8px;
@@ -420,40 +319,9 @@ body {
   }
 }
 
-/* ---------------------------------------------------------------------
-   Collapsed report — set by setReportCollapsed() in main.js. Shrinks the
-   bar to identity, the day's total, and playback, hiding everything else
-   (species table, conditions, run-status, chart/axis).
-   Defaults collapsed on a small/short viewport (read once at boot, same
-   one-time-read convention PREFERS_REDUCED_MOTION uses below in main.js),
-   but the toggle works at any width. Every rule here targets #report.collapsed
-   specifically so its extra ID specificity always wins over the width/height
-   breakpoints further down (which only carry class specificity) — the
-   collapsed view reads the same regardless of which of those is also active.
-   --------------------------------------------------------------------- */
+/* Collapsed report — set by setReportCollapsed() in main.js. Shrinks the bar to identity, the day's total, and playback. Every rule here targets #report.collapsed specifically so its ID specificity wins over the breakpoints further down. */
 
-/* Animated, not toggled: every element below transitions out instead of
-   snapping to display:none. Two different techniques, chosen by shape:
-   - Self-contained pieces with a known, bounded height (a 4-row species
-     table, a chart/axis whose own SVG/height is already a fixed CSS value,
-     a 1-2 line footnote) get a real max-height animation — the cap is
-     picked close to their actual content height (not a big round number),
-     since a cap much larger than the real content reaches its full height
-     early and then visibly "keeps animating" doing nothing for the rest of
-     the duration.
-   - Whole *fields* leaving the flex row (#conditions, #run-status) do NOT
-     animate width: #report-body's fields are divided by the `.field +
-     .field` hairline-border-left system and sized by breakpoint-specific
-     flex-basis rules (see the "Narrower viewports" section below) — safely
-     animating a field's own width to 0 would mean auditing and re-deriving
-     all of that per breakpoint. They fade+scale out instead, keep their
-     layout width for the fade's duration, and only reflow the row at the
-     very end when display:none lands — softer than an instant pop, without
-     touching the divider/flex-basis system. See .claude/context/ui.md.
-   transition-behavior:allow-discrete + @starting-style is what lets a
-   transition run across the display:none boundary at all — without it a
-   transitioning property still jumps instantly the moment display flips.
-   Unsupported browsers just keep today's instant toggle; nothing breaks. */
+/* Animated, not toggled: bounded pieces get a real max-height animation; whole fields fade+scale instead of animating width. */
 .report-foot,
 #species-breakdown,
 #season-chart,
@@ -521,9 +389,7 @@ body {
   }
 }
 
-/* #passage's field-head loses the divider that used to separate it from
-   #species-breakdown in sync with that table's own collapse, rather than
-   snapping the instant the table's display flips. */
+/* #passage's field-head loses its divider in sync with #species-breakdown's own collapse, rather than snapping instantly. */
 #passage .field-head {
   transition:
     margin-bottom var(--dur-med) var(--ease),
@@ -543,12 +409,7 @@ body {
   }
 }
 
-/* display:flex, not left implicit — beats the >=640px/500px breakpoint's
-   own display:grid the same way the selector's specificity does everywhere
-   else in this block. flex-wrap is deliberately left unset so it still
-   falls through to the <=1280px breakpoint's flex-wrap: wrap, letting the
-   three remaining fields drop to a second row on a genuinely narrow phone
-   instead of forcing a single overflowing row. */
+/* display:flex, not left implicit, beats the >=640px/500px breakpoint's own display:grid. flex-wrap left unset so it still falls through to the <=1280px breakpoint's flex-wrap: wrap. */
 #report.collapsed .report-body {
   display: flex;
   align-items: center;
@@ -581,11 +442,7 @@ body {
   flex: 1 1 auto;
 }
 
-/* Field 5 collapses to just the transport row, same reduction #passage's
-   field-head/table pair gets above — snap, not animated, matching
-   #masthead's own narrow-viewport hides rather than #season-chart's
-   max-height treatment just above (not worth the extra transition
-   bookkeeping for two small rows). */
+/* Field 5 collapses to just the transport row — snap, not animated, matching #masthead's own narrow-viewport hides. */
 #report.collapsed #controls .field-head,
 #report.collapsed #controls .readout {
   display: none;
@@ -604,15 +461,7 @@ body {
   border-left: 1px solid var(--line-soft);
 }
 
-/* Dimmed during a season switch (setYear, main.js) while a field's old
-   figures are still on screen but no longer necessarily correct for the
-   year just selected — the opacity part of this transition needs no
-   prefers-reduced-motion guard on its own, matching #fish-loading's own
-   unguarded opacity fade below. padding-left/border-left-color ride the
-   same rule so the collapsed bar's divider fade (`#report.collapsed
-   .field`, above) doesn't need a second transition list — but unlike plain
-   opacity, those two move the divider hairline in space, so the guard below
-   trims the rule back to opacity-only under reduced motion. */
+/* Dimmed during a season switch while a field's old figures may no longer be correct for the year just selected. */
 .field {
   transition:
     opacity var(--dur-med) var(--ease),
@@ -630,9 +479,7 @@ body {
   opacity: 0.45;
 }
 
-/* Each field is headed once, so rows beneath don't repeat their unit.
-   Row shape (display/align-items/justify-content) is shared — see the
-   theme layer above. */
+/* Each field is headed once, so rows beneath don't repeat their unit; row shape is shared from the theme layer above. */
 .field-head {
   gap: 12px;
   margin-bottom: var(--s2);
@@ -646,9 +493,7 @@ body {
   white-space: nowrap;
 }
 
-/* The mobile-collapsed alternate to "Daily adult passage" — hidden here,
-   shown only in that one narrow/short-viewport scope (below) where the full
-   label doesn't fit next to the day's count on a shared row. */
+/* The mobile-collapsed alternate to "Daily adult passage", shown only in the narrow/short-viewport scope below. */
 .field-head .label-short {
   display: none;
 }
@@ -658,20 +503,14 @@ body {
   font-weight: 400;
 }
 
-/* ---------------------------------------------------------------------
-   Field 1 — identity and the current reading
-   --------------------------------------------------------------------- */
+/* Field 1 — identity and the current reading. */
 
 #masthead {
   flex: 0 0 auto;
   max-width: 38ch; /* was 34ch — the condensed face's heavier (500) label weight needs a touch more room for "2015" not to orphan */
 }
 
-/* The panel's own title, above the dam identity — a page-level label, not
-   a field reading. The left accent bar is `.station`'s old device ("the
-   only mark standing in for an agency device — a rule, not a seal"),
-   transplanted here now that this is the first thing in the field, and is
-   what still marks it as a heading. */
+/* The panel's own title, above the dam identity — a page-level label, not a field reading. The left accent bar still marks it as a heading. */
 .panel-title {
   margin-bottom: var(--s2);
   padding-bottom: var(--s2);
@@ -685,12 +524,7 @@ body {
   color: var(--text);
 }
 
-/* Dam identity as a label/value row (name, then code) — replaced the old
-   .station + h1 pair (see ui.md, "Field 1"). `.dam-row .label` ("Lower
-   Granite Lock & Dam") is one of the two named exceptions to this field's
-   otherwise-regular type — bold and a step larger than the rest; `.dam-code`
-   ("LWG") is not (it's set explicitly below, not inherited from this
-   container, precisely so it doesn't pick up the label's weight). */
+/* Dam identity as a label/value row; `.dam-row .label` is bold and a step larger, `.dam-code` is set explicitly below so it doesn't inherit that weight. */
 #masthead .dam-row {
   gap: 10px;
   margin-top: var(--s2);
@@ -712,9 +546,7 @@ body {
   color: var(--text);
 }
 
-/* Label/value row — replaced the old single wrapping sentence (see
-   .claude/context/ui.md, "Field 1") once the season control needed its own
-   row rather than a word inside one. */
+/* Label/value row, replacing the old single wrapping sentence once the season control needed its own row. */
 #masthead .reach-row {
   gap: 10px;
   margin-top: var(--s2);
@@ -731,19 +563,13 @@ body {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
-  /* Not inherited: .reach-row's own uppercase-label letter-spacing (0.14em)
-     otherwise applies to this ~22-character string too, which is what was
-     pushing it past #masthead's width and overlapping the field beside it. */
+  /* Not inherited: .reach-row's uppercase-label letter-spacing was pushing this string past #masthead's width. */
   letter-spacing: normal;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
-/* The #year-listbox trigger (below) — kept in the same quiet, hairline-
-   underline register the old <select> had, but now a real button with a
-   chevron: a bare underlined word didn't read as interactive at all (see
-   ui.md). Now the trailing item of its own .reach-row rather than a word
-   inline in a sentence. */
+/* The #year-listbox trigger — kept in the same quiet hairline-underline register the old <select> had, now a real button with a chevron. */
 #year-select {
   display: inline-flex;
   align-items: center;
@@ -763,8 +589,7 @@ body {
   transition: border-color var(--dur-fast) var(--ease);
 }
 
-/* The other named exception (with .dam-row .label, above) — bold and a
-   step larger than this field's otherwise-regular type. */
+/* Bold and a step larger than this field's otherwise-regular type. */
 #year-select-value {
   font-size: var(--t-5);
   font-weight: 700;
@@ -791,24 +616,16 @@ body {
   outline-offset: 2px;
 }
 
-/* Held during a season load — the fetch is same-origin and quick, but the
-   control should not look interactive while it is ignoring input. */
+/* Held during a season load; the control shouldn't look interactive while ignoring input. */
 #year-select:disabled {
   color: var(--text-faint);
   cursor: default;
 }
 
-/* The listbox itself — see the #year-listbox markup comment in index.html
-   for why this lives outside #report. Styled from the same tokens as every
-   other panel in the app (hard corners, hairline border, --ink background)
-   instead of inheriting a platform popup's own light-mode chrome. */
+/* The listbox itself — lives outside #report, styled from the same tokens as every other panel instead of a platform popup's chrome. */
 #year-listbox {
   position: fixed;
-  /* #hud sets pointer-events:none and #year-listbox is its own sibling of
-     #report (not a descendant — see the markup comment in index.html), so
-     it doesn't inherit #report's own opt-back-in the way everything inside
-     the bar does. Without this, every option click fell straight through
-     to #river-canvas underneath. */
+  /* #hud sets pointer-events:none and #year-listbox is a sibling of #report, not a descendant, so it needs its own opt-back-in. */
   pointer-events: auto;
   z-index: 3;
   margin: 0;
@@ -819,9 +636,7 @@ body {
   font-variant-numeric: tabular-nums;
   font-size: var(--t-2);
   letter-spacing: 0.04em;
-  /* Focused programmatically on open (setYearListboxOpen, main.js), never
-     by Tab — the highlighted row (.active) already marks position, so the
-     browser's own default focus ring here would just be noise. */
+  /* Focused programmatically on open, never by Tab — .active already marks position, so a default focus ring would be noise. */
   outline: none;
 }
 
@@ -843,42 +658,23 @@ body {
   color: var(--text);
 }
 
-/* The loaded season — same accent-marks-the-current-reading convention as
-   .speed-btn[aria-pressed="true"] and #season-delta.above. */
+/* The loaded season — same accent-marks-the-current-reading convention as #season-delta.above. */
 #year-listbox li[aria-selected="true"] {
   color: var(--accent);
 }
 
-/* Hidden except in #report.collapsed's mobile-compact view (below) — a
-   duplicate of just the date text, since that view needs it sharing a row
-   with .dam-code and the "real" reading (below) no longer lives in
-   #masthead to share a row with. */
+/* Hidden except in #report.collapsed's mobile-compact view — a duplicate of just the date text, sharing a row with .dam-code. */
 #masthead .readout-compact {
   display: none;
 }
 
-/* ---------------------------------------------------------------------
-   Field 2 — the day's counts
-   --------------------------------------------------------------------- */
-
-/* flex:1 1 260px (not the old 0 0 auto) so this field — and the table inside
-   it — actually stretches past its own tight content width instead of
-   sitting at exactly the sum of its column widths. A definite flex-basis
-   (260px, not auto) is what makes width:100% on the table below safe (see
-   .claude/context/ui.md); flex-grow:1 lets it take a *share* of any extra
-   row width, but max-width caps that share so this field can't out-grow
-   #controls — the chart is still meant to be the row's dominant growing
-   field, and on a wide desktop window an uncapped #passage otherwise won a
-   roughly even split with it, squeezing the chart's own figcaption/axis
-   into wrapping. */
+/* Field 2 — the day's counts. flex:1 1 260px so this field stretches past its tight content width; max-width caps its share so it can't out-grow #controls, which is meant to be the row's dominant growing field. */
 #passage {
   flex: 1 1 260px;
   max-width: 460px;
 }
 
-/* Table, not a flex row, so counts sit in fixed columns as digits change.
-   width:100% — safe now that #passage above has a definite flex-resolved
-   size rather than being shrink-to-fit; see .claude/context/ui.md. */
+/* Table, not a flex row, so counts sit in fixed columns as digits change; width:100% is safe now #passage has a definite flex-resolved size. */
 #species-breakdown {
   border-collapse: collapse;
   width: 100%;
@@ -899,7 +695,7 @@ body {
   padding-right: 6px;
 }
 
-/* Square, not a dot — see rule 1 at the top of this file. */
+/* Square, not a dot. */
 #species-breakdown .key i {
   display: inline-block;
   margin-right: 6px;
@@ -918,16 +714,12 @@ body {
   padding-right: 0;
 }
 
-/* Key colours read the shared --species-color indirection above, keyed off
-   data-species rather than row position (see ui.md — a past positional
-   version broke when species were added/reordered). */
+/* Key colours read the shared --species-color indirection, keyed off data-species rather than row position. */
 #species-breakdown .key[data-species] {
   color: var(--species-color);
 }
 
-/* Reported-but-unswum species: dimmed label, but the key square keeps its
-   real species color (read from --species-color, not currentColor, or it'd
-   be lost once .key.reported dims the text). */
+/* Reported-but-unswum species: dimmed label, but the key square keeps its real species color from --species-color, not currentColor. */
 #species-breakdown .key.reported {
   color: var(--text-faint);
 }
@@ -940,9 +732,7 @@ body {
   color: var(--text-dim);
 }
 
-/* ---------------------------------------------------------------------
-   Fields 3 and 4 — conditions, and where the run stands
-   --------------------------------------------------------------------- */
+/* Fields 3 and 4 — conditions, and where the run stands. */
 
 #conditions,
 #run-status {
@@ -970,8 +760,7 @@ body {
   white-space: nowrap;
 }
 
-/* The one judgement (not measurement) reading in the bar — below-average is
-   the neutral case (dimmed, not alarmed), not an error. */
+/* The one judgement, not measurement, reading in the bar — below-average is the neutral case, not an error. */
 #season-delta {
   transition: color var(--dur-fast) var(--ease);
 }
@@ -984,13 +773,7 @@ body {
   color: var(--text-dim);
 }
 
-/* ---------------------------------------------------------------------
-   Field 5 — the season chart and the controls
-   --------------------------------------------------------------------- */
-
-/* The only field that grows. A column (transport row, then chart/slider/axis
-   stack), not [button | stack] — see ui.md for why that layout breaks the
-   cursor/curve alignment. */
+/* Field 5 — the season chart and the controls. The only field that grows; a column (transport row, then chart/slider/axis stack), not [button | stack]. */
 #controls {
   flex: 1 1 auto;
   min-width: 240px;
@@ -999,10 +782,7 @@ body {
   gap: var(--s2);
 }
 
-/* The current reading — moved here from #masthead to sit with the chart it
-   describes (see ui.md, "Field 1"/"Field 5"). #masthead keeps its own
-   .readout-compact duplicate for the collapsed-mobile view, which needs
-   the date sharing a row with .dam-code instead. */
+/* The current reading — moved here from #masthead to sit with the chart it describes; #masthead keeps its own compact duplicate. */
 #controls .readout {
   gap: 12px;
   font-size: var(--t-4);
@@ -1041,9 +821,7 @@ body {
   color: var(--text-faint);
 }
 
-/* Narrower than #play-pause, without its min-width — these are secondary.
-   .btn supplies border/color/hover/focus/disabled/pressed (Loop's disabled
-   state and the current-pace pressed state both read from it). */
+/* Narrower than #play-pause, without its min-width, since these are secondary; .btn supplies border/color/hover/focus/disabled/pressed. */
 .transport-btn,
 .speed-btn {
   flex: none;
@@ -1063,9 +841,7 @@ body {
   text-align: center;
 }
 
-/* Two label/value rows — series name + key on the left, that series' own
-   reading on the right — not one run-on caption string. Matches the
-   mobile mockup; see .claude/context/ui.md. */
+/* Two label/value rows — series name + key on the left, that series' own reading on the right — not one run-on caption string. */
 #season-chart figcaption {
   margin-bottom: var(--s2);
   font-size: var(--t-4);
@@ -1078,8 +854,7 @@ body {
   padding: 1px 0;
 }
 
-/* Keys drawn as the marks themselves (block for area, rule for line) rather
-   than as swatches — quicker to read with only two series. */
+/* Keys drawn as the marks themselves (block for area, rule for line) rather than as swatches. */
 #season-chart .key-passage::before,
 #season-chart .key-temp::before {
   content: "";
@@ -1112,9 +887,7 @@ body {
   color: var(--text-dim);
 }
 
-/* A dark "instrument screen" set into the light paper panel, matching the
-   mock — a fixed dark ground independent of --ink (the panel's own light
-   background), since --series/--water-temp are tuned for a dark backdrop. */
+/* A dark "instrument screen" set into the light paper panel — a fixed dark ground independent of --ink, since --series/--water-temp are tuned for a dark backdrop. */
 #season-chart svg {
   display: block;
   width: 100%;
@@ -1134,10 +907,7 @@ body {
   stroke-linejoin: round;
 }
 
-/* .btn supplies border/cursor/focus-visible; color stays --text (not the
-   shared --text-dim default) since Pause is the one primary action in the
-   row, and :active's filled accent — not .btn's own bordered pressed
-   state — is this button's own "in use" signal. */
+/* .btn supplies border/cursor/focus-visible; color stays --text since Pause is the one primary action, with :active's filled accent as the "in use" signal. */
 #play-pause {
   flex: none;
   /* Pushed to the far end of #transport — Peak/Loop cluster on the left. */
@@ -1157,8 +927,7 @@ body {
   border-color: var(--accent);
 }
 
-/* Fully custom — a gauge (hairline track, red cursor bar) instead of the
-   default pill-track control. */
+/* Fully custom — a gauge (hairline track, red cursor bar) instead of the default pill-track control. */
 #timeline {
   -webkit-appearance: none;
   appearance: none;
@@ -1207,8 +976,7 @@ body {
   box-shadow: 0 0 0 1px var(--text);
 }
 
-/* Month ticks, positioned from percentages written by buildTimelineAxis()
-   in main.js. */
+/* Month ticks, positioned from percentages written by buildTimelineAxis() in main.js. */
 #timeline-axis {
   position: relative;
   height: 13px;
@@ -1223,12 +991,8 @@ body {
   background: var(--line);
 }
 
-/* Clicking a month label jumps to its first counted day (delegated handler
-   in main.js). Styled as the label it already was, not as a control. */
-/* Padding/letter-spacing kept tight (not the shared uppercase-label group's
-   usual 0.14em) — these are the one label in the app where nine of them
-   have to fit across one narrow track without measured thinning
-   (thinMonthLabels, main.js) hiding every other one; see ui.md. */
+/* Clicking a month label jumps to its first counted day; styled as the label it already was, not as a control. */
+/* Padding/letter-spacing kept tighter than the shared uppercase-label group, since nine of these have to fit across one narrow track. */
 #timeline-axis button {
   position: absolute;
   top: 4px;
@@ -1268,8 +1032,7 @@ body {
   transform: translateX(-100%);
 }
 
-/* Inset by half the cursor's width, so a given date lands at the same x in
-   the chart, the slider cursor, and the axis. */
+/* Inset by half the cursor's width, so a given date lands at the same x in the chart, the slider cursor, and the axis. */
 #season-chart,
 #timeline-axis {
   margin: 0 1.5px;
@@ -1279,9 +1042,7 @@ body {
   margin-bottom: 4px;
 }
 
-/* ---------------------------------------------------------------------
-   Footnote strip — provenance
-   --------------------------------------------------------------------- */
+/* Footnote strip — provenance. */
 
 .report-foot {
   display: flex;
@@ -1299,16 +1060,20 @@ body {
   margin-left: auto;
 }
 
+.attribution {
+  margin: auto;
+}
+
+.attribution a {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
 .footnote {
   color: var(--text-dimmer);
 }
 
-/* ---------------------------------------------------------------------
-   Loading overlay
-   --------------------------------------------------------------------- */
-
-/* Shown while loadFishAssets() (main.js) loads+bakes the per-species GLBs;
-   faded out, not removed, once the fish renderer is ready. */
+/* Loading overlay, shown while loadFishAssets() loads+bakes the per-species GLBs; faded out, not removed, once ready. */
 #fish-loading {
   position: absolute;
   inset: 0;
@@ -1368,11 +1133,7 @@ body {
   }
 }
 
-/* ---------------------------------------------------------------------
-   Corner nav link — shared between the river and fish-viewer pages
-   --------------------------------------------------------------------- */
-/* .btn/.btn-surface (theme layer, top of file) + the shared uppercase
-   .label group supply the rest. */
+/* Corner nav link — shared between the river and fish-viewer pages. .btn/.btn-surface plus the shared uppercase .label group supply the rest. */
 #fish-viewer-link,
 #back-link {
   position: absolute;
@@ -1383,15 +1144,7 @@ body {
   text-decoration: none;
 }
 
-/* Below each drawer's own min(Npx, 100vw) width (#plates/#inspect-panel,
-   further down), the open drawer is a full-viewport overlay and visually
-   covers this link's fixed top-left corner slot — the drawer's z-index:1
-   already paints over it, so it's unclickable there too, just invisibly.
-   :has() lets this stay a pure CSS rule keyed off the same .open class
-   drawer.js already toggles, rather than adding a drawer-open signal
-   somewhere JS has to remember to also flip. Each link only shares a page
-   with its own drawer (#fish-viewer-link+#plates on the river, #back-link+
-   #inspect-panel on the fish viewer), so no cross-page interference. */
+/* Below each drawer's own min(Npx, 100vw) width, the open drawer is a full-viewport overlay that covers this link's corner slot. :has() keys off the same .open class drawer.js toggles, so no extra JS signal is needed. */
 @media (max-width: 400px) {
   #app:has(#plates.open) #fish-viewer-link {
     display: none;
@@ -1404,10 +1157,7 @@ body {
   }
 }
 
-/* ---------------------------------------------------------------------
-   Failure notice (see showNotice in main.js) — top-centre, not in the
-   report bar, so it's legible even if the bar itself never populated.
-   --------------------------------------------------------------------- */
+/* Failure notice — top-centre, not in the report bar, so it's legible even if the bar itself never populated. */
 
 #notice {
   position: absolute;
@@ -1420,9 +1170,7 @@ body {
   font-size: var(--t-4);
   line-height: 1.45;
   pointer-events: auto;
-  /* Centering (-50%) and the entrance settle share one transform so they
-     never fight each other — see .shown, written by showNotice()/hideNotice()
-     in main.js. */
+  /* Centering (-50%) and the entrance settle share one transform so they never fight each other. */
   transform: translate(-50%, -4px);
   opacity: 0;
   transition:
@@ -1451,23 +1199,16 @@ body {
   display: none;
 }
 
-/* ---------------------------------------------------------------------
-   Insight toast (see src/insights.js) — one shared snackbar, top-centre
-   like #notice above, opened by .info-btn buttons scattered through the
-   HUD, the plates drawer, and the fish viewer's bar/panel.
-   --------------------------------------------------------------------- */
+/* Insight toast — one shared snackbar, top-centre like #notice, opened by .info-btn buttons scattered through the HUD and drawers. */
 
-/* .btn supplies border/hover/focus-visible; only the rest color (--text-
-   faint, quieter than .btn's default) and size/type are this button's own. */
+/* .btn supplies border/hover/focus-visible; only the rest color and size/type are this button's own. */
 .info-btn {
   width: 14px;
   height: 14px;
   margin-left: 6px;
   padding: 0;
   color: var(--text-faint);
-  /* Sans + italic, not the mono numeral font — a bold mono "i" at this size
-     reads as a "1" (both are just a stem with a serif foot). Italic keeps
-     it unambiguous as a letter and matches the conventional info-icon glyph. */
+  /* Sans + italic, not the mono numeral font — a bold mono "i" at this size reads as a "1". */
   font-size: 11px;
   font-style: italic;
   font-weight: 700;
@@ -1475,10 +1216,7 @@ body {
   vertical-align: middle;
 }
 
-/* The one open insight — same "current reading" register the accent is
-   otherwise reserved for. .btn[aria-pressed="true"] already sets
-   border-color; only the (quieter, --text-faint-at-rest) color needs its
-   own override to reach accent too. */
+/* The one open insight — same "current reading" register the accent is otherwise reserved for. */
 .info-btn[aria-pressed="true"] {
   color: var(--accent);
 }
@@ -1488,11 +1226,7 @@ body {
   top: 18px;
   left: 50%;
   z-index: 3; /* above #plates-toggle (2) / #plates (1) and #notice */
-  /* A flat px cap, not #notice's ch-based one — ch measures against this
-     font's "0", and in the proportional --sans face that undershoots badly
-     (68ch landed under 460px, barely wider than #notice). 720px reads as
-     genuinely filling more of the top on a real monitor; small viewports
-     still fall back to the calc() margin the same as #notice does. */
+  /* A flat px cap, not #notice's ch-based one — ch undershoots badly in the proportional --sans face. */
   width: min(720px, calc(100vw - 48px));
   padding: 12px 34px 12px 14px;
   border-left: 3px solid var(--accent);
@@ -1559,9 +1293,7 @@ body {
   outline-offset: 1px;
 }
 
-/* ---------------------------------------------------------------------
-   Debug panel (D key — see main.js)
-   --------------------------------------------------------------------- */
+/* Debug panel, toggled with the D key. */
 
 #debug-panel {
   position: absolute;
@@ -1579,19 +1311,10 @@ body {
   white-space: pre;
 }
 
-/* ---------------------------------------------------------------------
-   Plates drawer (see src/plates.js) — overlays the canvas, doesn't resize it
-   --------------------------------------------------------------------- */
+/* Plates drawer — overlays the canvas, doesn't resize it. */
 
-/* #field-notes-toggle (inspect.html) shares this treatment byte-for-byte —
-   same reasoning as the #fish-viewer-link/#back-link rule above. It never
-   coexists with #plates-toggle (different pages), so the shared top:18px/
-   right:18px corner slot is never contested. z-index:2 still matters even
-   though this is no longer the drawer's close control (that's .drawer-close
-   now, a child of the panel with its own z-index:1) — it's what keeps this
-   button paintable/clickable above #plates/#inspect-panel while closed. */
-/* .btn/.btn-surface (theme layer, top of file) + the shared uppercase
-   .label group supply border/color/hover/focus/type. */
+/* #field-notes-toggle shares this treatment byte-for-byte; z-index:2 is what keeps this button paintable/clickable above #plates/#inspect-panel while closed. */
+/* .btn/.btn-surface + the shared uppercase .label group supply border/color/hover/focus/type. */
 #plates-toggle,
 #field-notes-toggle {
   position: absolute;
@@ -1603,28 +1326,14 @@ body {
   pointer-events: auto;
 }
 
-/* aria-pressed=true means its drawer is open — hidden rather than styled
-   "active" (its old treatment), since .drawer-close now owns closing and a
-   second, now-redundant control sitting right next to it read as clutter,
-   not a second affordance. createDrawer() (drawer.js) moves focus to
-   closeButton on open specifically so this doesn't leave keyboard focus on
-   an element that just vanished; closing (by any of the three routes —
-   this toggle's own click handler still works, closeButton, or Escape)
-   sets aria-pressed back to false before refocusing this element, so it's
-   visible again by the time focus actually lands on it. */
+/* aria-pressed=true means its drawer is open — hidden rather than styled "active", since .drawer-close now owns closing. */
 #plates-toggle[aria-pressed="true"],
 #field-notes-toggle[aria-pressed="true"] {
   display: none;
 }
 
-/* Shared slide-in drawer chrome — #plates (this page) and #inspect-panel
-   (inspect.css) are the same component, driven by the same drawer.js
-   open/close logic, so their look can't drift out of sync the way two
-   independent copies did. z-index:1 is what puts the drawer in front of
-   the bottom bar (#hud/#inspect-bar, both z-index:auto) when open,
-   regardless of DOM order — see .claude/context/drawer.md. Each page still
-   sets its own width below (400px here vs. 320px in inspect.css), since
-   that's real content-driven sizing, not chrome. */
+/* Shared slide-in drawer chrome — #plates and #inspect-panel are the same component, driven by the same drawer.js open/close logic. */
+/* z-index:1 puts the drawer in front of the bottom bar when open, regardless of DOM order; each page still sets its own width below. */
 #plates,
 #inspect-panel {
   position: absolute;
@@ -1655,19 +1364,8 @@ body {
   width: min(400px, 100vw);
 }
 
-/* Dedicated close control, shared between #plates and #inspect-panel — a
-   real child of the panel (unlike #plates-toggle/#field-notes-toggle,
-   page-level siblings kept exactly where they are so opening a drawer
-   always stays a plain text button, per .claude/context/ui.md), so it
-   reads as chrome that belongs to the panel rather than a page-level
-   control that happens to sit nearby. Top-left, not top-right: top-right is
-   already #plates-toggle/#field-notes-toggle's own corner, and giving this
-   the same corner would stack two controls on top of each other. Neither
-   panel needs extra top padding to clear it — both already clear the
-   *other* corner's button with room to spare (52px). Off-screen (and out of
-   the way) for free whenever its panel is closed, via the parent's own
-   transform:translateX(100%) — no separate visibility rule needed. */
-/* .btn/.btn-surface (theme layer, top of file) supply the rest. */
+/* Dedicated close control, shared between #plates and #inspect-panel — a real child of the panel, so it reads as chrome that belongs to it. */
+/* Top-left, not top-right, since top-right is already #plates-toggle/#field-notes-toggle's own corner. .btn/.btn-surface supply the rest. */
 .drawer-close {
   position: absolute;
   top: 12px;
@@ -1692,9 +1390,7 @@ body {
   padding: 52px var(--s4) var(--s4); /* clears #plates-toggle floating above */
 }
 
-/* Scrollbars, shared between this drawer and #inspect-panel/#inspect-bar
-   (inspect.css) and this file's own #report (both bottom bars can now
-   scroll internally on a short viewport — see the max-height rules above). */
+/* Scrollbars, shared between this drawer, #inspect-panel/#inspect-bar, and #report, since bottom bars can now scroll internally on a short viewport. */
 #plates-scroll,
 #inspect-panel,
 #inspect-bar,
@@ -1747,14 +1443,7 @@ body {
   border-bottom: none;
 }
 
-/* Reveal cascade for the drawer's own contents — every direct child of the
-   scroll region, so it also covers #plates-titleblock at the end and the
-   two async replacements (FIG. 4/5) landing on their own later. Staggered
-   via a plain inline transition-delay set per-child by plates.js's
-   revealPlate()/appendPlate(); the async replacements pass no stagger
-   (delay 0) since they arrive independently over the network, not as one
-   coordinated batch. Transform + opacity, so it's guarded under reduced
-   motion below. */
+/* Reveal cascade for the drawer's contents, staggered via a plain inline transition-delay set per-child by plates.js's revealPlate(). */
 #plates-scroll > * {
   opacity: 1;
   transform: translateY(0);
@@ -1795,9 +1484,7 @@ body {
   color: var(--text);
 }
 
-/* .btn supplies border/cursor/hover/focus-visible/.active — the last of
-   those (not aria-pressed; plates.js toggles this one by class) is what
-   marks percent-mode "on". */
+/* .btn supplies border/cursor/hover/focus-visible/.active — the last, not aria-pressed, is what marks percent-mode "on" (plates.js toggles by class). */
 .plate-toggle {
   margin-left: auto;
   color: var(--text-faint);
@@ -1867,9 +1554,7 @@ body {
   margin-right: var(--s3);
 }
 
-/* stroke-width/vector-effect (theme layer, top of file) keep stroke width
-   constant despite each plate's stretched viewBox (preserveAspectRatio:
-   none throughout, same as #season-chart). */
+/* stroke-width/vector-effect keep stroke width constant despite each plate's stretched viewBox. */
 .plate-cursor {
   stroke: var(--accent);
 }
@@ -1940,9 +1625,7 @@ body {
   color: var(--accent);
 }
 
-/* --species-color for every [data-species] element in this drawer (and
-   everywhere else in the app) comes from the shared block near the top of
-   this file — nothing #plates-specific needed here any more. */
+/* --species-color for every [data-species] element in this drawer comes from the shared block near the top of this file. */
 
 .plate-area[data-species],
 .plate-today-bar rect[data-species],
@@ -2028,12 +1711,9 @@ body {
   text-align: right;
 }
 
-/* ---------------------------------------------------------------------
-   Narrower viewports
-   --------------------------------------------------------------------- */
+/* Narrower viewports. */
 
-/* One row of five fields needs real width; below it the bar wraps to two
-   rows rather than crushing the chart. */
+/* One row of five fields needs real width; below it the bar wraps to two rows rather than crushing the chart. */
 @media (max-width: 1280px) {
   .report-body {
     flex-wrap: wrap;
@@ -2062,12 +1742,7 @@ body {
   }
 }
 
-/* Below this the fields can only stack (744px of an 812px phone screen), so
-   the narrow layout is a two-column grid instead — see ui.md for the fixed-
-   width-table/grid-track overflow bug this ran into. Also matched on short
-   viewport height (not just narrow width) so a landscape phone (e.g.
-   667x375, which falls between this breakpoint and the 900px one on width
-   alone) gets the same compact treatment — one system, not two. */
+/* Below this the fields can only stack, so the narrow layout is a two-column grid instead; also matched on short viewport height so a landscape phone gets the same compact treatment. */
 @media (max-width: 640px), (max-height: 500px) {
   #hud {
     padding: 10px;
@@ -2097,33 +1772,13 @@ body {
     grid-column: 1 / -1;
   }
 
-  /* #passage's own base-rule max-width:460px (an ID selector) would
-     otherwise beat the `.report-body > .field { min-width: 0 }` reset above
-     on specificity alone regardless of source order — reasserting min-width
-     here, later and at equal ID specificity, is what actually wins. Without
-     it the grid-shrink fix that rule exists for stops applying to this one
-     field. max-width: none too — the desktop cap that protects #controls
-     from a wide-row flex split has nothing to protect here (this field
-     spans the full grid row on its own line), and left in place it would
-     just strand empty space beside a field that should fill its row like
-     every other one in this view. See .claude/context/ui.md. */
+  /* #passage's own base-rule max-width:460px would otherwise beat the min-width:0 reset above on specificity; reasserted here at equal ID specificity. */
   #passage {
     min-width: 0;
     max-width: none;
   }
 
-  /* Field-level visual order for the mobile portrait layout — chart before
-     the day's counts, conditions/run-status last. DOM order stays as-is
-     (masthead, passage, conditions, run-status, controls) since desktop's
-     flex row still reads top-to-bottom in source order; only this grid
-     scope reorders. Restored to source order under #report.collapsed
-     below, since that compact view was tuned around masthead → passage →
-     controls specifically.
-     max-width: none — #masthead's own 34ch cap (base rule above) is a
-     desktop sizing concern (keeps the identity field from stretching the
-     whole bar wider on a five-field row). Left in place here it instead
-     stopped the field from filling its own full-width grid column,
-     leaving it narrower than #passage/#conditions beside it. */
+  /* Field-level visual order for the mobile portrait layout — chart before the day's counts, conditions/run-status last; DOM order stays as-is, only this grid scope reorders. */
   #masthead {
     order: 1;
     max-width: none;
@@ -2145,10 +1800,7 @@ body {
     order: 5;
   }
 
-  /* Trimmed to the three rows the mobile mockup shows — full five-row
-     field at every wider breakpoint. `p.cond-secondary` (not just
-     `.cond-secondary`) to out-specificity the base `#conditions
-     p:not(.field-head) { display: flex }` rule above. */
+  /* Trimmed to the three rows the mobile mockup shows; `p.cond-secondary`, not just `.cond-secondary`, to out-specificity the base rule above. */
   #conditions p.cond-secondary {
     display: none;
   }
@@ -2157,14 +1809,9 @@ body {
     padding-right: 8px;
   }
 
-  /* Month labels are thinned by measurement (thinMonthLabels in main.js), not
-     display:none — a hidden label has a zero-width rect the measurement can't use. */
+  /* Month labels are thinned by measurement (thinMonthLabels in main.js), not display:none, since a hidden label has a zero-width rect. */
 
-  /* Stacked instead of the desktop side-by-side wrapped row — .source is
-     long enough that sharing a row's width with .footnote pushed it past
-     two lines; the full row width alone isn't quite enough either (see the
-     letter-spacing/font-size trims below), but stacking is the bulk of
-     the fix. */
+  /* Stacked instead of the desktop side-by-side wrapped row, since .source shared a row with .footnote pushed past two lines. */
   .report-foot {
     flex-direction: column;
     gap: var(--s1);
@@ -2183,28 +1830,8 @@ body {
     margin-left: 0;
   }
 
-  /* Collapsed-on-mobile goes past the desktop collapsed bar (identity in
-     full + daily total + transport, see ui.md) down to just the three
-     things a mobile viewer actually needs while the sim is running: the
-     current date, the day's passage count, and a way to pause it — no
-     timeline here, since a viewer wanting to scrub dates has already
-     expanded the bar to reach the slider. The dam code rides along as a
-     compact prefix on the date line since it costs no extra row, but the
-     season/year picker, the day-ordinal, and the Peak-seek button are cut
-     here. Scoped to #report.collapsed so the manual toggle at wider
-     viewports still gets the fuller collapsed view ui.md documents; this is
-     the small/short-viewport case specifically. Everything hidden below
-     stays in the DOM — expanding the bar (the chevron tab) reaches it
-     again.
-     .report-body becomes a single flex row: #masthead grows to fill the
-     leading space (`flex: 1 1 auto`) while #passage and #controls sit at
-     the trailing edge sized to their own content. #controls needs its own
-     override here — its base rule (`flex: 1 1 auto; min-width: 240px`) is
-     sized for holding the whole transport-row-plus-timeline-stack it
-     normally does, and with the timeline cut and #transport's own Peak
-     button hidden too, #controls is down to a single Pause button; without
-     the override that 240px floor would force this row to wrap or overflow
-     at phone width. */
+  /* Collapsed-on-mobile goes past the desktop collapsed bar down to just the current date, the day's passage count, and a way to pause it. */
+  /* .report-body becomes a single flex row: #masthead grows to fill the leading space while #passage and #controls sit at the trailing edge. */
   #report.collapsed .report-body {
     display: flex;
     align-items: center;
@@ -2213,9 +1840,7 @@ body {
     row-gap: 6px;
   }
 
-  /* Restores masthead → passage → controls, overriding the expanded-view
-     order:1/2/3 set above — this compact view was measured and tuned
-     around that specific sequence (see ui.md). */
+  /* Restores masthead → passage → controls, overriding the expanded-view order:1/2/3 set above. */
   #report.collapsed #masthead {
     order: 1;
     flex: 1 1 auto;
@@ -2251,11 +1876,7 @@ body {
     display: inline;
   }
 
-  /* .dam-code shrinks from the title-sized identity line to a plain inline
-     prefix sharing a row with the compact date reading (.readout-compact,
-     below) instead of leading its own — the full dam name stays hidden
-     (.dam-row .label, above), since it's the code, not the name, that fits
-     a shared row at real phone widths. */
+  /* .dam-code shrinks to a plain inline prefix sharing a row with the compact date reading, since it fits a shared row where the full name wouldn't. */
   #report.collapsed #masthead .dam-row {
     margin-top: 0;
   }
@@ -2266,10 +1887,7 @@ body {
     letter-spacing: 0.05em;
   }
 
-  /* The compact date duplicate (hidden everywhere else — see the base
-     .readout-compact rule) is what actually shows here, sharing a row with
-     .dam-code now that the "real" date-label/day-ordinal pair lives in
-     #controls instead of #masthead. */
+  /* The compact date duplicate is what actually shows here, sharing a row with .dam-code now that the real pair lives in #controls. */
   #report.collapsed #masthead .readout-compact {
     display: flex;
     align-items: baseline;
@@ -2277,28 +1895,14 @@ body {
     margin: 0;
   }
 
-  /* Supplies the divider between the dam code and the date that a line
-     break used to provide. */
+  /* Supplies the divider between the dam code and the date that a line break used to provide. */
   #report.collapsed #masthead .readout-compact::before {
     content: "\00b7";
     color: var(--text-faint);
   }
-
-  /* .report-body's --field-gap (22px) is a between-fields gutter sized for
-     a desktop row; this scope replaces it outright with column-gap: --s3 (a
-     few px) plus a small row-gap as a wrap fallback, since 22px between
-     three items on one row would blow past this view's whole height/width
-     budget. */
 }
 
-/* Touch-target growth. (pointer: coarse), not a width breakpoint — a touch
-   tablet at desktop width gets these, a narrow desktop browser window does
-   not (same signal quality.js already uses for tier detection). Real
-   padding growth, not an invisible expanded hit-region: .speed-btn/#transport
-   controls sit only 4-8px apart, so a bigger-than-visible catch-area risks
-   stealing a neighbor's tap. #year-select is deliberately excluded — it's
-   the trailing item of #masthead .reach-row (a flex label/value row, see
-   ui.md); left out of this pass rather than re-verified against it. */
+/* Touch-target growth, keyed on (pointer: coarse), not a width breakpoint. Real padding growth, not an invisible hit-region, since controls sit only 4-8px apart. */
 @media (pointer: coarse) {
   .transport-btn,
   .speed-btn,
@@ -2317,8 +1921,7 @@ body {
     height: 36px;
   }
 
-  /* The visual gauge cursor stays a thin hairline bar (see rule above) —
-     only the draggable hit area grows, keeping the instrument look. */
+  /* The visual gauge cursor stays a thin hairline bar; only the draggable hit area grows, keeping the instrument look. */
   #timeline {
     height: 32px;
   }

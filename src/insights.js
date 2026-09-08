@@ -1,7 +1,4 @@
-// insights.js
-// One shared "insight" toast, the small info buttons that open it, and the
-// localStorage-backed cache that keeps each one from being recomputed.
-// Design rationale, invariants, gotchas: .claude/context/insights.md
+// One shared "insight" toast, its info-button triggers, and a localStorage cache so each is computed once.
 let toastEl = null;
 let titleEl = null;
 let bodyEl = null;
@@ -10,8 +7,7 @@ let hideTimer = null;
 
 const AUTO_HIDE_MS = 20000;
 
-// Builds the toast once and appends it to <body> (not #app) so it paints
-// above both pages' chrome regardless of which one calls this — see the doc.
+// Appended to <body>, not #app, so it paints above either page's chrome.
 export function initInsightToast() {
   if (toastEl) return;
 
@@ -37,11 +33,7 @@ export function initInsightToast() {
 
   document.body.appendChild(toastEl);
 
-  // Hovering (or focusing into) the toast holds the auto-hide off entirely —
-  // a viewer who's still reading, or has tabbed onto the close button,
-  // shouldn't have it vanish under them mid-sentence. Leaving restarts the
-  // full countdown rather than resuming a partial one; simpler, and a viewer
-  // who just moved their mouse off it is still mid-read either way.
+  // Hovering or focusing the toast holds the auto-hide off; leaving restarts the full countdown.
   toastEl.addEventListener("pointerenter", () => clearTimeout(hideTimer));
   toastEl.addEventListener("pointerleave", () => {
     if (activeBtn) hideTimer = setTimeout(hideInsight, AUTO_HIDE_MS);
@@ -51,12 +43,7 @@ export function initInsightToast() {
     if (activeBtn) hideTimer = setTimeout(hideInsight, AUTO_HIDE_MS);
   });
 
-  // Escape and a click outside both dismiss, same convention the plates
-  // drawer's own toggle uses (see .claude/context/plates.md). A click on
-  // any .info-btn is excluded here since that button's own handler already
-  // decides what happens next (reopen with new content, or close) —
-  // without the exclusion, switching between two open insights would
-  // close-then-reopen across two events instead of just updating in place.
+  // Escape or a click outside dismisses; a click on .info-btn is excluded since its own handler decides.
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && activeBtn) hideInsight();
   });
@@ -85,8 +72,7 @@ function showInsight(title, text, btn) {
   titleEl.hidden = !title;
   bodyEl.textContent = text;
   toastEl.hidden = false;
-  // Forces a reflow so the entrance transition runs even when the toast was
-  // already hidden a moment ago — same trick showNotice() uses in main.js.
+  // Forces a reflow so the entrance transition runs even if the toast was just hidden.
   void toastEl.offsetWidth;
   toastEl.classList.add("shown");
   hideTimer = setTimeout(hideInsight, AUTO_HIDE_MS);
@@ -99,24 +85,13 @@ function hideInsight() {
     activeBtn.setAttribute("aria-pressed", "false");
     activeBtn = null;
   }
-  // Deferred re-hide, not transitionend — a backgrounded tab or reduced
-  // motion can mean that event never fires (same reasoning as hideNotice()
-  // in main.js).
+  // Deferred re-hide, not transitionend — a backgrounded tab or reduced motion can skip that event.
   setTimeout(() => {
     if (!toastEl.classList.contains("shown")) toastEl.hidden = true;
   }, 260);
 }
 
-// ---------------------------------------------------------------------
-// Insight cache — a growing "database" of already-written insights, keyed
-// by the section and timeframe they describe (e.g. "passage:2015:2015-03-06"
-// or "season-card:steelhead:2015"). There's no backend to hold this (see the
-// root CLAUDE.md), so the document is a single JSON blob in localStorage:
-// generated once per key, on demand, the first time a viewer actually asks
-// for it, then reused forever after instead of recomputed. See the doc for
-// why this is safe — every key names a fact about a finished day, which
-// never changes once counted.
-// ---------------------------------------------------------------------
+// Insight cache: JSON blob in localStorage, keyed by section+timeframe, generated once per key on first ask.
 const STORE_KEY = "salmon-insights-v1";
 let store = null;
 
@@ -131,9 +106,7 @@ function loadStore() {
       }
     }
   } catch {
-    // Private browsing, a full quota, or corrupt JSON — start empty rather
-    // than fail. This is a cache, not a data source; every entry is always
-    // regenerable from the getText that would have supplied it.
+    // Private browsing, a full quota, or corrupt JSON — start empty; every entry is regenerable anyway.
   }
   return store;
 }
@@ -142,9 +115,7 @@ function persistStore() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(store)));
   } catch {
-    // Storage unavailable or full — the cache still works for the rest of
-    // this session (the in-memory Map is untouched), it just won't survive
-    // a reload.
+    // Storage unavailable or full — the in-memory cache still works, it just won't survive a reload.
   }
 }
 
@@ -158,13 +129,7 @@ function resolveInsight(key, getText) {
   return text;
 }
 
-// key may be a string or a function returning one, evaluated at click time
-// just like getText — most call sites need a fresh key (today's date, the
-// selected species) rather than whatever was current when the button was
-// built. getText only ever runs on a cache miss; a hit skips it entirely.
-// title is the toast's own heading (also folded into the aria-label) — it's
-// never cached, since it's just the field/figure's own name, already known
-// synchronously wherever the button is built.
+// key/getText may be functions, evaluated at click time so they can depend on then-current state.
 export function createInfoButton(key, getText, title) {
   const btn = document.createElement("button");
   btn.type = "button";

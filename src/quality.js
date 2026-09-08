@@ -1,23 +1,14 @@
-// quality.js
-// Device-tier detection, the settings each tier implies, and the frame-time
-// governor that corrects a wrong guess. No user-facing quality control —
-// `?quality=low` is for development/A-B testing only.
-// Design rationale, invariants, gotchas: .claude/context/quality.md
+// Device-tier detection, the settings each tier implies, and the frame-time governor that corrects a wrong guess.
 
-// Ordered weakest to strongest. Indices are used for stepping, so the order
-// matters more than the names.
+// Ordered weakest to strongest; indices are used for stepping.
 const TIERS = ["low", "medium", "high"];
 
-// ---------------------------------------------------------------------
-// The tier table — see quality.md for what got cut where and why, including
-// the caustics-pass cost breakdown and the population-vs-WORLD_SCALE math.
-// ---------------------------------------------------------------------
 const SETTINGS = {
   low: {
-    // Single highest-leverage number in the table — every fragment cost scales with its square.
+    // Highest-leverage number in the table — fragment cost scales with its square.
     pixelRatio: 1,
 
-    // Both top two GPU costs, gone — see quality.md.
+    // Both top two GPU costs, gone.
     realCaustics: false,
     waterSimSize: 0,
     causticsSegments: 0,
@@ -58,7 +49,7 @@ const SETTINGS = {
     realCaustics: true,
     waterSimSize: 512,
     causticsSegments: 120,
-    // Deliberately NOT cut to match causticsSegments — see quality.md (free resolution at identical fill cost).
+    // Deliberately not cut to match causticsSegments — free resolution at identical fill cost.
     causticsTargetSize: 1024,
     causticsEnvSize: 512,
     causticsIterations: 40,
@@ -73,19 +64,11 @@ const SETTINGS = {
   },
 };
 
-// ---------------------------------------------------------------------
-// Detection
-// ---------------------------------------------------------------------
-
-// GPU strings that mean "do not attempt the real caustics pass" — software rasterizers and mobile
-// parts too old for vertex texture fetch in a loop. Mali-G57/Adreno 6xx+ deliberately excluded — see quality.md.
+// GPU strings meaning "do not attempt the real caustics pass" — software rasterizers and old mobile parts.
 const WEAK_GPU =
   /SwiftShader|llvmpipe|Software|Microsoft Basic Render|PowerVR|VideoCore|Mali-[T4]|Mali-G[1-5][0-9](\D|$)|Adreno \(TM\) [1-5][0-9][0-9]/i;
 
-// Reads the GPU string, then throws the WebGL context away immediately
-// (mobile browsers cap live contexts) rather than waiting for GC. Returns
-// null when the extension is unavailable (Firefox/Safari privacy modes) —
-// a supported outcome; see quality.md.
+// Throws the WebGL context away immediately rather than waiting for GC; returns null if the debug extension is unavailable.
 function probeGpu() {
   try {
     const canvas = document.createElement("canvas");
@@ -108,9 +91,7 @@ function probeGpu() {
   }
 }
 
-// Picks the starting tier from hints, not facts — errs toward guessing low
-// on mobile and lets the governor decide the rest (see quality.md for why).
-// Returns { tier, reason }; reason is surfaced in the debug panel.
+// Picks the starting tier from hints, not facts, erring toward low on mobile; the governor corrects the rest.
 export function detectTier() {
   const forced = new URLSearchParams(window.location.search).get("quality");
   if (forced && TIERS.includes(forced)) {
@@ -122,7 +103,7 @@ export function detectTier() {
     return { tier: "low", reason: `known-weak GPU: ${gpu}` };
   }
 
-  // Most reliable mobile/tablet signal — the input device, not a parsed user-agent string.
+  // Input device, not a parsed user-agent string — the most reliable mobile/tablet signal.
   const coarse =
     window.matchMedia?.("(pointer: coarse)").matches ?? false;
   const cores = navigator.hardwareConcurrency || 4;
@@ -143,10 +124,6 @@ export function detectTier() {
   return { tier: "high", reason: gpu ? `desktop, ${gpu}` : "desktop" };
 }
 
-// ---------------------------------------------------------------------
-// Live state
-// ---------------------------------------------------------------------
-
 const detected = detectTier();
 
 // Mutated in place by applyTier(), not reassigned, so `import { QUALITY }` consumers always see current values.
@@ -163,32 +140,25 @@ function applyTier(tier) {
   Object.assign(QUALITY, SETTINGS[tier]);
 }
 
-// ---------------------------------------------------------------------
-// The frame-time governor
-// ---------------------------------------------------------------------
-
 // Ignore the first second or so — shader compile/texture upload/GLB parsing, not steady-state cost.
 const WARMUP_FRAMES = 60;
 
 // Decision every ~2s at 60fps — slow enough one bad frame can't trigger it, fast enough not to stall.
 const WINDOW_FRAMES = 120;
 
-// A tier change is itself a multi-frame stall (rebuildWorld in main.js) — don't measure through it.
+// A tier change is itself a multi-frame stall — don't measure through it.
 const COOLDOWN_FRAMES = 300;
 
-// ≈48fps — the "clearly not coping" line, deliberately below 60 (see quality.md).
+// ≈48fps, the "clearly not coping" line.
 const DOWNGRADE_MS = 20.8;
 
-// Median (not mean) of a ring buffer, copied before sorting so sorting in place doesn't scramble
-// the ring's write order — see quality.md for why median over mean.
+// Copies before sorting so sorting in place doesn't scramble the ring buffer's write order.
 function median(values, count) {
   const sorted = values.slice(0, count).sort((a, b) => a - b);
   return sorted[sorted.length >> 1];
 }
 
-// Watches frame times and steps the tier down when the device clearly isn't coping.
-// `onChange(tier)` fires after QUALITY has been updated. Deliberately no auto-upgrade,
-// and `onChange` is null (measure but never act) when the tier was forced via ?quality= — see quality.md.
+// Watches frame times and steps the tier down when the device isn't coping; never auto-upgrades.
 export function createPerfGovernor(onChange) {
   const samples = new Float32Array(WINDOW_FRAMES);
   let count = 0;
@@ -203,7 +173,7 @@ export function createPerfGovernor(onChange) {
         return;
       }
 
-      // Excludes the delta a backgrounded tab produces on return (rAF stops firing while hidden).
+      // Excludes the delta a backgrounded tab produces on return.
       if (deltaMs > 0 && deltaMs < 1000) samples[count++] = deltaMs;
       if (count < WINDOW_FRAMES) return;
 

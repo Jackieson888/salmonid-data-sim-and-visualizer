@@ -1,32 +1,24 @@
-// causticsGenerator.js — real-time caustics: env map of the riverbed + a
-// refraction ray-march, run every frame after the water sim steps.
-// Design rationale, invariants, gotchas: .claude/context/scene/water-and-caustics.md
+// Real-time caustics: env map of the riverbed plus a refraction ray-march, run every frame after the water sim steps.
 import * as THREE from "three";
 import { waterWorldSize, WATER_HEIGHT_SCALE } from "./water.js";
 import { riverDepth } from "./terrain.js";
 import { WATER_NORMAL_GLSL } from "./glsl.js";
 import { QUALITY } from "../quality.js";
 
-// Cost knobs, all device-tier scaled (quality.js) — this pass is the most
-// expensive thing in the frame (vertex count O(segments^2), each running up
-// to maxIterations texture fetches), so it's also the one tiers give back
-// first. The low tier skips constructing this generator entirely (see
-// createWorld in main.js) in favor of glsl.js's procedural stand-in.
+// Cost knobs, all device-tier scaled — this pass is the frame's most expensive, so it's the first tiers give back.
 const causticsMeshSegments = () => QUALITY.causticsSegments;
 const envMapSize = () => QUALITY.causticsEnvSize;
 
-// Read by main.js to size water.js's causticGlow() blur texel to this
-// texture's actual resolution.
+// Read by main.js to size water.js's causticGlow() blur texel to this texture's actual resolution.
 export const causticsTargetSize = () => QUALITY.causticsTargetSize;
 
-// Ray-march step count, as env-map texels — must be compile-time (WebGL
-// forbids while-loops). Renou's demo uses 50 at his 1024 env map size.
+// Ray-march step count, as env-map texels; must be compile-time since WebGL forbids while-loops.
 const maxIterations = () => QUALITY.causticsIterations;
 
-// Air -> water refractive index ratio (1 / 1.333), same as Renou's shader.
+// Air -> water refractive index ratio (1 / 1.333).
 const ETA = 0.7504;
 
-// Scales the RATIO_CAP-bounded area-ratio into brightness. Renou hardcodes 0.15.
+// Scales the RATIO_CAP-bounded area-ratio into brightness.
 const CAUSTICS_FACTOR = 0.15;
 
 const ENV_VERTEX_SHADER = /* glsl */ `
@@ -53,10 +45,7 @@ const ENV_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// Ported from shaders/caustics/water_vertex.glsl. `position.xy` holds this
-// vertex's rest-position world (x, z) directly (see buildCausticsGeometry).
-// A function, not a module-level string: the march length is a tier setting
-// (quality.js) interpolated in at material build time.
+// `position.xy` holds this vertex's rest-position world (x, z) directly. A function since the march length is a tier setting.
 const causticsVertexShader = () => /* glsl */ `
   ${WATER_NORMAL_GLSL}
 
@@ -89,9 +78,7 @@ const causticsVertexShader = () => /* glsl */ `
     vec2 coords = 0.5 + 0.5 * currentPosition;
 
     vec3 refracted = refract(light, waterNormal, ${ETA.toFixed(4)});
-    // w=0 (direction transform), not w=1 like the reference source — our
-    // light camera sits hundreds of world units up, where w=1's translation
-    // bake-in would drown out the refraction. See context doc.
+    // w=0 (direction transform), not w=1 — the light camera sits hundreds of units up, where translation would drown out the refraction.
     vec4 projectedRefractionVector = projectionMatrix * viewMatrix * vec4(refracted, 0.0);
 
     vWaterDepth = 0.5 + 0.5 * projectedWaterPosition.z / projectedWaterPosition.w;
@@ -122,9 +109,7 @@ const causticsVertexShader = () => /* glsl */ `
   }
 `;
 
-// Ported from shaders/caustics/water_fragment.glsl, but RATIO_CAP replaces
-// the reference's unbounded 2e20 sentinel — see context doc for why (a plain
-// box blur plus additive accumulation would let that sentinel swamp the output).
+// RATIO_CAP bounds the area ratio; an unbounded sentinel would swamp the output through the additive accumulation.
 const RATIO_CAP = 400.0;
 
 const CAUSTICS_FRAGMENT_SHADER = /* glsl */ `
@@ -154,9 +139,7 @@ const CAUSTICS_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// Straight-down orthographic camera over the same oversized, bounds-centered
-// area water.js/terrain.js render into — see context doc for why
-// straight-down rather than along the real sun direction.
+// Straight-down orthographic camera over the same oversized area water.js/terrain.js render into.
 function buildLightCamera(bounds, coverage) {
   const { width: planeWidth, height: planeHeight } = coverage;
   const centerX = coverage.centerX;
@@ -180,9 +163,7 @@ function buildLightCamera(bounds, coverage) {
   return camera;
 }
 
-// Flat (unrotated) plane whose position.xy holds rest-position world (x, z)
-// directly — unlike buildWaterMesh/buildTerrainMesh, never rotated into the
-// real 3D XZ plane since it's only ever rasterized through the light camera.
+// Flat plane whose position.xy holds rest-position world (x, z) directly; never rotated since it's only rasterized through the light camera.
 function buildCausticsGeometry(coverage) {
   const { width: planeWidth, height: planeHeight } = coverage;
   const centerX = coverage.centerX;
@@ -208,23 +189,17 @@ function makeTarget(size) {
 }
 
 export function createCausticsGenerator(renderer, bounds, terrainMesh, coverage) {
-  // `coverage` is the caustics pass's own, shorter reach (causticsWorldSize
-  // in water.js) — sets the light camera's frustum and the refraction grid's
-  // extent.
+  // `coverage` is the caustics pass's own, shorter reach — sets the light camera's frustum and the refraction grid's extent.
   const lightCamera = buildLightCamera(bounds, coverage);
 
-  // The water SIM's (larger) coverage — the vertex shader must sample the
-  // height field through this mapping, not `coverage`, or it refracts
-  // against the wrong part of the surface. See context doc.
+  // The water sim's larger coverage — the vertex shader must sample the height field through this mapping, not `coverage`.
   const { width: planeWidth, height: planeHeight, marginX, marginZ } =
     waterWorldSize(bounds);
 
   const envMapTarget = makeTarget(envMapSize());
   const causticsTarget = makeTarget(causticsTargetSize());
 
-  // Shares terrainMesh's (already world-baked) geometry rather than cloning
-  // it, so this pass tracks whatever shape the riverbed has. A separate Mesh
-  // since adding the riverbed itself here would reparent it out of the main scene.
+  // Shares terrainMesh's geometry rather than cloning it, in a separate Mesh so the riverbed itself isn't reparented.
   const envMaterial = new THREE.ShaderMaterial({
     vertexShader: ENV_VERTEX_SHADER,
     fragmentShader: ENV_FRAGMENT_SHADER,
@@ -245,8 +220,7 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh, coverage)
     transparent: true,
     side: THREE.DoubleSide,
   });
-  // Additive accumulation: overlapping refracted triangles sum brightness.
-  // Depth (alpha) is just the latest write, not summed.
+  // Additive accumulation: overlapping refracted triangles sum brightness; depth (alpha) is just the latest write.
   causticsMaterial.blending = THREE.CustomBlending;
   causticsMaterial.blendEquation = THREE.AddEquation;
   causticsMaterial.blendSrc = THREE.OneFactor;
@@ -259,11 +233,10 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh, coverage)
   const causticsMesh = new THREE.Mesh(causticsGeometry, causticsMaterial);
 
   const black = new THREE.Color(0, 0, 0);
-  // Hoisted out of render() (which runs every frame) to avoid GC pressure.
+  // Hoisted out of render() (runs every frame) to avoid GC pressure.
   const previousClearColor = new THREE.Color();
 
-  // Renders `mesh` into `target` through the light camera, leaving the
-  // renderer's target and clear color exactly as it found them.
+  // Renders `mesh` into `target` through the light camera, leaving the renderer's target/clear color as found.
   function renderToTarget(mesh, target) {
     const previousTarget = renderer.getRenderTarget();
     renderer.getClearColor(previousClearColor);
@@ -278,28 +251,20 @@ export function createCausticsGenerator(renderer, bounds, terrainMesh, coverage)
     renderer.setClearColor(previousClearColor, previousClearAlpha);
   }
 
-  // Only the caustics accumulation pass runs per frame — see renderEnvMap().
+  // Only the caustics accumulation pass runs per frame.
   function render(waterTexture) {
     causticsMaterial.uniforms.water.value = waterTexture;
     renderToTarget(causticsMesh, causticsTarget);
   }
 
-  // The environment map is rendered ONCE, here, not every frame.
-  //
-  // It stores the receiver geometry's world position + depth per texel, and
-  // every input to that is static. Re-rendering it per frame (as this used
-  // to do) re-rasterized a byte-identical texture 60 times a second. A resize
-  // disposes this whole generator and rebuilds it, which re-runs this once.
+  // Rendered once here, not every frame — every input (receiver world position + depth per texel) is static.
   function renderEnvMap() {
     renderToTarget(envMesh, envMapTarget);
   }
 
   renderEnvMap();
 
-  // Pushed every frame from main.js's loop (the sun moves within the day too
-  // — sweptSunDirection in season.js), which is what slides the light net
-  // across the bed. Negated: refract()'s `I` wants travel direction, while
-  // season.sunDirection points toward the sun.
+  // Pushed every frame as the sun moves; negated since refract()'s `I` wants travel direction, not direction-to-sun.
   function setSunDirection(direction) {
     causticsMaterial.uniforms.light.value.copy(direction).multiplyScalar(-1);
   }

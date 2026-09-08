@@ -1,43 +1,23 @@
-// data.js
-// Design rationale, invariants, gotchas: .claude/context/data.md
+// Real Lower Granite Dam daily adult passage counts, loaded from vendored DART CSV snapshots in public/.
 import { parseAdultDailyCsv } from "./dart/parseAdultDaily.js";
 
-// Real Lower Granite Dam (LWG) daily adult passage counts, read at module load
-// from a snapshot vendored into this repo (public/lwg-adult-daily-2015.csv).
-// Five species drive the simulation; `count` is their per-day sum (see main.js).
-// The rest of what DART publishes is parsed too and reported in the HUD
-// without being simulated — see the note on `count` in parseAdultDailyCsv.
-//
-// Every counting season vendored under public/, oldest first — each a DART
-// adult_daily.php export for Lower Granite (scripts/fetch-dart.mjs, whose
-// own VENDOR_YEARS is the source of what's actually on disk — bump both
-// together). The trailing year may be a season still in progress; DART just
-// answers with however many rows it's counted so far (see main.js's
-// season-completeness note).
-//
-// NOTHING may cache runData.length across a year change — see the rebuild
-// hooks in main.js and plates.js.
+// Every counting season vendored under public/, oldest first; keep in sync with scripts/fetch-dart.mjs's VENDOR_YEARS.
 export const AVAILABLE_YEARS = [
   2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017,
   2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026,
 ];
 
-// The season the app opens on — 2015 has substantial counts across all five
-// simulated species all year and is the only year with a vendored
-// river-conditions file (see riverConditionsUrl below).
+// 2015 has substantial counts across all five simulated species and is the only year with a river-conditions file.
 const DEFAULT_YEAR = 2015;
 
-// Retrieved 2026-08-24, byte-for-byte as served — no added header comment (see data.md for why).
 const snapshotUrl = (year) => `/lwg-adult-daily-${year}.csv`;
 
-// Opt-in-only fallback source (see liveRefreshRequested) — snapshots are the default. See data.md.
-// Same query shape as adultDailyUrl() in scripts/fetch-dart.mjs — one implementation, not two that can drift.
+// Opt-in fallback (see liveRefreshRequested); snapshots are the default.
 const liveDartUrl = (year) =>
   `https://www.cbr.washington.edu/dart/cs/php/rpt/adult_daily.php?sc=1&outputFormat=csv&year=${year}&proj=LWG&span=no&startdate=1%2F1&enddate=12%2F31&run=`;
 
-// Same-origin static asset — generous, bounds a wedged connection rather than policing a slow one.
 const SNAPSHOT_TIMEOUT_MS = 15000;
-// Third-party host, so this is the real guard.
+// Third-party host, so this timeout is the real guard.
 const DART_TIMEOUT_MS = 5000;
 
 async function fetchText(url, timeoutMs, label) {
@@ -50,7 +30,7 @@ async function fetchText(url, timeoutMs, label) {
     }
     return await response.text();
   } catch (err) {
-    // Rewrite the bare "AbortError" into something that says what was being fetched and for how long.
+    // Rewrite the bare "AbortError" into a message naming what timed out.
     if (err.name === "AbortError") {
       throw new Error(`${label} request timed out after ${timeoutMs}ms`);
     }
@@ -60,13 +40,13 @@ async function fetchText(url, timeoutMs, label) {
   }
 }
 
-// `?live`/`?live=1` on the URL; off by default (see data.md). Guarded for a non-browser context.
+// `?live`/`?live=1` on the URL; off by default.
 function liveRefreshRequested() {
   if (typeof location === "undefined") return false;
   return new URLSearchParams(location.search).has("live");
 }
 
-// Exported so the HUD can be honest about its own provenance (see the masthead in index.html).
+// Exported so the HUD can be honest about its own provenance.
 export let runDataSource = "snapshot";
 
 async function loadRunDataFor(year) {
@@ -88,11 +68,9 @@ async function loadRunDataFor(year) {
   }
 }
 
-// No synthetic fallback, deliberately — see data.md (the old one presented invented numbers as a federal record).
+// No synthetic fallback, deliberately — the HUD presents this as a federal measurement record.
 
-// `let`, not `const` — ES module live bindings notify every importer the instant loadYear()
-// reassigns these, but notify nobody who *derives* something from them. See data.md for the
-// rebuild hooks (rebuildForYear() in main.js, rebuildPlatesForYear() in plates.js).
+// `let`, not `const`: loadYear() reassigns these, but anything that derives from them must rebuild explicitly.
 export let runData = [];
 export let runYear = DEFAULT_YEAR;
 
@@ -106,8 +84,7 @@ function initialYear() {
   return AVAILABLE_YEARS.includes(requested) ? requested : DEFAULT_YEAR;
 }
 
-// Throws on failure WITHOUT touching runData/runYear — see setYear() in main.js, which
-// reverts its control and warns on that throw.
+// Throws on failure without touching runData/runYear.
 export async function loadYear(year) {
   if (!rowsByYear.has(year)) {
     const { rows, source } = await loadRunDataFor(year);
@@ -121,11 +98,9 @@ export async function loadYear(year) {
 
 await loadYear(initialYear());
 
-// River conditions and multi-year history: lazy and memoized, unlike runData
-// — see data.md for why, and for why only 2015 has a vendored river file.
+// River conditions and multi-year history: lazy and memoized, unlike runData.
 const riverConditionsUrl = (year) => `/lwg-river-${year}.csv`;
 const RUN_HISTORY_URL = "/lwg-history-2006-2015.json";
-// Same-origin static assets, opened well after boot — generous like SNAPSHOT_TIMEOUT_MS.
 const ENRICHMENT_TIMEOUT_MS = 15000;
 
 function csvNumber(value) {
@@ -136,10 +111,7 @@ function csvNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Wide-format daily river conditions at LWG, pivoted from DART's long-format
-// river_graph_text export (scripts/fetch-dart.mjs). THROWS on a body that
-// isn't this file — see data.md for why that matters (an SPA dev-server
-// fallback would otherwise return HTML as a 200 and parse into fake rows).
+// Throws on a body that isn't this CSV, since a dev-server SPA fallback would otherwise return HTML as a fake 200.
 function parseRiverConditionsCsv(csvText) {
   const lines = csvText.split("\n").filter((line) => line.trim() !== "");
   const header = lines[0].split(",").map((name) => name.trim());
@@ -167,7 +139,7 @@ function parseRiverConditionsCsv(csvText) {
   });
 }
 
-// A REJECTED promise is deliberately left cached — see data.md (otherwise a 404'd year re-requests every switch back to it).
+// A rejected promise is deliberately left cached, or a 404'd year would re-request every switch back to it.
 const riverConditionsByYear = new Map();
 
 export function loadRiverConditions(year = runYear) {
@@ -186,11 +158,7 @@ export function loadRiverConditions(year = runYear) {
 
 let runHistoryPromise = null;
 
-// Per-year season totals by species and a day-of-year min/mean/max envelope
-// across 2006-2015, precomputed by scripts/fetch-dart.mjs so the browser
-// never parses ten years of CSV itself. Shape:
-//   { years, seasonTotals: [{year, chinook, ..., count}],
-//     dailyEnvelope: [{doy, n, min, mean, max}] }
+// Per-year season totals and a day-of-year min/mean/max envelope, precomputed by scripts/fetch-dart.mjs.
 export function loadRunHistory() {
   if (!runHistoryPromise) {
     runHistoryPromise = fetchText(

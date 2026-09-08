@@ -1,20 +1,15 @@
-// boids.js
-// Reynolds flocking (separation/alignment/cohesion) plus fish-specific
-// drift, drag, edge steering, and a fade in/out lifecycle. Fully 2D (x, y);
-// the renderer (fishMesh.js) reinterprets these as worldX/worldZ.
-// Design rationale, invariants, gotchas: .claude/context/boids.md
+// Reynolds flocking plus fish-specific drift, drag, edge steering, and a fade in/out lifecycle. Fully 2D (x, y).
 
 // Equal to REMOVE_FADE_FRAMES intentionally — fish fade in and out over the same duration.
 const SPAWN_FADE_FRAMES = 24;
 
-// Renderer sizes its instance capacity off this — see FISH_RENDER_HEADROOM in main.js.
-// Equal to SPAWN_FADE_FRAMES intentionally, not a coincidence.
+// Renderer sizes its instance capacity off this; equal to SPAWN_FADE_FRAMES intentionally.
 export const REMOVE_FADE_FRAMES = 24;
 
-// Blend factor for Fish.smoothSpeed's EMA (see constructor).
+// Blend factor for Fish.smoothSpeed's EMA.
 const SPEED_SMOOTHING = 0.03;
 
-// Flocking-force tuning knobs used in step() (see .claude/context/boids.md).
+// Flocking-force tuning knobs used in step().
 const ALIGNMENT_GAIN = 0.05;
 const COHESION_GAIN = 0.0005;
 const FLOW_BIAS_SCALE = 0.01;
@@ -52,9 +47,7 @@ function gridKey(cx, cy) {
   return cx * GRID_KEY_SCALE + cy;
 }
 
-// Buckets `fish` by which cellSize x cellSize cell they fall in; callers scan
-// a fish's own cell plus its 8 neighbors instead of the whole flock. Pools
-// its Map and bucket arrays across frames rather than reallocating.
+// Buckets `fish` by cellSize x cellSize cell, so callers scan 9 cells instead of the whole flock; pools its arrays across frames.
 class SpatialGrid {
   constructor() {
     this.cells = new Map();
@@ -83,7 +76,7 @@ class SpatialGrid {
       bucket.push(f);
     }
 
-    // Release fish references from buckets the pool no longer hands out, or a shrinking flock leaks dead Fish.
+    // Release fish references from buckets the pool no longer hands out, so a shrinking flock can't leak dead Fish.
     for (let i = this.used; i < previousUsed; i++) this.pool[i].length = 0;
   }
 
@@ -189,7 +182,7 @@ export class Flock {
     return fish;
   }
 
-  // Flags a fade-out (Fish.opacity) rather than deleting immediately; step() drops it once faded. Idempotent.
+  // Flags a fade-out rather than deleting immediately; step() drops it once faded. Idempotent.
   remove(fish) {
     if (fish.removing) return;
     fish.removing = true;
@@ -202,7 +195,7 @@ export class Flock {
     return this._activeCount;
   }
 
-  // Flags up to `n` not-yet-removing fish to fade out, in one array pass (see .claude/context/boids.md for why not the obvious find()-in-a-loop).
+  // Flags up to `n` not-yet-removing fish to fade out, in one array pass.
   removeActive(n) {
     for (let i = 0; i < this.fish.length && n > 0; i++) {
       const fish = this.fish[i];
@@ -212,7 +205,7 @@ export class Flock {
     }
   }
 
-  // Immediately drops fish still mid-fade-out, skipping the rest of the fade — called at the start of a fresh jumpToDay resync (main.js).
+  // Immediately drops fish still mid-fade-out, skipping the rest of the fade.
   finalizeRemovals() {
     this._pruneFish(
       this.fish.some((f) => f.removing),
@@ -220,9 +213,7 @@ export class Flock {
     );
   }
 
-  // Filters this.fish to drop everything matching `predicate`, but only when `shouldPrune`
-  // is true — callers that already know the answer (e.g. a flag set while scanning for
-  // something else) pass it in directly instead of paying for a second full-array scan.
+  // Filters this.fish to drop everything matching `predicate`, but only when `shouldPrune` is already known true.
   _pruneFish(shouldPrune, predicate) {
     if (shouldPrune) {
       this.fish = this.fish.filter((f) => !predicate(f));
@@ -316,7 +307,7 @@ export class Flock {
         this.options.currentWeight *
         CURRENT_DRAG_SCALE;
 
-      // Clamp steering force. Math.sqrt, not Math.hypot — faster in V8, and overflow protection is unneeded at these magnitudes (see boids.md).
+      // Math.sqrt, not Math.hypot — faster in V8, and overflow protection is unneeded at these magnitudes.
       const forceMag = Math.sqrt(ax * ax + ay * ay);
       const maxForce = this.options.maxForce;
       if (forceMag > maxForce) {
@@ -324,8 +315,7 @@ export class Flock {
         ay = (ay / forceMag) * maxForce;
       }
 
-      // Steer away from top/bottom/left edges (right stays open for exit). Applied after the flocking
-      // clamp, with its own headroom, so a fish with no maxForce budget left can still turn from a wall.
+      // Steer away from top/bottom/left edges (right stays open for exit), applied after the flocking clamp with its own headroom.
       const { margin, edgeSteer } = this.options;
       if (fish.y < margin) ay += edgeSteer * (1 - fish.y / margin);
       if (fish.y > this.bounds.height - margin) {
@@ -350,10 +340,7 @@ export class Flock {
         fish.vy *= scale;
       }
 
-      // Post-clamp, so this reflects the speed actually applied (see Fish.smoothSpeed).
-      // Derived from the branch just taken above instead of a third sqrt call: the clamp
-      // already pins the resulting magnitude to maxSpeed, maxSpeed*0.4, or the untouched
-      // pre-clamp `speed`.
+      // Post-clamp speed, derived from the branch just taken above instead of a third sqrt call.
       const newSpeed =
         speed > maxSpeed
           ? maxSpeed
@@ -367,7 +354,7 @@ export class Flock {
       fish.x += fish.vx * dt;
       fish.y += fish.vy * dt;
 
-      // Hard clamp: zeroes outward velocity rather than bouncing, so the rendered heading doesn't snap (see boids.md).
+      // Hard clamp: zeroes outward velocity rather than bouncing, so the rendered heading doesn't snap.
       if (fish.y < 0) {
         fish.y = 0;
         if (fish.vy < 0) fish.vy = 0;
@@ -391,13 +378,10 @@ export class Flock {
       if (fish.removing) fish.removeAge += dt;
     }
 
-    // Overlap resolution: a hard guarantee that fish bodies stay apart, on top of the soft
-    // separation/cohesion forces above. Own grid, rebuilt here since positions just moved.
-    // See .claude/context/boids.md for the dt-scaling and clamp-to-1 rationale.
+    // Overlap resolution: a hard guarantee that fish bodies stay apart, on top of the soft forces above. Own grid, rebuilt since positions just moved.
     const CORRECTION_FRACTION = Math.min(1, 0.5 * dt);
 
-    // Ceiling on how far this pass may move one fish in a single step (see boids.md — this is
-    // the one thing that can move a fish off its facing direction, so it's capped to a nudge).
+    // Ceiling on how far this pass may move one fish per step — the one thing that can move a fish off its facing direction.
     const maxCorrection = this.options.maxSpeed * dt * 0.5;
     const maxCorrectionSq = maxCorrection * maxCorrection;
     for (let i = 0; i < this.fish.length; i++) {
@@ -433,7 +417,7 @@ export class Flock {
               dy = 0;
               dist = 0.01;
             }
-            // Accumulated (not applied immediately) so the pass is order-independent — see boids.md.
+            // Accumulated, not applied immediately, so the pass is order-independent.
             const push = ((minDist - dist) / dist) * CORRECTION_FRACTION * 0.5;
             a._corrX -= dx * push;
             a._corrY -= dy * push;
@@ -464,8 +448,7 @@ export class Flock {
         f.y += cy;
       }
 
-      // River flow-through: fish past the right edge have finished their run — fade them out (remove()).
-      // `!removing` guard: without it, a fish sitting past exitX for its whole fade-out would be counted ~24 times.
+      // Fish past the right edge finished their run; `!removing` guard stops a fading fish being counted repeatedly.
       if (f.x > exitX && !f.removing) {
         this.remove(f);
         this.exitedLastStep++;

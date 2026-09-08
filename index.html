@@ -10,13 +10,11 @@
              Granite Dam on the Snake River, driven by real daily adult
              passage counts from Columbia Basin Research DART."
     />
-    <!-- Explicit icon: without one, a 404 for /favicon.ico trips
-       scripts/screenshot.mjs's failure detection. See .claude/context/ui.md -->
+    <!-- Explicit icon: without one, a 404 for /favicon.ico trips scripts/screenshot.mjs's failure detection. -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="theme-color" content="#0a0f12" />
 
-    <!-- Condensed PNW/Corps-of-Engineers report face for the HUD — see the
-       --sans stack and rationale in style.css / .claude/context/ui.md. -->
+    <!-- Condensed PNW/Corps-of-Engineers report face for the HUD; see the --sans stack in style.css. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -24,8 +22,7 @@
       rel="stylesheet"
     />
 
-    <!-- Social card — regenerate og-image.png via scripts/screenshot.mjs
-       rather than hand-making one. See .claude/context/ui.md -->
+    <!-- Social card — regenerate og-image.png via scripts/screenshot.mjs rather than hand-making one. -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Salmonid Run — A Boids Simulation" />
     <meta
@@ -51,12 +48,8 @@
     <main id="app">
       <canvas id="river-canvas"></canvas>
 
-      <!-- The HUD's report styling: .claude/context/ui.md -->
       <div id="hud">
-        <!-- Collapses #report to the current reading, the day's total, and
-           playback — see setReportCollapsed() in main.js and #report.collapsed
-           in style.css. A flex sibling of #report (not a child), so it isn't
-           clipped by #report's own overflow-y:auto. -->
+        <!-- Collapses #report to the current reading; a flex sibling of #report, not a child, so it isn't clipped by its overflow-y:auto. -->
         <button
           id="report-toggle"
           class="btn btn-surface"
@@ -76,40 +69,25 @@
         </button>
         <section id="report">
           <div class="report-body">
-            <!-- 1. Identity. The current reading (date/day-ordinal) now
-               lives in field 5, next to "Season chart" — see the note there
-               and .claude/context/ui.md. -->
+            <!-- 1. Identity. The current reading (date/day-ordinal) lives in field 5, next to "Season chart". -->
             <header class="field" id="masthead">
-              <!-- The panel's own title — an app-level label, not a field
-                 reading. The accent mark reuses .station's old
-                 border-left-as-a-mark device (see ui.md rule 1: no
-                 border-radius) rather than a drawn shape. Info button
-                 appended by initInsights() in main.js. -->
+              <!-- The panel's own title — an app-level label, not a field reading. Info button appended by initInsights() in main.js. -->
               <p class="panel-title">
                 <span class="label">Salmonid Data Simulation</span>
               </p>
-              <!-- Dam identity as a label/value row, matching Snake
-                 River/Counting Season below — no separate "Adult Fish
-                 Passage" station line. -->
+              <!-- Dam identity as a label/value row, matching Snake River/Counting Season below. -->
               <p class="dam-row">
                 <span class="label">Lower Granite Lock &amp; Dam</span>
                 <span class="dam-code">LWG</span>
               </p>
-              <!-- Two label/value rows (real dam coordinates, then the
-                 season picker) instead of one wrapping sentence — see
-                 .claude/context/ui.md. -->
+              <!-- Two label/value rows instead of one wrapping sentence. -->
               <p class="reach-row">
                 <span class="label">Snake River</span>
                 <span class="coords">46&deg;39'38"N 117&deg;25'41"W</span>
               </p>
               <p class="reach-row">
                 <span class="label">Counting Season</span>
-                <!-- A custom listbox, not a native <select> — Chromium's own
-                   select popup ignores color-scheme:dark on Windows and
-                   rendered as a stock white listbox over this page's dark
-                   chrome. #year-listbox (a sibling of #report below, not a
-                   descendant — see .claude/context/ui.md) holds the actual
-                   options, populated from AVAILABLE_YEARS in main.js. -->
+                <!-- A custom listbox, not a native <select> — Chromium's own select popup ignores color-scheme:dark on Windows. -->
                 <button
                   type="button"
                   id="year-select"
@@ -129,19 +107,13 @@
                   <span id="year-select-value">2015</span>
                 </button>
               </p>
-              <!-- Collapsed-mobile only (see #report.collapsed in style.css)
-                 — a duplicate of just the date text, kept alongside
-                 .dam-code on one shared row when the bar is compact. The
-                 "real" date-label/day-ordinal pair lives in field 5 now;
-                 setDateReadout() (main.js) writes both. -->
+              <!-- Collapsed-mobile only: a duplicate of just the date text, kept alongside .dam-code on one shared row. -->
               <p class="readout-compact">
                 <span id="date-label-compact"></span>
               </p>
             </header>
 
-            <!-- 2. The day's counts — all eight DART species at this project,
-               not just the five the flock draws (see .claude/context/data.md
-               and .claude/context/main.md for the simulated/reported split). -->
+            <!-- 2. The day's counts — all eight DART species at this project, not just the five the flock draws. -->
             <div class="field" id="passage">
               <p class="field-head">
                 <span class="label label-full">Daily adult passage</span>
@@ -188,17 +160,13 @@
               </table>
             </div>
 
-            <!-- 3. Conditions — temperature rides the passage CSV; outflow,
-               spill, dissolved gas load after boot (loadConditionsForYear,
-               main.js) and read "—" for a season with no vendored river file. -->
+            <!-- 3. Conditions — temperature rides the passage CSV; outflow/spill/gas load after boot and read "—" without a vendored river file. -->
             <div class="field" id="conditions">
               <p class="field-head"><span class="label">Conditions</span></p>
               <p><span class="label">Water</span><b id="water-temp">—</b></p>
               <p><span class="label">Outflow</span><b id="outflow">—</b></p>
               <p><span class="label">Spill</span><b id="spill">—</b></p>
-              <!-- .cond-secondary: dropped at the mobile portrait width to
-                 keep this field to the three rows the mockup shows — still
-                 full-height at every wider breakpoint. See ui.md. -->
+              <!-- .cond-secondary: dropped at the mobile portrait width to keep this field to three rows. -->
               <p class="cond-secondary">
                 <span class="label">Diss. gas</span><b id="dissolved-gas">—</b>
               </p>
@@ -207,8 +175,7 @@
               </p>
             </div>
 
-            <!-- 4. Where this season stands vs. the ten-year daily mean —
-               both figures count the same five species (data.md). -->
+            <!-- 4. Where this season stands vs. the ten-year daily mean; both figures count the same five species. -->
             <div class="field" id="run-status">
               <p class="field-head"><span class="label">Run to date</span></p>
               <p><span class="label">Season</span><b id="season-total">0</b></p>
@@ -220,28 +187,19 @@
               </p>
             </div>
 
-            <!-- 5. The season and its controls — column layout, see ui.md. -->
+            <!-- 5. The season and its controls, column layout. -->
             <div class="field" id="controls">
-              <!-- Matches the other three fields' own field-head — info
-                 button appended by initInsights() in main.js. -->
-              <!-- The "real" date reading — moved here from field 1 to match
-                 the mobile mockup. #masthead keeps a compact duplicate of
-                 just the date for its own collapsed view; see the note
-                 there and .claude/context/ui.md. -->
+              <!-- The real date reading; #masthead keeps a compact duplicate for its own collapsed view. -->
               <p class="readout">
                 <span id="date-label">Loading run data&hellip;</span>
                 <span id="day-ordinal"></span>
               </p>
-              <!-- Deliberately short: day-to-day stepping is the arrow keys
-                 and slider, season ends are Home/End. Just run/hold + pace.
-                 Peak/Loop cluster left, Pause pushed to the far right
-                 (margin-left: auto in style.css) — two groups, not one
-                 evenly-spaced row of three. -->
+              <!-- Deliberately short: day-to-day stepping is the arrow keys and slider, season ends are Home/End. -->
               <div id="transport">
                 <button class="btn transport-btn" id="to-peak" type="button">
                   Peak
                 </button>
-                <!-- Placeholder — not wired up yet. See ui.md. -->
+                <!-- Placeholder — not wired up yet. -->
                 <button
                   class="btn transport-btn"
                   id="loop-toggle"
@@ -252,15 +210,13 @@
                 >
                   Loop
                 </button>
-                <!-- No aria-label — it would override the visible text (the
-                   actual state). aria-pressed set from setPlaying(), main.js. -->
-                <button id="play-pause" class="btn" aria-pressed="false">Pause</button>
+                <!-- No aria-label — it would override the visible text (the actual state). -->
+                <button id="play-pause" class="btn" aria-pressed="false">
+                  Pause
+                </button>
               </div>
               <div id="timeline-block">
-                <!-- Daily passage as an area, water temp as a line — drawn at
-                   boot from runData (buildSeasonChart, main.js). Two
-                   label/value rows (icon+series name, then the reading for
-                   that series) rather than one run-on caption string. -->
+                <!-- Daily passage as an area, water temp as a line, drawn at boot from runData. -->
                 <figure id="season-chart">
                   <figcaption>
                     <p>
@@ -299,9 +255,7 @@
                   value="0"
                   aria-label="Date in the counting season"
                 />
-                <!-- Month ticks, positioned from runData (buildTimelineAxis,
-                   main.js) — not spaced evenly, since months aren't equal
-                   fractions of a counting-season track. -->
+                <!-- Month ticks, positioned from runData; not spaced evenly since months aren't equal fractions of the track. -->
                 <div id="timeline-axis" aria-hidden="true"></div>
               </div>
             </div>
@@ -314,17 +268,22 @@
               ten-year average from 2006&ndash;2015, inclusive of the season
               shown
             </p>
+            <p class="attribution">
+              <a
+                href="https://jackson-schacher.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Jackson Schacher</a
+              >
+              &middot; 2026
+            </p>
             <p class="source">
               Columbia Basin Research DART &middot; adult passage daily counts
               &middot; data courtesy of the U.S. Army Corps of Engineers
             </p>
           </div>
         </section>
-        <!-- #year-select's popup — position:fixed and a sibling of #report,
-           not a descendant, so it isn't clipped by #report's own
-           max-height:70vh/overflow-y:auto (same reason #report-toggle sits
-           outside #report — see ui.md). Positioned from #year-select's own
-           bounding rect on open (main.js); options populated there too. -->
+        <!-- #year-select's popup — position:fixed and a sibling of #report, not a descendant, so it isn't clipped by its overflow. -->
         <ul
           id="year-listbox"
           role="listbox"
@@ -336,11 +295,12 @@
 
       <pre id="debug-panel" hidden></pre>
 
-      <!-- A single fish up close, running the swim clip in isolation — src/inspect.js -->
-      <a id="fish-viewer-link" class="btn btn-surface" href="/inspect.html">Fish viewer &rarr;</a>
+      <!-- A single fish up close, running the swim clip in isolation. -->
+      <a id="fish-viewer-link" class="btn btn-surface" href="/inspect.html"
+        >Fish viewer &rarr;</a
+      >
 
-      <!-- The plates drawer — closed by default, built lazily on first open.
-         See .claude/context/plates.md -->
+      <!-- The plates drawer — closed by default, built lazily on first open. -->
       <button
         id="plates-toggle"
         class="btn btn-surface"
@@ -351,10 +311,7 @@
         Plates
       </button>
       <aside id="plates" aria-label="Data plates">
-        <!-- Dedicated close control, a real child of the panel. The toggle
-           above stays a plain "Plates" open button, but hides itself
-           (CSS, keyed off aria-pressed) while open — this is now the only
-           way to close. See .claude/context/drawer.md. -->
+        <!-- Dedicated close control, a real child of the panel; the toggle above hides itself while open, keyed off aria-pressed. -->
         <button
           type="button"
           class="btn btn-surface drawer-close"
@@ -378,13 +335,11 @@
         <p>Loading fish assets</p>
       </div>
 
-      <!-- role="status" announces failures without stealing focus; written by
-         showNotice() in main.js and the boot handler below. -->
+      <!-- role="status" announces failures without stealing focus. -->
       <div id="notice" role="status" hidden></div>
     </main>
 
-    <!-- Catches a module-eval throw in main.js/data.js, which would otherwise
-       skip main.js's own error handling entirely. See .claude/context/ui.md -->
+    <!-- Catches a module-eval throw in main.js/data.js, which would otherwise skip main.js's own error handling entirely. -->
     <script>
       (function () {
         function onBootFailure(event) {
@@ -400,9 +355,7 @@
           notice.textContent =
             "The simulation could not start — the passage data failed to load. " +
             "Reloading the page may fix it.";
-          // Mirrors showNotice()'s entrance in main.js (see .claude/context/ui.md) —
-          // this path runs instead of that one, only when main.js itself never
-          // got far enough to run it.
+          // Mirrors showNotice()'s entrance in main.js; this path runs only when main.js never got far enough to run it.
           notice.className = "error";
           void notice.offsetWidth;
           notice.classList.add("shown");

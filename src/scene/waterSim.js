@@ -1,6 +1,4 @@
-// waterSim.js — GPU height-field water sim (ping-pong render targets).
-// Design rationale, invariants, gotchas: .claude/context/scene/water-and-caustics.md
-
+// GPU height-field water sim using ping-pong render targets.
 import * as THREE from "three";
 
 const VERTEX_SHADER = /* glsl */ `
@@ -42,9 +40,7 @@ const UPDATE_FRAGMENT_SHADER = /* glsl */ `
   void main() {
     vec4 info = texture2D(texture, coord);
 
-    // Discrete wave equation: pull height toward the 4-neighbor average,
-    // accumulate into velocity (.g) with damping, integrate height. Both
-    // constants tuned for a calm river, not a jittery pond — see context doc.
+    // Discrete wave equation: pull height toward the 4-neighbor average, damp into velocity (.g), integrate height.
     vec2 dx = vec2(delta.x, 0.0);
     vec2 dy = vec2(0.0, delta.y);
     float average = (
@@ -81,10 +77,7 @@ export function createWaterSimulation(renderer, size, aspect) {
   let targetB = new THREE.WebGLRenderTarget(size, size, rtOptions);
   let target = targetA;
 
-  // Render targets start with undefined GPU memory — clear both explicitly.
-  // Clear color is saved/restored: it's renderer-global state, and leaving
-  // it on transparent black used to leak into every later renderer.clear()
-  // in the app for the rest of the session.
+  // Render targets start with undefined GPU memory — clear both, saving/restoring the renderer's global clear color.
   {
     const previousTarget = renderer.getRenderTarget();
     const previousClearColor = new THREE.Color();
@@ -127,8 +120,7 @@ export function createWaterSimulation(renderer, size, aspect) {
   const dropMesh = new THREE.Mesh(geometry, dropMaterial);
   const updateMesh = new THREE.Mesh(geometry, updateMaterial);
 
-  // Renders `mesh` reading from the current target, writing the other, then
-  // swaps which target is "current".
+  // Renders `mesh` reading from the current target and writing the other, then swaps.
   function render(mesh) {
     const oldTarget = target;
     const newTarget = target === targetA ? targetB : targetA;
@@ -142,8 +134,7 @@ export function createWaterSimulation(renderer, size, aspect) {
     target = newTarget;
   }
 
-  // center: {x, z} in [-1, 1] sim-space. radius/strength: sim-space units.
-  // Writes into the existing Vector2 so a drop allocates nothing.
+  // center: {x, z} in [-1, 1] sim-space; writes into the existing Vector2 so a drop allocates nothing.
   function addDrop(center, radius, strength) {
     dropMaterial.uniforms.center.value.set(center.x, center.z);
     dropMaterial.uniforms.radius.value = radius;

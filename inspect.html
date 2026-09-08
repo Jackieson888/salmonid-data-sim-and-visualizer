@@ -1,136 +1,175 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fish Viewer — Salmonid Run</title>
-  <!-- See the favicon note in index.html / .claude/context/ui.md -->
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <!-- Condensed PNW/Corps-of-Engineers report face — see style.css. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700&display=swap"
-    rel="stylesheet"
-  />
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="inspect.css" />
-</head>
-<body>
-  <main id="app">
-    <canvas id="fish-canvas"></canvas>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fish Viewer — Salmonid Run</title>
+    <!-- See the favicon note in index.html. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Condensed PNW/Corps-of-Engineers report face — see style.css. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="inspect.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="fish-canvas"></canvas>
 
-    <!-- SVG overlay (not drawn into the WebGL scene) for leader-line labels;
-         see .claude/context/scene/fishAnatomy.md. Sized to canvas in inspect.js. -->
-    <svg id="anatomy-overlay" aria-hidden="true"></svg>
+      <!-- SVG overlay (not drawn into the WebGL scene) for leader-line labels; sized to canvas in inspect.js. -->
+      <svg id="anatomy-overlay" aria-hidden="true"></svg>
 
-    <a id="back-link" class="btn btn-surface" href="/">&larr; Back to river</a>
+      <a id="back-link" class="btn btn-surface" href="/"
+        >&larr; Back to river</a
+      >
 
-    <!-- Slides in like the river's own plates drawer (src/plates.js) — closed
-         by default so the fish fills more of the screen. -->
-    <button
-      id="field-notes-toggle"
-      class="btn btn-surface"
-      type="button"
-      aria-pressed="false"
-      aria-controls="inspect-panel"
-    >
-      Field Notes
-    </button>
-
-    <!-- Styled to match the river view's HUD. Split like the river page: a
-         bottom bar for everything but field notes, a side panel for just
-         the notes. See .claude/context/ui.md and .claude/context/inspect.md -->
-    <div id="inspect-panel">
-      <!-- Dedicated close control, a real child of the panel. The toggle
-           above stays a plain "Field Notes" open button, but hides itself
-           (CSS, keyed off aria-pressed) while open — this is now the only
-           way to close. See .claude/context/drawer.md. -->
-      <button type="button" class="btn btn-surface drawer-close" id="field-notes-close" aria-label="Close field notes">
-        <svg class="close-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M1 1l10 10M11 1L1 11" /></svg>
+      <!-- Slides in like the river's own plates drawer; closed by default so the fish fills more of the screen. -->
+      <button
+        id="field-notes-toggle"
+        class="btn btn-surface"
+        type="button"
+        aria-pressed="false"
+        aria-controls="inspect-panel"
+      >
+        Field Notes
       </button>
-      <!-- Pulled out of #field-guide (updateFieldGuide, src/inspect.js) so
-           it can share the panel's top row with .drawer-close, filling the
-           space #field-notes-toggle used to occupy before it started
-           hiding itself while open — see .claude/context/ui.md. Only the
-           species name (<b>) is JS-written; "Field notes" is static. -->
-      <p class="field-head" id="field-notes-head">
-        <span class="label">Field notes</span>
-        <b id="field-notes-species-name"></b>
-      </p>
-      <div id="field-guide"></div>
-    </div>
 
-    <!-- The bottom bar — everything but field notes, using #report's
-         .field/.field-head vocabulary from style.css. No report-foot strip:
-         nothing here needs citing beyond what the field-notes panel credits. -->
-    <div id="inspect-bar">
-      <div class="report-body">
-        <!-- A list, not a <select> — whole roster readable at rest, each row
-             keyed with its species' water tint. Populated from SPECIES in inspect.js. -->
-        <div class="field" id="species-field">
-          <p class="field-head"><span class="label">Species</span></p>
-          <div id="species-list" role="radiogroup" aria-label="Species"></div>
-        </div>
+      <!-- Styled to match the river view's HUD; split like the river page: a bottom bar for everything but field notes, a side panel for the notes. -->
+      <div id="inspect-panel">
+        <!-- Dedicated close control, a real child of the panel; the toggle above hides itself while open, keyed off aria-pressed. -->
+        <button
+          type="button"
+          class="btn btn-surface drawer-close"
+          id="field-notes-close"
+          aria-label="Close field notes"
+        >
+          <svg
+            class="close-icon"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M1 1l10 10M11 1L1 11" />
+          </svg>
+        </button>
+        <!-- Shares the panel's top row with .drawer-close; only the species name (<b>) is JS-written, "Field notes" is static. -->
+        <p class="field-head" id="field-notes-head">
+          <span class="label">Field notes</span>
+          <b id="field-notes-species-name"></b>
+        </p>
+        <div id="field-guide"></div>
+      </div>
 
-        <div class="field" id="view-field">
-          <p class="field-head"><span class="label">View</span></p>
-          <!-- Turntable off by default — see .claude/context/inspect.md.
-               Real buttons, not checkboxes; aria-pressed carries state
-               (setPressed/isPressed, src/inspect.js). -->
-          <div class="toggles">
-            <button type="button" class="btn toggle-btn" id="playing-toggle" aria-pressed="true"><i class="toggle-mark"></i>Swimming</button>
-            <button type="button" class="btn toggle-btn" id="rotate-toggle" aria-pressed="false"><i class="toggle-mark"></i>Turntable</button>
-            <button type="button" class="btn toggle-btn" id="labels-toggle" aria-pressed="true"><i class="toggle-mark"></i>Anatomy labels</button>
-            <!-- Loops through five build stages, crossfading — see
-                 applyConstruction/tickConstruction in src/inspect.js. -->
-            <button type="button" class="btn toggle-btn" id="construction-toggle" aria-pressed="false"><i class="toggle-mark"></i>Construction<b id="construction-stage"></b></button>
+      <!-- The bottom bar — everything but field notes, using #report's .field/.field-head vocabulary from style.css. -->
+      <div id="inspect-bar">
+        <div class="report-body">
+          <!-- A list, not a <select> — whole roster readable at rest, each row keyed with its species' water tint. -->
+          <div class="field" id="species-field">
+            <p class="field-head"><span class="label">Species</span></p>
+            <div id="species-list" role="radiogroup" aria-label="Species"></div>
           </div>
-          <button id="reset-view" class="btn" type="button">Reset view</button>
 
-          <!-- Pushes this material's uFogDensity/uFogColor plus a drifting-
-               silt field (buildInspectParticles, src/inspect.js); 0 = no change. -->
-          <div class="range-field" id="turbidity-field">
-            <label for="turbidity-slider">Turbidity<b id="turbidity-value">Clear</b></label>
-            <input type="range" id="turbidity-slider" min="0" max="100" value="0" step="1">
+          <div class="field" id="view-field">
+            <p class="field-head"><span class="label">View</span></p>
+            <!-- Turntable off by default. Real buttons, not checkboxes; aria-pressed carries state. -->
+            <div class="toggles">
+              <button
+                type="button"
+                class="btn toggle-btn"
+                id="playing-toggle"
+                aria-pressed="true"
+              >
+                <i class="toggle-mark"></i>Swimming
+              </button>
+              <button
+                type="button"
+                class="btn toggle-btn"
+                id="rotate-toggle"
+                aria-pressed="false"
+              >
+                <i class="toggle-mark"></i>Turntable
+              </button>
+              <button
+                type="button"
+                class="btn toggle-btn"
+                id="labels-toggle"
+                aria-pressed="false"
+              >
+                <i class="toggle-mark"></i>Anatomy labels
+              </button>
+              <!-- Loops through five build stages, crossfading. -->
+              <button
+                type="button"
+                class="btn toggle-btn"
+                id="construction-toggle"
+                aria-pressed="false"
+              >
+                <i class="toggle-mark"></i>Construction<b
+                  id="construction-stage"
+                ></b>
+              </button>
+            </div>
+            <button id="reset-view" class="btn" type="button">
+              Reset view
+            </button>
+
+            <!-- Pushes this material's uFogDensity/uFogColor plus a drifting-silt field; 0 = no change. -->
+            <div class="range-field" id="turbidity-field">
+              <label for="turbidity-slider"
+                >Turbidity<b id="turbidity-value">Clear</b></label
+              >
+              <input
+                type="range"
+                id="turbidity-slider"
+                min="0"
+                max="100"
+                value="0"
+                step="1"
+              />
+            </div>
           </div>
-        </div>
 
-        <!-- Adult length, all five on one scale, drawn as real silhouettes
-             (buildFishSilhouette, src/inspect.js). See .claude/context/ui.md -->
-        <div class="field" id="length-field">
-          <div id="length-scale"></div>
-        </div>
+          <!-- Adult length, all five on one scale, drawn as real silhouettes. -->
+          <div class="field" id="length-field">
+            <div id="length-scale"></div>
+          </div>
 
-        <!-- This species' own season: a passage sparkline on the river chart's x-axis. -->
-        <div class="field" id="season-field">
-          <div id="season-card"></div>
+          <!-- This species' own season: a passage sparkline on the river chart's x-axis. -->
+          <div class="field" id="season-field">
+            <div id="season-card"></div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Compacts #inspect-bar to species + core view controls, hiding the
-         length scale/season card/secondary toggles — see setBarCollapsed()
-         in inspect.js and #inspect-bar.collapsed in inspect.css. Positioned
-         off the bar's own measured height (--bar-h, inspect.js), so it isn't
-         clipped by the bar's own overflow-y:auto. -->
-    <button
-      id="inspect-bar-toggle"
-      class="btn btn-surface"
-      type="button"
-      aria-pressed="false"
-      aria-controls="inspect-bar"
-      aria-label="Collapse panel"
-    >
-      <svg class="chevron-icon" viewBox="0 0 12 8" aria-hidden="true" focusable="false"><path d="M1 1l5 5 5-5" /></svg>
-    </button>
+      <!-- Compacts #inspect-bar to species + core view controls; positioned off the bar's measured height so it isn't clipped by its own overflow. -->
+      <button
+        id="inspect-bar-toggle"
+        class="btn btn-surface"
+        type="button"
+        aria-pressed="false"
+        aria-controls="inspect-bar"
+        aria-label="Collapse panel"
+      >
+        <svg
+          class="chevron-icon"
+          viewBox="0 0 12 8"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M1 1l5 5 5-5" />
+        </svg>
+      </button>
 
-    <div id="fish-loading">
-      <div class="bar"></div>
-      <p>Loading fish assets</p>
-    </div>
-  </main>
+      <div id="fish-loading">
+        <div class="bar"></div>
+        <p>Loading fish assets</p>
+      </div>
+    </main>
 
-  <script type="module" src="/src/inspect.js"></script>
-</body>
+    <script type="module" src="/src/inspect.js"></script>
+  </body>
 </html>
